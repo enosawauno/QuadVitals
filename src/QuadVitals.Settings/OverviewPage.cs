@@ -159,7 +159,7 @@ namespace QuadVitals.Settings
             Card device = new Card("设备状态", "\uE7F4");
             device.HeaderRight.Content = BuildDeviceHeader();
             Grid strip = new Grid();
-            MetricTile[] tiles = { _cpuTile, _memoryTile, _gpuTile, _diskTile };
+            MetricTile[] tiles = { _cpuTile, _gpuTile, _memoryTile, _diskTile };
             for (int i = 0; i < tiles.Length; i++)
             {
                 if (i > 0) strip.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });

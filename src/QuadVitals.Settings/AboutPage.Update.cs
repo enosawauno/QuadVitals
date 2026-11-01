@@ -111,6 +111,12 @@ namespace QuadVitals.Settings
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 10, 0, 0)
             });
+
+            // 明细放在卡的末尾：左边是说明，右边是可点的地址，与开发者卡同一套行。
+            FrameworkElement changelog = LinkRow("日志明细", "GitHub", OpenChangelog);
+            AutomationProperties.SetAutomationId(changelog, "AboutUpdateChangelog");
+            changelog.Margin = new Thickness(0, 8, 0, 0);
+            card.Content.Children.Add(changelog);
             return card;
         }
 

@@ -35,6 +35,9 @@ namespace QuadVitals.Settings
         /// </summary>
         private const string FileOopsUrl = "https://github.com/enosawauno/FileOops-Release";
 
+        /// <summary>版本明细：更新卡末尾那一行指向仓库里的 CHANGELOG。</summary>
+        private const string ChangelogUrl = "https://github.com/enosawauno/QuadVitals/blob/main/CHANGELOG.md";
+
         private readonly SettingsWindow _window;
 
         public AboutPage(SettingsWindow window)
@@ -196,6 +199,18 @@ namespace QuadVitals.Settings
             Grid.SetColumn(target, 1);
             row.Children.Add(target);
             return row;
+        }
+
+        private void OpenChangelog()
+        {
+            try
+            {
+                Process.Start(ChangelogUrl);
+            }
+            catch (Exception ex)
+            {
+                _window.ShowNotice("无法打开更新明细：" + ex.Message, true);
+            }
         }
 
         private void OpenLicencePage()

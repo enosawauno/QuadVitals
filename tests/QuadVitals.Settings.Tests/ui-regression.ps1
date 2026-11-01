@@ -547,7 +547,7 @@ $linkBlocks = @()
 foreach ($element in (Find-ByTypeName $aboutRoot 'Border')) {
     if ($element.Cursor -eq [System.Windows.Input.Cursors]::Hand) { $linkBlocks += $element }
 }
-Check 'the developer card has three clickable link blocks' ($linkBlocks.Count -eq 3) "blocks=$($linkBlocks.Count)"
+Check 'the about page has four clickable link blocks' ($linkBlocks.Count -eq 4) "blocks=$($linkBlocks.Count)"
 $paintedBlocks = 0
 foreach ($block in $linkBlocks) {
     if ($null -ne $block.Background) { $paintedBlocks++ }
@@ -577,6 +577,26 @@ foreach ($block in (Find-ByTypeName $aboutRoot 'TextBlock')) {
 Check 'the about page has an update card' ($null -ne $updateTitle) ''
 $updateCheck = Find-ById $aboutRoot 'AboutUpdateCheck'
 $updateCancel = Find-ById $aboutRoot 'AboutUpdateCancel'
+# 更新卡末尾的更新明细行：左边是说明，右边是可点的地址，和开发者卡同一套行。
+# The card is built lazily inside a scroll host: force one more layout pass before looking for the
+# row, otherwise the first traversal runs before the card's content is realized.
+$aboutRoot.UpdateLayout()
+$changelogRow = Wait-ById $aboutRoot 'AboutUpdateChangelog'
+Check 'the update card carries a changelog row' ($null -ne $changelogRow) ''
+if ($null -ne $changelogRow) {
+    $changelogLabel = $null
+    $changelogTarget = $null
+    foreach ($child in $changelogRow.Children) {
+        if ($child -is [System.Windows.Controls.TextBlock] -and $child.Text -eq (U @(0x65E5, 0x5FD7, 0x660E, 0x7EC6))) { $changelogLabel = $child }
+        if ($child -is [System.Windows.Controls.Border]) { $changelogTarget = $child }
+    }
+    Check 'the changelog row is labelled 日志明细' ($null -ne $changelogLabel) ''
+    Check 'the changelog value block is the clickable part' (($null -ne $changelogTarget) -and ($changelogTarget.Cursor -eq [System.Windows.Input.Cursors]::Hand)) ''
+    Check 'the changelog label stays inert' (($null -eq $changelogLabel) -or ($changelogLabel.Cursor -ne [System.Windows.Input.Cursors]::Hand)) ''
+    $changelogUrl = $asm.GetType('QuadVitals.Settings.AboutPage').GetField('ChangelogUrl', [Reflection.BindingFlags]'NonPublic,Static').GetValue($null)
+    Check 'the changelog link points at the repository changelog' ($changelogUrl -eq 'https://github.com/enosawauno/QuadVitals/blob/main/CHANGELOG.md') "url=$changelogUrl"
+}
+
 Check 'the update action is usable without a preview flag' (($null -ne $updateCheck) -and $updateCheck.IsEnabled) ''
 Check 'the cancel action stays hidden until a transfer starts' (($null -ne $updateCancel) -and ($updateCancel.Visibility -eq [System.Windows.Visibility]::Collapsed)) ''
 $progressTrack = Find-ById $aboutRoot 'AboutUpdateProgress'
@@ -1044,6 +1064,14 @@ while ($ovQueue.Count -gt 0 -and $null -eq $ovPage) {
     }
 }
 Check 'the overview page is reachable' ($null -ne $ovPage) ''
+if ($null -ne $ovPage) {
+    # 卡片顺序：CPU / 显卡 / 内存 / 磁盘。显卡在第二格：占用和温度放一起比把两个占用排前面好读。
+    $gpuColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_gpuTile', $flags).GetValue($ovPage))
+    $memoryColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_memoryTile', $flags).GetValue($ovPage))
+    $cpuColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_cpuTile', $flags).GetValue($ovPage))
+    $diskColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_diskTile', $flags).GetValue($ovPage))
+    Check 'the device tiles read cpu, gpu, memory, disk' (($cpuColumn -eq 0) -and ($gpuColumn -eq 2) -and ($memoryColumn -eq 4) -and ($diskColumn -eq 6)) "columns=$cpuColumn,$gpuColumn,$memoryColumn,$diskColumn"
+}
 if ($null -ne $ovPage) {
     $gpuTile = $ovType.GetField('_gpuTile', $flags).GetValue($ovPage)
     $accent = $gpuTile.GetType().GetField('_accent', $flags).GetValue($gpuTile)
