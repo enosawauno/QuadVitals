@@ -19,7 +19,9 @@ $gateBandName = 'QuadVitalsDeskBandGateCheck'
 function Invoke-Step([string]$title, [string]$script, [string[]]$arguments) {
     Write-Host ''
     Write-Host "== $title" -ForegroundColor Cyan
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root $script) @arguments
+    # Out-Host: the caller discards this function's return value, and a child process's stdout would
+    # otherwise be captured into it - the step would run with its whole log thrown away.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root $script) @arguments | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[verify] FAILED: $title (exit $LASTEXITCODE)" -ForegroundColor Red
         $script:failed++
