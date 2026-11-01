@@ -42,7 +42,7 @@ QuadVitals 的任务栏条是 **DeskBand**（COM 工具栏），依赖 Windows 1
 
 ## 安装
 
-从 [Releases](https://github.com/enosawauno/QuadVitals-Release/releases) 下载 `QuadVitals-Setup-<版本>.exe` 并运行。
+从 [Releases](https://github.com/enosawauno/QuadVitals/releases) 下载 `QuadVitals-Setup-<版本>.exe` 并运行。
 
 - 安装到 `%LOCALAPPDATA%\QuadVitals`，不需要管理员权限写文件。
 - 首次安装会请求一次管理员权限，用于创建登录计划任务，让 Agent 以最高权限启动并读取温度。

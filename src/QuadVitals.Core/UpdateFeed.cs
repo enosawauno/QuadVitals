@@ -52,11 +52,10 @@ namespace QuadVitals.Core
         /// <summary>
         /// GitHub Releases resolves <c>latest/download/&lt;asset&gt;</c> to the newest release, so the
         /// check needs no API call (and therefore no 60-requests-per-hour unauthenticated limit).
-        /// Assets live in a release-only repository: the source tree is not published, and the
-        /// updater must not depend on it being public.
+        /// The artifacts live on the source repository's releases, next to the code they belong to.
         /// </summary>
         public const string DefaultBaseUrl =
-            "https://github.com/enosawauno/QuadVitals-Release/releases/latest/download/";
+            "https://github.com/enosawauno/QuadVitals/releases/latest/download/";
 
         public const string ManifestFileName = "latest.json";
 
