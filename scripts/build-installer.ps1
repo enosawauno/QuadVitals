@@ -34,6 +34,22 @@ if (-not $hit) { throw "cannot read SemVer from $versionFile" }
 $version = $hit.Matches[0].Groups[1].Value
 Write-Host "  version: $version"
 
+Step 'confirm the release notes'
+# Packaging is the point of no return: the notes are what the user reads in the update card, so they
+# have to be the wording that was agreed, not the wording whoever packaged the build typed. A
+# maintainer checkout carries a local check for it; anywhere else the packager has to name the
+# version they confirmed, which makes an accidental release of unagreed notes impossible.
+$notesCheck = Join-Path $root 'scripts\maintenance\check-changelog-approved.ps1'
+if (Test-Path -LiteralPath $notesCheck) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $notesCheck
+    if ($LASTEXITCODE -ne 0) {
+        throw 'release notes are not confirmed - confirm the wording, save the approved text, then package'
+    }
+} elseif ($env:QUADVITALS_RELEASE_NOTES_CONFIRMED -ne $version) {
+    throw ('release notes are not confirmed - set QUADVITALS_RELEASE_NOTES_CONFIRMED=' + $version + ' once the wording is agreed')
+}
+
+
 # ---------------------------------------------------------------- payload ----
 $releaseRoot = Join-Path $root 'build\out\release'
 $zip = Join-Path $releaseRoot ("QuadVitals-{0}.zip" -f $version)
@@ -205,21 +221,6 @@ Write-Host ("  sha256          : {0}" -f $hash)
 Step 'write update manifest'
 $zipName = "QuadVitals-$version.zip"
 $zipPath = Join-Path $releaseRoot $zipName
-
-Step 'confirm the release notes'
-# Packaging is the point of no return: the notes are what the user reads in the update card, so they
-# have to be the wording that was agreed, not the wording whoever packaged the build typed. A
-# maintainer checkout carries a local check for it; anywhere else the packager has to name the
-# version they confirmed, which makes an accidental release of unagreed notes impossible.
-$notesCheck = Join-Path $root 'scripts\maintenance\check-changelog-approved.ps1'
-if (Test-Path -LiteralPath $notesCheck) {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $notesCheck
-    if ($LASTEXITCODE -ne 0) {
-        throw 'release notes are not confirmed - confirm the wording, save the approved text, then package'
-    }
-} elseif ($env:QUADVITALS_RELEASE_NOTES_CONFIRMED -ne $version) {
-    throw ('release notes are not confirmed - set QUADVITALS_RELEASE_NOTES_CONFIRMED=' + $version + ' once the wording is agreed')
-}
 
 Step 'read release notes from CHANGELOG.md'
 # The changelog is the single source for what users are told about a version: the in-app update
