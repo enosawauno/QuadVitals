@@ -31,6 +31,10 @@ namespace QuadVitals.Settings
         private readonly FeedbackKind[] _kinds = { FeedbackKind.Bug, FeedbackKind.Feature, FeedbackKind.Other };
         private readonly List<FeedbackDraftAttachment> _attachments = new List<FeedbackDraftAttachment>();
 
+        // WPF 的 TextBoxView 在左侧给光标留 2 px：同一个内边距下，输入文字第一格的起点
+        // 总比「边框 + 2×内边距」多 2。提示层要跟上这个偏移，否则会和输入文字错开。
+        private const double HintCaretInset = 2;
+
         private readonly ComboBox _kind = new DarkComboBox();
         private readonly DarkTextBox _text = new DarkTextBox();
         private readonly DarkCheckBox _includeLogs = new DarkCheckBox();
@@ -204,11 +208,18 @@ namespace QuadVitals.Settings
             _text.FontSize = 13;
 
             // 提示搬进输入框当占位文字：浅浅一层，一旦有内容就消失，不再白占一行。
+            // 位置必须和输入文字同源：DarkTextBox 的模板把内边距同时给到 Border 与内容宿主，
+            // 文字起点是「边框 + 2×内边距」再左让 2 px 光标位；右边界不加那 2 px，
+            // 这样提示与输入文字的换行宽度一致，同一段话不会两处折行不同。
             _placeholder.Text = "截图直接 Ctrl+V 粘贴，也可以把文件拖进这里。最多 8 个，单个 ≤ 50 MB。";
             _placeholder.FontSize = 13;
             _placeholder.Foreground = Theme.TextTertiaryBrush;
             _placeholder.TextWrapping = TextWrapping.Wrap;
-            _placeholder.Margin = new Thickness(12, 9, 12, 0);
+            _placeholder.Margin = new Thickness(
+                _text.BorderThickness.Left + _text.Padding.Left * 2 + HintCaretInset,
+                _text.BorderThickness.Top + _text.Padding.Top * 2,
+                _text.BorderThickness.Right + _text.Padding.Right * 2,
+                0);
             _placeholder.VerticalAlignment = VerticalAlignment.Top;
             _placeholder.IsHitTestVisible = false;   // 不拦输入、拖放和右键
 

@@ -854,6 +854,18 @@ if ($null -ne $feedbackPage) {
     $collapsed = ($resultBody.Visibility -eq [System.Windows.Visibility]::Collapsed)
     $restored = ($feedbackCard.Title -eq (U @(0x53CD, 0x9988, 0x5185, 0x5BB9)))
     Check 'leaving the feedback page collapses the result card' ($collapsed -and $restored) "collapsed=$collapsed restored=$restored"
+
+    # The hint is an overlay above the input. It has to start on the same character cell as
+    # typed text, otherwise it reads as a separate line sitting above and to the left.
+    $hintBox = $feedbackPageType.GetField('_placeholder', $flags).GetValue($feedbackPage)
+    $textBox = $feedbackPageType.GetField('_text', $flags).GetValue($feedbackPage)
+    $feedbackRoot.UpdateLayout()
+    $textOrigin = $textBox.GetRectFromCharacterIndex(0)
+    Check 'the hint starts on the typed text column' ([math]::Abs($hintBox.Margin.Left - $textOrigin.X) -le 1) "hint=$($hintBox.Margin.Left) text=$($textOrigin.X)"
+    Check 'the hint starts on the typed text row' ([math]::Abs($hintBox.Margin.Top - $textOrigin.Y) -le 1) "hint=$($hintBox.Margin.Top) text=$($textOrigin.Y)"
+    $hintWrap = $textBox.ActualWidth - $hintBox.Margin.Left - $hintBox.Margin.Right
+    $textWrap = $textBox.ActualWidth - $textOrigin.X - ($textBox.BorderThickness.Right + $textBox.Padding.Right * 2)
+    Check 'the hint wraps at the typed text width' ([math]::Abs($hintWrap - $textWrap) -le 1) "hint=$([math]::Round($hintWrap,1)) text=$([math]::Round($textWrap,1))"
 }
 
 "== sidebar: sliding selection pill =="
