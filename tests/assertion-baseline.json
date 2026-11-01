@@ -1,5 +1,5 @@
 {
   "_comment": "Assertion floors. Suites may add assertions, never remove them: removing one is how a fixed bug comes back.",
-  "settings-ui": 197,
+  "settings-ui": 227,
   "setup": 48
 }

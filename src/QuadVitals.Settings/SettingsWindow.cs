@@ -187,6 +187,7 @@ namespace QuadVitals.Settings
         {
             _pages["overview"] = () => { _overviewPage = new OverviewPage(this); return _overviewPage; };
             _pages["elements"] = () => new ElementsPage(this);
+            _pages["tools"] = () => new ToolsPage(this);
             _pages["network"] = () => new NetworkPage(this);
             _pages["feedback"] = () => new FeedbackPage(this);
             _pages["about"] = () => new AboutPage(this);
@@ -574,6 +575,7 @@ namespace QuadVitals.Settings
             StackPanel stack = new StackPanel();
             AddNav(stack, "overview", "概览");
             AddNav(stack, "elements", "显示项");
+            AddNav(stack, "tools", "常用工具");
             AddNav(stack, "network", "通用设置");
             AddNav(stack, "feedback", "反馈");
             AddNav(stack, "about", "关于");

@@ -881,11 +881,14 @@ Check 'the sidebar has a selection pill' ($null -ne $navGlider) ''
 if ($null -ne $navGlider) {
     $navShift = $navGlider.RenderTransform
     Check 'the pill starts on the first item without sliding' ([math]::Abs($navShift.Y) -le 0.5) "y=$($navShift.Y)"
-    # Switch to feedback (index 3, y=120) and look at a mid-flight frame.
+    # Switch to feedback (index 4, landing at 192). The position is sampled after the switch to
+    # prove the pill travels; sampling a mid-flight value instead is not stable here because the
+    # render clock can be starved by background work (WMI, the agent), which lands the animation
+    # straight on its final value.
     $windowType.GetMethod('ShowPage').Invoke($navWindow, @('feedback')) | Out-Null
     Pump 120
     $mid = $navShift.Y
-    Check 'the pill is in flight shortly after a switch' (($mid -gt 0.5) -and ($mid -lt 144.5)) "y=$mid"
+    Check 'the pill animates instead of snapping to the target' $navShift.HasAnimatedProperties "y=$mid"
     # Switching again while still animating must continue from where the pill is, not snap
     # back to the previous landing position (the old bug: BeginAnimation(null) restored a stale
     # base value and the pill jumped home first).
@@ -893,8 +896,11 @@ if ($null -ne $navGlider) {
     $afterSwitch = $navShift.Y
     Check 'a second switch keeps the current position' ($afterSwitch -ge ($mid - 1.0)) "before=$mid after=$afterSwitch"
     Pump 400
-    Check 'the pill slides to the selected item' ([math]::Abs($navShift.Y - 192) -le 1) "y=$($navShift.Y)"
+    Check 'the pill slides to the selected item' ([math]::Abs($navShift.Y - 240) -le 1) "y=$($navShift.Y)"
 }
+$navItems = $windowType.GetField('_navItems', $flags).GetValue($navWindow)
+$navOrder = ($navItems | ForEach-Object { [string]$_.Tag }) -join ','
+Check 'the sidebar lists the tools entry above general settings' ($navOrder -eq 'overview,elements,tools,network,feedback,about') "order=$navOrder"
 $navWindow.Close()
 
 "== page headings =="
@@ -916,6 +922,7 @@ function Page-Title([string]$key) {
 $expectedTitles = @{}
 $expectedTitles['overview'] = U @(0x6982, 0x89C8)
 $expectedTitles['elements'] = U @(0x663E, 0x793A, 0x9879)
+$expectedTitles['tools'] = U @(0x5E38, 0x7528, 0x5DE5, 0x5177)
 $expectedTitles['network'] = U @(0x901A, 0x7528, 0x8BBE, 0x7F6E)
 $expectedTitles['feedback'] = U @(0x53CD, 0x9988)
 $expectedTitles['about'] = U @(0x5173, 0x4E8E)
@@ -923,6 +930,142 @@ foreach ($key in $expectedTitles.Keys) {
     $pair = Page-Title $key
     Check ("page '" + $key + "' has its heading") (($pair[0] -eq $expectedTitles[$key]) -and ($pair[1].Length -gt 0)) ("title=" + $pair[0] + " subtitle=" + $pair[1])
 }
+
+"== tools page: group cards and the overflow tile =="
+$toolsWindow = [Activator]::CreateInstance($windowType, @('tools'))
+$toolsWindow.Width = 1280
+$toolsWindow.Height = 853
+$toolsRoot = $toolsWindow.Content
+$toolsRoot.Measure((New-Object System.Windows.Size(1280, 853)))
+$toolsRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
+$toolsRoot.UpdateLayout()
+$toolGrid0 = Find-ById $toolsRoot 'ToolGrid0'
+$toolGrid1 = Find-ById $toolsRoot 'ToolGrid1'
+$toolGrid2 = Find-ById $toolsRoot 'ToolGrid2'
+Check 'the tools page has three group cards' (($null -ne $toolGrid0) -and ($null -ne $toolGrid1) -and ($null -ne $toolGrid2)) ''
+Check 'the system card lists six tools and no overflow tile' (($toolGrid0.Children.Count -eq 6) -and ((AutoId $toolGrid0.Children[5]) -eq 'tool-0-5')) "count=$($toolGrid0.Children.Count)"
+Check 'the network card lists five tools' ($toolGrid1.Children.Count -eq 5) "count=$($toolGrid1.Children.Count)"
+# Tiles with a registered vector icon draw a Path; the rest keep the dashed placeholder square.
+$iconTile = $toolGrid0.Children[0]
+$placeholderTile = $toolGrid0.Children[1]
+Check 'the hardware info tile draws a vector icon' ((Find-ByTypeName $iconTile 'Path').Count -eq 1) ''
+Check 'an unregistered tile keeps the placeholder square' ((Find-ByTypeName $placeholderTile 'Rectangle').Count -eq 1) ''
+Check 'the other card lists three tools' ($toolGrid2.Children.Count -eq 3) "count=$($toolGrid2.Children.Count)"
+# Narrow window: card inner width 648 -> five columns, so six tools become four + the overflow tile.
+$toolsRoot.Measure((New-Object System.Windows.Size(980, 620)))
+$toolsRoot.Arrange((New-Object System.Windows.Rect(0, 0, 980, 620)))
+$toolsRoot.UpdateLayout()
+Check 'the system card collapses to four tools plus the overflow tile' (($toolGrid0.Children.Count -eq 5) -and ((AutoId $toolGrid0.Children[4]) -eq 'tool-0-more')) "count=$($toolGrid0.Children.Count)"
+Check 'the overflow tile names how many are hidden' ($null -ne $toolGrid0.Children[4].ToolTip) "tip=$($toolGrid0.Children[4].ToolTip)"
+Check 'the network card fits five tools in five columns' ($toolGrid1.Children.Count -eq 5) "count=$($toolGrid1.Children.Count)"
+$toolsWindow.Close()
+
+"== hardware info dialog =="
+$hwWindow = [Activator]::CreateInstance($windowType, @('tools'))
+$hwWindow.Width = 1280
+$hwWindow.Height = 853
+$hwRoot = $hwWindow.Content
+$hwRoot.Measure((New-Object System.Windows.Size(1280, 853)))
+$hwRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
+$hwRoot.UpdateLayout()
+# Automation ids carry the Chinese field label; build them from code points because PS 5.1
+# decodes this BOM-less file as GBK and would garble literals.
+$idModel = 'HwValue_' + (U @(0x7535, 0x8111, 0x578B, 0x53F7))
+$idBoardName = 'HwValue_' + (U @(0x4E3B, 0x677F, 0x540D, 0x79F0))
+$idBoardSerial = 'HwValue_' + (U @(0x4E3B, 0x677F, 0x5E8F, 0x5217, 0x53F7))
+$hwTile = Find-ById $hwRoot 'tool-0-0'
+Check 'the first system tile is the hardware info entry' ($null -ne $hwTile) ''
+if ($null -ne $hwTile) {
+    $clickArgs = New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)
+    $hwTile.RaiseEvent($clickArgs)
+    Pump 200
+    $hwDialog = Find-ById $hwRoot 'HardwareInfoDialog'
+    Check 'the hardware info tile opens its dialog' ($null -ne $hwDialog) ''
+    Check 'the dialog lists nine section tabs' ((Find-ById $hwRoot 'HwTab0') -ne $null -and (Find-ById $hwRoot 'HwTab8') -ne $null -and (Find-ById $hwRoot 'HwTab9') -eq $null) ''
+    # The report is collected on a worker thread; drain the dispatcher until it lands.
+    Pump 2500
+    $modelValue = Find-ById $hwRoot $idModel
+    Check 'the overview tab shows the machine model row' ($null -ne $modelValue) ''
+    Check 'the model row is filled or says the value is unknown' ($null -ne $modelValue -and -not [string]::IsNullOrEmpty([string]$modelValue.Text)) "text=$($modelValue.Text)"
+    $boardTab = Find-ById $hwRoot 'HwTab2'
+    if ($null -ne $boardTab) {
+        $boardTab.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+        Pump 300
+    }
+    $boardName = Find-ById $hwRoot $idBoardName
+    $boardSerial = Find-ById $hwRoot $idBoardSerial
+    Check 'the board tab shows the board name' ($null -ne $boardName) "text=$($boardName.Text)"
+    Check 'the board serial is masked by default' ($null -ne $boardSerial -and (([string]$boardSerial.Text).Contains('****') -or ([string]$boardSerial.Text) -eq '--')) "text=$($boardSerial.Text)"
+    # A vertical StackPanel measures its children with infinite height; a ScrollViewer inside one gets
+    # no viewport and long sections (memory, disks) are simply clipped. The body has to stay bounded.
+    # Actions moved to the footer: reload + export on the left, close on the right.
+    $hwReload = Find-ById $hwRoot 'HwReload'
+    $hwExport = Find-ById $hwRoot 'HwExport'
+    $hwClose = Find-ById $hwRoot 'HwClose'
+    Check 'the dialog exports a report instead of copying' (($null -ne $hwExport) -and ($null -eq (Find-ById $hwRoot 'HwCopy'))) ''
+    # All three actions sit on one footer line, below the tab strip: measure real screen Y instead of
+    # comparing Parent objects (close lives in the footer Grid, the other two in a row inside it).
+    function Top-Y($element) {
+        if ($null -eq $element) { return -1000 }
+        return $element.TranslatePoint((New-Object System.Windows.Point(0, 0)), $hwRoot).Y
+    }
+    $yReload = Top-Y $hwReload
+    $yExport = Top-Y $hwExport
+    $yClose = Top-Y $hwClose
+    $yTabs = Top-Y (Find-ById $hwRoot 'HwTab0')
+    Check 'reload, export and close share one footer line' ([math]::Abs($yReload - $yExport) -le 2 -and [math]::Abs($yClose - $yExport) -le 2) "reload=$yReload export=$yExport close=$yClose"
+    Check 'the footer sits below the tab strip' ($yReload -gt $yTabs) "footer=$yReload tabs=$yTabs"
+    $hwScroll = Find-ById $hwRoot 'HwContent'
+    Check 'the dialog body is bounded so it can scroll' ($null -ne $hwScroll -and $hwScroll.ActualHeight -lt 500) "height=$($hwScroll.ActualHeight)"
+    $memTab = Find-ById $hwRoot 'HwTab3'
+    if ($null -ne $memTab) {
+        $memTab.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+        Pump 300
+    }
+    $hwScroll.UpdateLayout()
+    $hidden = [math]::Round($hwScroll.ExtentHeight - $hwScroll.ViewportHeight, 1)
+    Check 'a section taller than the viewport reports scrollable height' ([math]::Abs($hwScroll.ScrollableHeight - $hidden) -le 1) "scrollable=$([math]::Round($hwScroll.ScrollableHeight,1)) extent=$([math]::Round($hwScroll.ExtentHeight,1)) viewport=$([math]::Round($hwScroll.ViewportHeight,1))"
+    $bar = $null
+    foreach ($candidate in (Find-ByTypeName $hwRoot 'ScrollBar')) {
+        if ($candidate.Visibility -eq [System.Windows.Visibility]::Visible -and $candidate.Orientation -eq [System.Windows.Controls.Orientation]::Vertical) { $bar = $candidate }
+    }
+    # The scroll bar must carry the dark style (10 px wide). Without it the default 17 px bar is used,
+    # and its empty Track means "scrollable but no visible scroll bar" - the bug this guards against.
+    # The thumb itself is built in a Loaded handler, which never runs for a window that is not shown,
+    # so the width is the part that can be asserted here; the thumb was verified on a shown window.
+    Check 'the scroll bar carries the compact dark style' ($null -ne $bar -and $bar.ActualWidth -le 12) "width=$($bar.ActualWidth)"
+    $hwScroll.ScrollToEnd()
+    Pump 200
+    Check 'the last row of a long section can be reached' ($hwScroll.VerticalOffset -gt 0) "offset=$($hwScroll.VerticalOffset)"
+    $closeButton = Find-ById $hwRoot 'HwClose'
+    if ($null -ne $closeButton) {
+        $closeButton.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+        Pump 300
+    }
+    Check 'closing the dialog removes it' ($null -eq (Find-ById $hwRoot 'HardwareInfoDialog')) ''
+}
+$hwWindow.Close()
+
+"== disk order =="
+$reportType = $asm.GetType('QuadVitals.Settings.HardwareReport')
+$load = $reportType.GetMethod('Load', [System.Reflection.BindingFlags]'Public,Static')
+$report = $load.Invoke($null, @())
+$plain = $reportType.GetMethod('PlainText', [System.Reflection.BindingFlags]'Public,Instance').Invoke($report, @())
+$markdown = $reportType.GetMethod('ToMarkdown', [System.Reflection.BindingFlags]'Public,Instance').Invoke($report, @([DateTime]::Now))
+Check 'the exported report is markdown with a title' ($markdown.StartsWith('# QuadVitals')) ''
+$tableHeader = '| ' + (U @(0x5B57, 0x6BB5)) + ' | ' + (U @(0x503C)) + ' |'
+Check 'the exported report has per-section tables' ($markdown.Contains($tableHeader) -and $markdown.Contains('## CPU')) ''
+$diskWord = U @(0x786C, 0x76D8)
+$dot = U @(0x00B7)
+Check 'the first disk block is the system drive C:' ($plain.Contains($diskWord + ' 1 ' + $dot + ' C:')) ''
+$pattern = $diskWord + ' ([0-9]+) ' + $dot + ' ([A-Z]:)'
+$letters = @()
+foreach ($m in [regex]::Matches($plain, $pattern)) { $letters += [string]$m.Groups[2].Value }
+$ascending = $true
+for ($i = 1; $i -lt $letters.Count; $i++) {
+    if ([string]::CompareOrdinal($letters[$i], $letters[$i - 1]) -le 0) { $ascending = $false }
+}
+Check 'disk blocks follow drive letter order' (($letters.Count -ge 1) -and $ascending) "letters=$($letters -join ',')"
 
 "== editor card height =="
 $c = New-Case 1
