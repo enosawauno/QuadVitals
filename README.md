@@ -82,3 +82,7 @@ QuadVitals 使用 [PolyForm Noncommercial License 1.0.0](LICENSE)：源码公开
 
 - LibreHardwareMonitorLib 0.9.2（MPL 2.0）
 - HidSharp 2.1.0（Apache 2.0）
+
+## 界面
+
+![QuadVitals 仪表盘概览](assets/screenshots/overview.png)
