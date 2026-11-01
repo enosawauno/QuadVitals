@@ -577,7 +577,8 @@ foreach ($block in (Find-ByTypeName $aboutRoot 'TextBlock')) {
 Check 'the about page has an update card' ($null -ne $updateTitle) ''
 $updateCheck = Find-ById $aboutRoot 'AboutUpdateCheck'
 $updateCancel = Find-ById $aboutRoot 'AboutUpdateCancel'
-# 更新卡末尾的更新明细行：左边是说明，右边是可点的地址，和开发者卡同一套行。
+# The changelog row at the end of the update card: label on the left, clickable value on the
+# right, the same row shape the developer card uses.
 # The card is built lazily inside a scroll host: force one more layout pass before looking for the
 # row, otherwise the first traversal runs before the card's content is realized.
 $aboutRoot.UpdateLayout()
@@ -590,7 +591,7 @@ if ($null -ne $changelogRow) {
         if ($child -is [System.Windows.Controls.TextBlock] -and $child.Text -eq (U @(0x65E5, 0x5FD7, 0x660E, 0x7EC6))) { $changelogLabel = $child }
         if ($child -is [System.Windows.Controls.Border]) { $changelogTarget = $child }
     }
-    Check 'the changelog row is labelled 日志明细' ($null -ne $changelogLabel) ''
+    Check 'the changelog row is labelled for the changelog' ($null -ne $changelogLabel) ''
     Check 'the changelog value block is the clickable part' (($null -ne $changelogTarget) -and ($changelogTarget.Cursor -eq [System.Windows.Input.Cursors]::Hand)) ''
     Check 'the changelog label stays inert' (($null -eq $changelogLabel) -or ($changelogLabel.Cursor -ne [System.Windows.Input.Cursors]::Hand)) ''
     $changelogUrl = $asm.GetType('QuadVitals.Settings.AboutPage').GetField('ChangelogUrl', [Reflection.BindingFlags]'NonPublic,Static').GetValue($null)
@@ -1065,12 +1066,20 @@ while ($ovQueue.Count -gt 0 -and $null -eq $ovPage) {
 }
 Check 'the overview page is reachable' ($null -ne $ovPage) ''
 if ($null -ne $ovPage) {
-    # 卡片顺序：CPU / 显卡 / 内存 / 磁盘。显卡在第二格：占用和温度放一起比把两个占用排前面好读。
-    $gpuColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_gpuTile', $flags).GetValue($ovPage))
-    $memoryColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_memoryTile', $flags).GetValue($ovPage))
-    $cpuColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_cpuTile', $flags).GetValue($ovPage))
-    $diskColumn = [System.Windows.Controls.Grid]::GetColumn($ovType.GetField('_diskTile', $flags).GetValue($ovPage))
-    Check 'the device tiles read cpu, gpu, memory, disk' (($cpuColumn -eq 0) -and ($gpuColumn -eq 2) -and ($memoryColumn -eq 4) -and ($diskColumn -eq 6)) "columns=$cpuColumn,$gpuColumn,$memoryColumn,$diskColumn"
+    # Order is CPU / GPU / memory / disk: the GPU sits in the second slot, so usage and
+    # temperature stay next to each other instead of two usage tiles in a row.
+    # Compared by on-screen x, not by grid column: the user sees left-to-right order.
+    function Tile-Left([string]$field) {
+        $tile = $ovType.GetField($field, $flags).GetValue($ovPage)
+        if ($null -eq $tile) { return -1 }
+        return $tile.TransformToAncestor($ovPage).Transform((New-Object System.Windows.Point(0, 0))).X
+    }
+    $cpuLeft = Tile-Left '_cpuTile'
+    $gpuLeft = Tile-Left '_gpuTile'
+    $memoryLeft = Tile-Left '_memoryTile'
+    $diskLeft = Tile-Left '_diskTile'
+    Check 'the device tiles read cpu, gpu, memory, disk' (($cpuLeft -ge 0) -and ($cpuLeft -lt $gpuLeft) -and ($gpuLeft -lt $memoryLeft) -and ($memoryLeft -lt $diskLeft)) "x=$cpuLeft,$gpuLeft,$memoryLeft,$diskLeft"
+
 }
 if ($null -ne $ovPage) {
     $gpuTile = $ovType.GetField('_gpuTile', $flags).GetValue($ovPage)
