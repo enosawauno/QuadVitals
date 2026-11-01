@@ -35,6 +35,10 @@ build/tmp/
 # Local only, never published.
 server/
 
+# Local-only design docs, ledgers and reports.
+docs/
+files/
+
 # Local policy terms (kept out of the tree on purpose).
 .public-surface-deny.txt
 

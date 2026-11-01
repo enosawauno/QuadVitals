@@ -28,13 +28,15 @@
 
 版本与许可见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
 
-产品图标在 `assets\icon\` 里，随仓库分发。母版是 `png\icon-1024.png`，三个 ico 都由它生成：
+产品图标在 `assets\icon\` 里，随仓库分发。母版是 `png\icon-2048.png`（2048×2048，带透明通道；`png\icon-1024.png` 是半尺寸副本，脚本默认用它），三个 ico 都由母版生成：
 
 ```powershell
-powershell -File scripts\make-app-icon.ps1 -Master assets\icon\png\icon-1024.png -Output assets\icon\app.ico        -Fill 1.0
-powershell -File scripts\make-app-icon.ps1 -Master assets\icon\png\icon-1024.png -Output assets\icon\quadvitals.ico -Fill 1.0
-powershell -File scripts\make-app-icon.ps1 -Master assets\icon\png\icon-1024.png -Output assets\icon\tray.ico       -Fill 1.25
+powershell -File scripts\make-app-icon.ps1 -Master assets\icon\png\icon-2048.png -Output assets\icon\app.ico        -Fill 1.0
+powershell -File scripts\make-app-icon.ps1 -Master assets\icon\png\icon-2048.png -Output assets\icon\quadvitals.ico -Fill 1.0
+powershell -File scripts\make-app-icon.ps1 -Master assets\icon\png\icon-2048.png -Output assets\icon\tray.ico       -Fill 1.25 -Sizes 16,20,24,32,40,48
 ```
+
+`-Fill` 控制墨迹在画布里的占比（托盘图标在小尺寸下用 1.25 放大一档），`-Sizes` 指定要嵌的档位（默认 16–256 共十档；托盘从不画到 48 px 以上，只留六档）。标题栏左上角的标记用去底板的 `png\mark-128.png`（缺省回退 `mark-64.png`），由 `build-ui.ps1` 以 `/resource` 嵌进设置程序，不需要单独生成。
 
 图标为本项目原创，不含第三方图形或字体；改图后重跑上面三条即可。缺图标时构建不中断，exe 用系统默认图标。
 
