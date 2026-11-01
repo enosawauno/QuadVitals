@@ -1,0 +1,43 @@
+# Build output
+bin/
+obj/
+build/out/
+artifacts/
+packages/
+*.nupkg
+*.snupkg
+
+# IDE
+.vs/
+*.user
+*.suo
+*.userprefs
+
+# Logs / local data
+logs/
+*.log
+*.etl
+
+# Local only, never published.
+spikes/
+
+# Local settings
+*.local.json
+.env
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Scratch space for throwaway probes / reference captures
+build/tmp/
+
+# Local only, never published.
+server/
+
+# Local policy terms (kept out of the tree on purpose).
+.public-surface-deny.txt
+
+# Python bytecode
+__pycache__/
+*.pyc

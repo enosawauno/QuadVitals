@@ -1,0 +1,44 @@
+# Text normalisation and binary protection.
+#
+# Git for Windows defaults to core.autocrlf=true; without these rules .cs/.cpp
+# files flip between LF and CRLF on every checkout and produce noisy diffs.
+# QuadVitals is Windows-only, but the source is kept LF so the index stays stable
+# across checkouts.
+* text=auto eol=lf
+
+*.cs       text eol=lf
+*.cpp      text eol=lf
+*.h        text eol=lf
+*.ps1      text eol=lf
+*.csproj   text eol=lf
+*.sln      text eol=lf
+*.md       text eol=lf
+*.json     text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.xml      text eol=lf
+*.def      text eol=lf
+*.props    text eol=lf
+
+# Binary assets and build artefacts: never text-convert.
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.webp     binary
+*.gif      binary
+*.bmp      binary
+*.ico      binary
+*.icns     binary
+*.zip      binary
+*.7z       binary
+*.rar      binary
+*.gz       binary
+*.dll      binary
+*.exe      binary
+*.sys      binary
+*.pdb      binary
+*.lib      binary
+*.exp      binary
+*.obj      binary
+*.nupkg    binary
+*.dmp      binary
