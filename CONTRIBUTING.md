@@ -69,7 +69,7 @@ src/
   QuadVitals.UI/         WPF 设计系统
 tests/                   Core 断言、UI 行为回归、安装器回归
 scripts/                 构建、安装、测试与检查脚本
-assets/                  产品图标（安装器与窗口图标；不随仓库分发，缺了用系统默认图标）
+assets/                  产品图标（安装器、窗口与托盘图标）
 ```
 
 ## 架构
