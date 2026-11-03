@@ -938,7 +938,6 @@ while ($scan.Count -gt 0) {
 }
 Check 'submitted: no buttons inside the result block' ($visibleButtons -eq 0) ("buttons=" + $visibleButtons)
 $head = $windowType.GetField('_feedbackHead', $flags).GetValue($feedbackWindow)
-Check 'submitted: the title row and its cross are gone' ($head.Visibility -ne [System.Windows.Visibility]::Visible) ''
 Check 'submitted: the panel is shorter than the form' (($panelBorder.ActualHeight -gt 150) -and ($panelBorder.ActualHeight -lt 400)) ("actual=" + [math]::Round($panelBorder.ActualHeight))
 Check 'submitted: the close button counts down from five' (([string]$closeResult.Content) -eq ((5).ToString() + (U @(0x79D2, 0x540E, 0x81EA, 0x52A8, 0x5173, 0x95ED)))) ("text=" + $closeResult.Content)
 Pump 1100
@@ -950,6 +949,26 @@ Check 'submitted: the countdown closes the panel on its own' ($overlay.Visibilit
 $windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
 Pump 60
 $feedbackRoot.UpdateLayout()
+
+Check 'submitted: the title row and its cross are gone' ($head.Visibility -ne [System.Windows.Visibility]::Visible) ''
+# Failed upload: the green tick and the "sent" headline must not survive - the panel has to read as
+# "saved locally, not uploaded", with the reason and the path on their own lines.
+$lastResultField = $feedbackPageType.GetField('_lastResult', $flags)
+$lastResultField.SetValue($feedbackPage, $result)
+$feedbackPageType.GetMethod('ShowUploadFailure', $flags).Invoke($feedbackPage, @('timeout')) | Out-Null
+Pump 60
+$reasonLine = $feedbackPageType.GetField('_failureReason', $flags).GetValue($feedbackPage)
+$pathLine = $feedbackPageType.GetField('_failurePath', $flags).GetValue($feedbackPage)
+$headlineLine = $feedbackPageType.GetField('_resultHeadline', $flags).GetValue($feedbackPage)
+$retryBtn = $feedbackPageType.GetField('_retry', $flags).GetValue($feedbackPage)
+Check 'failed upload: the headline stops saying sent' (-not ([string]$headlineLine.Text).Contains((U @(0x5DF2, 0x53D1, 0x9001)))) ("text=" + $headlineLine.Text)
+Check 'failed upload: the reason gets its own line' ($reasonLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $reasonLine.Visibility)
+Check 'failed upload: the path gets its own line' ($pathLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $pathLine.Visibility)
+Check 'failed upload: retry is offered next to close' (($retryBtn.Visibility -eq [System.Windows.Visibility]::Visible) -and ([string]$closeResult.Content -eq (U @(0x5173, 0x95ED)))) ("retry=" + $retryBtn.Visibility + " close=" + $closeResult.Content)
+Check 'failed upload: the countdown is stopped' (-not $overlay.Visibility -eq [System.Windows.Visibility]::Collapsed) ''
+Pump 1300
+Check 'failed upload: the panel stays open for the retry' ($overlay.Visibility -eq [System.Windows.Visibility]::Visible) ''
+
 $feedbackPageType.GetMethod('RestoreForm', $flags).Invoke($feedbackPage, $null) | Out-Null
 Pump 60
 Check 'back to the form restores its height' (-not [double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)

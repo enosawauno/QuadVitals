@@ -477,7 +477,12 @@ namespace QuadVitals.Settings
             _submit.Click += OnSubmit;
             actions.Children.Add(_submit);
 
-            // Result state: one way out, in the same slot the primary button would occupy.
+            // Result state: 重新上传 (only after a failed upload) and 关闭 sit together at the bottom right.
+            _retry.Margin = new Thickness(0, 0, 8, 0);
+            _retry.Visibility = Visibility.Collapsed;
+            _retry.Click += async (sender, e) => await RunUploadAsync();
+            actions.Children.Add(_retry);
+
             _closeResult = new FlatButton("关闭");
             AutomationProperties.SetAutomationId(_closeResult, "FeedbackCloseResult");
             _closeResult.Visibility = Visibility.Collapsed;

@@ -19,6 +19,10 @@ namespace QuadVitals.Settings
     {
         private readonly FlatButton _retry = new FlatButton("重新上传");
         private readonly TextBlock _successUpload = new TextBlock();
+        private readonly ContentControl _resultMark = new ContentControl();
+        private readonly TextBlock _resultHeadline = new TextBlock();
+        private readonly TextBlock _failureReason = new TextBlock();
+        private readonly TextBlock _failurePath = new TextBlock();
 
 
         private StackPanel BuildResultBody()
@@ -31,17 +35,18 @@ namespace QuadVitals.Settings
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            content.Children.Add(SuccessMark());
+            _resultMark.Content = SuccessMark();
+            _resultMark.HorizontalAlignment = HorizontalAlignment.Center;
+            content.Children.Add(_resultMark);
 
-            content.Children.Add(new TextBlock
-            {
-                Text = "反馈已发送成功",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Theme.TextPrimaryBrush,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 16, 0, 0)
-            });
+            _resultHeadline.Text = "反馈已发送成功";
+            _resultHeadline.FontSize = 18;
+            _resultHeadline.FontWeight = FontWeights.SemiBold;
+            _resultHeadline.Foreground = Theme.TextPrimaryBrush;
+            _resultHeadline.TextAlignment = TextAlignment.Center;
+            _resultHeadline.HorizontalAlignment = HorizontalAlignment.Center;
+            _resultHeadline.Margin = new Thickness(0, 16, 0, 0);
+            content.Children.Add(_resultHeadline);
 
             _successId.FontSize = 12.5;
             _successId.Foreground = Theme.TextSecondaryBrush;
@@ -56,12 +61,23 @@ namespace QuadVitals.Settings
             _successUpload.Margin = new Thickness(0, 6, 0, 0);
             content.Children.Add(_successUpload);
 
-            // 上传失败时才会出现：本地包还在，可以再试一次。
-            _retry.Margin = new Thickness(0, 16, 0, 0);
-            _retry.HorizontalAlignment = HorizontalAlignment.Center;
-            _retry.Visibility = Visibility.Collapsed;
-            _retry.Click += async (sender, e) => await RunUploadAsync();
-            content.Children.Add(_retry);
+            _failureReason.FontSize = 11.5;
+            _failureReason.Foreground = Theme.TextSecondaryBrush;
+            _failureReason.TextWrapping = TextWrapping.Wrap;
+            _failureReason.TextAlignment = TextAlignment.Center;
+            _failureReason.HorizontalAlignment = HorizontalAlignment.Center;
+            _failureReason.Margin = new Thickness(0, 6, 0, 0);
+            _failureReason.Visibility = Visibility.Collapsed;
+            content.Children.Add(_failureReason);
+
+            _failurePath.FontSize = 11;
+            _failurePath.Foreground = Theme.TextTertiaryBrush;
+            _failurePath.TextWrapping = TextWrapping.Wrap;
+            _failurePath.TextAlignment = TextAlignment.Center;
+            _failurePath.HorizontalAlignment = HorizontalAlignment.Center;
+            _failurePath.Margin = new Thickness(0, 6, 0, 0);
+            _failurePath.Visibility = Visibility.Collapsed;
+            content.Children.Add(_failurePath);
 
             return content;
         }
@@ -210,6 +226,10 @@ namespace QuadVitals.Settings
                 CleanupUploadTemp();
                 _successUpload.Text = "已上传，服务端编号 " + upload.FeedbackId;
                 _successUpload.Foreground = Theme.AccentGreenBrush;
+                _resultMark.Content = SuccessMark();
+                _resultHeadline.Text = "反馈已发送成功";
+                _failureReason.Visibility = Visibility.Collapsed;
+                _failurePath.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -223,12 +243,57 @@ namespace QuadVitals.Settings
         /// </summary>
         private void ShowUploadFailure(string reason)
         {
+            // A failed upload is not a success with a red footnote: the mark and the headline change
+            // too, and the reason/path move to their own lines so neither gets squeezed.
             StopAutoClose();
             if (_closeResult != null) _closeResult.Content = "关闭";
-            _successUpload.Text = "仅本机保存：上传失败（" + reason + "）　文件：" +
-                                  (_lastResult == null ? string.Empty : _lastResult.PackagePath);
-            _successUpload.Foreground = Theme.AccentRedBrush;
+            _resultMark.Content = FailureMark();
+            _resultHeadline.Text = "上传未完成，反馈已保存到本机";
+
+            _successUpload.Text = "本地包已生成，可重新上传";
+            _successUpload.Foreground = Theme.TextSecondaryBrush;
+
+            _failureReason.Text = "原因：" + reason;
+            _failureReason.Visibility = Visibility.Visible;
+
+            if (_lastResult != null)
+            {
+                _failurePath.Text = "文件：" + _lastResult.PackagePath;
+                _failurePath.Visibility = Visibility.Visible;
+            }
             _retry.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>Red disc with a white exclamation mark: the package is fine, only the upload is not.</summary>
+        private static UIElement FailureMark()
+        {
+            Canvas canvas = new Canvas
+            {
+                Width = 52,
+                Height = 52,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+
+            System.Windows.Shapes.Ellipse disc = new System.Windows.Shapes.Ellipse
+            {
+                Width = 52,
+                Height = 52,
+                Fill = Theme.AccentRedBrush
+            };
+            canvas.Children.Add(disc);
+
+            TextBlock bang = new TextBlock
+            {
+                Text = "!",
+                FontSize = 30,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Brushes.White,
+                Width = 52,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            canvas.Children.Add(bang);
+            return canvas;
         }
     }
 }
