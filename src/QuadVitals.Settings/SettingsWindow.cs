@@ -47,7 +47,7 @@ namespace QuadVitals.Settings
         // 反馈从侧边条搬到了标题栏气泡：表单实例活到窗口关，重开面板能接着草稿与结果卡。
         private FeedbackPage _feedbackPage;
         private FrameworkElement _feedbackPanel;
-        private TextBlock _feedbackHeading;
+        private bool _overlayClosesOnBackdrop;
         private MetricsChannel.Reader _statusReader;
         private DateTime _statusReaderAttemptUtc = DateTime.MinValue;
         // 自动恢复状态：连续两秒读到离线才开始动手，避免和刚启动的 Agent 抢。
@@ -271,10 +271,18 @@ namespace QuadVitals.Settings
             // Dialog layer: sits above the whole shell (title bar included) so a panel is really
             // centred in the window, and dims what is behind it without touching page layout.
             _overlay = new Grid { Visibility = Visibility.Collapsed };
-            _overlay.Children.Add(new Border
+            Border backdrop = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0xB4, 0x00, 0x00, 0x00))
-            });
+            };
+            System.Windows.Automation.AutomationProperties.SetAutomationId(backdrop, "OverlayBackdrop");
+            // Only panels that ask for it close on an outside click: the settings dialogs have a
+            // draft and a 取消 button, and dimming them by accident would throw that away.
+            backdrop.MouseLeftButtonUp += (sender, e) =>
+            {
+                if (_overlayClosesOnBackdrop) CloseOverlay();
+            };
+            _overlay.Children.Add(backdrop);
             _overlayContent = new ContentControl
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -298,9 +306,10 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>Shows a panel centred in the window with a dimming backdrop (no OS dialog).</summary>
-        public void ShowOverlay(FrameworkElement content)
+        public void ShowOverlay(FrameworkElement content, bool backdropCloses = false)
         {
             if (content == null || _overlay == null) return;
+            _overlayClosesOnBackdrop = backdropCloses;
 
             _agentPanelShown = false;
 
@@ -349,7 +358,6 @@ namespace QuadVitals.Settings
                 // The card title is the panel's title now ("反馈内容" / "反馈已保存").
                 _feedbackPage.HeadingChanged += text =>
                 {
-                    if (_feedbackHeading != null) _feedbackHeading.Text = text;
                     // The result is a short block; keeping the form's 580 px around it left most of
                     // the panel empty. Let it fit its content until the form comes back.
                     if (_feedbackPanel != null)
@@ -363,7 +371,7 @@ namespace QuadVitals.Settings
                 // the frame around the same form is what WPF rejects when the panel is opened twice.
                 _feedbackPanel = BuildFeedbackPanel();
             }
-            ShowOverlay(_feedbackPanel);
+            ShowOverlay(_feedbackPanel, true);
         }
 
         /// <summary>
@@ -382,33 +390,9 @@ namespace QuadVitals.Settings
                 SnapsToDevicePixels = true
             };
 
-            Grid grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-
-            // 标题与输入框之间留一档呼吸：紧贴着看像标题属于输入框的一部分。
-            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 14) };
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            _feedbackHeading = new TextBlock
-            {
-                Text = _feedbackPage.Heading,
-                FontSize = 16,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Theme.TextPrimaryBrush,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            head.Children.Add(_feedbackHeading);
-
-            Button close = PanelCloseButton("FeedbackClose");
-            close.Click += (sender, e) => CloseOverlay();
-            Grid.SetColumn(close, 1);
-            head.Children.Add(close);
-
-            grid.Children.Add(head);
-            Grid.SetRow(_feedbackPage, 1);
-            grid.Children.Add(_feedbackPage);
-            panel.Child = grid;
+            // 没有标题行也没有右上角 ✕：面板就是一张便签，内容自己说话。关闭走 Esc、
+            // 点面板外面（见 ShowOverlay 的 backdropCloses），结果态右下角还有一个「关闭」。
+            panel.Child = _feedbackPage;
             return panel;
         }
 
@@ -417,30 +401,6 @@ namespace QuadVitals.Settings
         private const double FeedbackPanelHeight = 580;
         /// <summary>The submitted state is a short centred block, like the installer's finish page.</summary>
         private const double FeedbackResultWidth = 520;
-
-        /// <summary>Small ✕ for panel headers: a third the weight of the caption button, same colour rules.</summary>
-        private static Button PanelCloseButton(string automationId)
-        {
-            Button close = new Button
-            {
-                Width = 26,
-                Height = 26,
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                Focusable = false,
-                FocusVisualStyle = null,
-                Foreground = Theme.TextSecondaryBrush,
-                Template = BuildCaptionTemplate(),
-                ToolTip = "关闭"
-            };
-            System.Windows.Automation.AutomationProperties.SetAutomationId(close, automationId);
-            System.Windows.Automation.AutomationProperties.SetName(close, "关闭");
-            close.Content = SmallCloseGlyph(close);
-            close.MouseEnter += (sender, e) => close.Foreground = Theme.TextPrimaryBrush;
-            close.MouseLeave += (sender, e) => close.Foreground = Theme.TextSecondaryBrush;
-            return close;
-        }
 
         /// <summary>Title-bar icon button: same box and hover as the caption buttons, custom glyph.</summary>
         private static Button IconButton(string automationId, string name, string tip,
@@ -501,31 +461,6 @@ namespace QuadVitals.Settings
             Canvas.SetTop(bubble, 0.5);
             canvas.Children.Add(bubble);
             return canvas;
-        }
-
-        private static FrameworkElement SmallCloseGlyph(Button owner)
-        {
-            Canvas canvas = new Canvas { Width = 12, Height = 12 };
-            canvas.Children.Add(SmallLine(owner, 2, 2, 10, 10));
-            canvas.Children.Add(SmallLine(owner, 10, 2, 2, 10));
-            return canvas;
-        }
-
-        private static Line SmallLine(Button owner, double x1, double y1, double x2, double y2)
-        {
-            Line line = new Line
-            {
-                X1 = x1,
-                Y1 = y1,
-                X2 = x2,
-                Y2 = y2,
-                StrokeThickness = 1.6,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round
-            };
-            line.SetBinding(Shape.StrokeProperty,
-                new System.Windows.Data.Binding("Foreground") { Source = owner });
-            return line;
         }
 
         /// <summary>设备状态卡右上角齿轮的入口。第一个设置项是指示器样式。</summary>

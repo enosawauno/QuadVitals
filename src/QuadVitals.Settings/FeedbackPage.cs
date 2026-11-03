@@ -24,7 +24,7 @@ namespace QuadVitals.Settings
     /// previewed before submit, packaged locally as a zip, then uploaded. Upload is best effort:
     /// a failure keeps the local package and offers a manual retry (no background queue).
     /// </summary>
-    internal sealed class FeedbackPage : UserControl, IRefreshable
+    internal sealed partial class FeedbackPage : UserControl, IRefreshable
     {
         private readonly SettingsWindow _window;
         private readonly FeedbackOptions _options = new FeedbackOptions();
@@ -85,7 +85,6 @@ namespace QuadVitals.Settings
         private readonly TextBlock _placeholder = new TextBlock();
         private StackPanel _resultBody;
         private readonly TextBlock _successId = new TextBlock();
-        private readonly TextBlock _successPath = new TextBlock();
         private readonly DispatcherTimer _draftTimer;
         private readonly DispatcherTimer _statusTimer = new DispatcherTimer
         {
@@ -101,9 +100,10 @@ namespace QuadVitals.Settings
         private FeedbackUploadRequest _lastRequest;
         private string _uploadTempDirectory;
         private readonly IFeedbackTransport _transport = new HttpFeedbackTransport();
-        private readonly FlatButton _retry = new FlatButton("重新上传");
-        private readonly TextBlock _successUpload = new TextBlock();
         private readonly bool _compact;
+        // 结果态的「关闭」带倒计时：结果看完就该走，不必再点一下。
+        private DispatcherTimer _autoCloseTimer;
+        private int _autoCloseSeconds;
 
         public FeedbackPage(SettingsWindow window) : this(window, false) { }
 
@@ -481,7 +481,11 @@ namespace QuadVitals.Settings
             _closeResult = new FlatButton("关闭");
             AutomationProperties.SetAutomationId(_closeResult, "FeedbackCloseResult");
             _closeResult.Visibility = Visibility.Collapsed;
-            _closeResult.Click += (sender, e) => _window.CloseOverlay();
+            _closeResult.Click += (sender, e) =>
+            {
+                StopAutoClose();
+                _window.CloseOverlay();
+            };
             actions.Children.Add(_closeResult);
 
             Grid.SetColumn(actions, 1);
@@ -490,90 +494,6 @@ namespace QuadVitals.Settings
             Grid.SetRow(row, 1);
             footer.Children.Add(row);
             return footer;
-        }
-
-        private StackPanel BuildResultBody()
-        {
-            // 成功页照安装器的完成页：绿色圆盘打勾 → 一句结论 → 下面两三行小字。
-            // 不放按钮：关闭走面板右下角那个，再来一条就是关掉重开（草稿在提交时已清）。
-            StackPanel content = new StackPanel
-            {
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            content.Children.Add(SuccessMark());
-
-            content.Children.Add(new TextBlock
-            {
-                Text = "反馈已发送成功",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Theme.TextPrimaryBrush,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 16, 0, 0)
-            });
-
-            _successId.FontSize = 12.5;
-            _successId.Foreground = Theme.TextSecondaryBrush;
-            _successId.HorizontalAlignment = HorizontalAlignment.Center;
-            _successId.Margin = new Thickness(0, 14, 0, 0);
-            content.Children.Add(_successId);
-
-            _successPath.FontSize = 11;
-            _successPath.Foreground = Theme.TextTertiaryBrush;
-            _successPath.TextAlignment = TextAlignment.Center;
-            _successPath.TextWrapping = TextWrapping.Wrap;
-            _successPath.HorizontalAlignment = HorizontalAlignment.Center;
-            _successPath.Margin = new Thickness(0, 6, 0, 0);
-            content.Children.Add(_successPath);
-
-            _successUpload.FontSize = 11.5;
-            _successUpload.TextWrapping = TextWrapping.Wrap;
-            _successUpload.TextAlignment = TextAlignment.Center;
-            _successUpload.HorizontalAlignment = HorizontalAlignment.Center;
-            _successUpload.Margin = new Thickness(0, 6, 0, 0);
-            content.Children.Add(_successUpload);
-
-            // 上传失败时才会出现：本地包还在，可以再试一次。
-            _retry.Margin = new Thickness(0, 16, 0, 0);
-            _retry.HorizontalAlignment = HorizontalAlignment.Center;
-            _retry.Visibility = Visibility.Collapsed;
-            _retry.Click += async (sender, e) => await RunUploadAsync();
-            content.Children.Add(_retry);
-
-            return content;
-        }
-
-        /// <summary>Green disc with a white tick, same shape as the installer's finish page.</summary>
-        private static UIElement SuccessMark()
-        {
-            Canvas canvas = new Canvas
-            {
-                Width = 52,
-                Height = 52,
-                HorizontalAlignment = HorizontalAlignment.Center
-            };
-
-            System.Windows.Shapes.Ellipse disc = new System.Windows.Shapes.Ellipse
-            {
-                Width = 52,
-                Height = 52,
-                Fill = Theme.AccentGreenBrush
-            };
-            canvas.Children.Add(disc);
-
-            System.Windows.Shapes.Path tick = new System.Windows.Shapes.Path
-            {
-                Data = Geometry.Parse("M 14,27 L 22,35 L 38,18"),
-                Stroke = Brushes.White,
-                StrokeThickness = 4.2,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round
-            };
-            canvas.Children.Add(tick);
-            return canvas;
         }
 
         private static void FadeIn(UIElement element)
@@ -607,7 +527,12 @@ namespace QuadVitals.Settings
             if (_clear != null) _clear.Visibility = Visibility.Visible;
             _addFiles.Visibility = Visibility.Visible;
             _submit.Visibility = Visibility.Visible;
-            if (_closeResult != null) _closeResult.Visibility = Visibility.Collapsed;
+            if (_closeResult != null)
+            {
+                _closeResult.Visibility = Visibility.Collapsed;
+                _closeResult.Content = "关闭";
+            }
+            StopAutoClose();
         }
 
         /// <summary>The placeholder is only visible while the box is empty.</summary>
@@ -1133,96 +1058,6 @@ namespace QuadVitals.Settings
                 _submit.IsEnabled = true;
                 _submit.Content = "提交反馈";
             }
-        }
-
-        private void ShowSuccess(FeedbackResult result)
-        {
-            _successId.Text = "编号：" + result.Id + "　·　" + result.AttachmentCount + " 个附件";
-            _successPath.Text = "文件：" + result.PackagePath;
-            _successUpload.Text = "准备上传…";
-            _successUpload.Foreground = Theme.TextSecondaryBrush;
-            _retry.Visibility = Visibility.Collapsed;
-
-            // 同一块区域原地变成结果：表单收起，结果顶上来；底部只剩一个关闭。
-            ShowingResult = true;
-            // 标题行保持「反馈」：结论已经由成功页的大标题说了，两处都写就成了同义反复。
-            SetHeading("反馈");
-            _formBody.Visibility = Visibility.Collapsed;
-            if (_logBlock != null) _logBlock.Visibility = Visibility.Collapsed;
-            if (_clear != null) _clear.Visibility = Visibility.Collapsed;
-            _addFiles.Visibility = Visibility.Collapsed;
-            _submit.Visibility = Visibility.Collapsed;
-            if (_closeResult != null) _closeResult.Visibility = Visibility.Visible;
-            _resultBody.Visibility = Visibility.Visible;
-            FadeIn(_resultBody);
-
-            if (IsPreviewOpen)
-            {
-                _previewPanel.Visibility = Visibility.Collapsed;
-                _previewButton.Content = "查看将包含的信息";
-            }
-
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (_resultBody != null) _resultBody.BringIntoView();
-            }), DispatcherPriority.Background);
-        }
-
-        /// <summary>
-        /// Best-effort upload. The local zip already exists, so a failure only changes
-        /// the wording on the success card and reveals the retry button.
-        /// </summary>
-        private async Task RunUploadAsync()
-        {
-            if (_lastRequest == null) return;
-
-            _retry.IsEnabled = false;
-            _retry.Visibility = Visibility.Collapsed;
-            _successUpload.Text = "正在上传到 quadvitals.enosawa.uno …";
-            _successUpload.Foreground = Theme.TextSecondaryBrush;
-
-            FeedbackUploadResult upload;
-            try
-            {
-                FeedbackUploadRequest request = _lastRequest;
-                upload = await Task.Run(() => FeedbackUploader.Upload(request, _transport));
-            }
-            catch (Exception ex)
-            {
-                upload = new FeedbackUploadResult { Error = "上传失败：" + ex.GetType().Name };
-            }
-
-            _retry.IsEnabled = true;
-            if (upload.Ok)
-            {
-                // 台账先记成功，再删本地包：删失败时下次启动按 "uploaded" 只删不重传。
-                if (_lastResult != null) FeedbackStore.AppendUploaded(DataDirectory, _lastResult.Id, upload.FeedbackId);
-                bool removed = false;
-                try
-                {
-                    string packagePath = _lastResult == null ? null : _lastResult.PackagePath;
-                    if (!string.IsNullOrEmpty(packagePath) && File.Exists(packagePath))
-                    {
-                        File.Delete(packagePath);
-                        removed = true;
-                    }
-                }
-                catch (Exception)
-                {
-                    // 删不掉就留着，启动时再删
-                }
-
-                _successPath.Text = removed ? "本地包已删除，台账保留编号" : "本地包未能删除，下次启动会重试";
-                CleanupUploadTemp();
-                _successUpload.Text = "已上传，服务端编号 " + upload.FeedbackId;
-                _successUpload.Foreground = Theme.AccentGreenBrush;
-                return;
-            }
-
-            if (_lastResult != null) FeedbackStore.AppendUploadFailed(DataDirectory, _lastResult.Id, upload.Error);
-            _successUpload.Text = "仅本机保存：上传失败（" + upload.Error + "）";
-            _successUpload.Foreground = Theme.AccentRedBrush;
-            _retry.Visibility = Visibility.Visible;
         }
 
         /// <summary>

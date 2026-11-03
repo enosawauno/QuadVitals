@@ -890,9 +890,6 @@ if ($null -ne $feedbackPage) {
     Check 'the hint wraps at the typed text width' ([math]::Abs($hintWrap - $textWrap) -le 1) "hint=$([math]::Round($hintWrap,1)) text=$([math]::Round($textWrap,1))"
 }
 
-$panelHeading = $windowType.GetField('_feedbackHeading', $flags).GetValue($feedbackWindow)
-Check 'the panel title says feedback once' ($null -ne $panelHeading -and $panelHeading.Text -eq (U @(0x53CD, 0x9988))) ("text=" + $(if ($null -ne $panelHeading) { $panelHeading.Text } else { '(null)' }))
-
 # The three actions are right-aligned, in the order the owner asked for: clear / attach / submit.
 $clearButton = Find-ById $feedbackRoot 'FeedbackClear'
 $attachButton = Find-ById $feedbackRoot 'FeedbackAddFiles'
@@ -941,16 +938,43 @@ while ($scan.Count -gt 0) {
 }
 Check 'submitted: no buttons inside the result block' ($visibleButtons -eq 0) ("buttons=" + $visibleButtons)
 Check 'submitted: the panel is shorter than the form' (($panelBorder.ActualHeight -gt 150) -and ($panelBorder.ActualHeight -lt 400)) ("actual=" + [math]::Round($panelBorder.ActualHeight))
+Check 'submitted: the close button counts down from five' (([string]$closeResult.Content) -eq ((5).ToString() + (U @(0x79D2, 0x540E, 0x81EA, 0x52A8, 0x5173, 0x95ED)))) ("text=" + $closeResult.Content)
+Pump 1100
+Check 'submitted: the countdown ticks down' (([string]$closeResult.Content) -match '^[0-4]') ("text=" + $closeResult.Content)
+# One second left is enough to prove the countdown actually closes the panel.
+$feedbackPageType.GetField('_autoCloseSeconds', $flags).SetValue($feedbackPage, 1)
+Pump 1300
+Check 'submitted: the countdown closes the panel on its own' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
+$windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
+Pump 60
+$feedbackRoot.UpdateLayout()
 $feedbackPageType.GetMethod('RestoreForm', $flags).Invoke($feedbackPage, $null) | Out-Null
 Pump 60
 Check 'back to the form restores its height' (-not [double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)
 
-$feedbackClose = Find-ById $feedbackRoot 'FeedbackClose'
-Check 'the panel has a close button' ($null -ne $feedbackClose) ''
-if ($null -ne $feedbackClose) {
-    $feedbackClose.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
-    Check 'closing the panel puts the overlay away' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
-}
+# No title row and no ✕ any more: the panel closes on Esc, on an outside click, or with the result's
+# 关闭 button.
+Check 'the panel has no close cross' ($null -eq (Find-ById $feedbackRoot 'FeedbackClose')) ''
+# The same button still closes immediately when clicked; the countdown is a suggestion, not a lock.
+$feedbackPageType.GetMethod('ShowSuccess', $flags).Invoke($feedbackPage, @($result)) | Out-Null
+Pump 60
+$closeResult2 = $feedbackPageType.GetField('_closeResult', $flags).GetValue($feedbackPage)
+$closeResult2.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+Pump 60
+Check 'clicking the close button ends it early' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
+$windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
+Pump 60
+$backdrop = Find-ById $feedbackRoot 'OverlayBackdrop'
+Check 'the dim layer exists' ($null -ne $backdrop) ''
+$backdropFlag = $windowType.GetField('_overlayClosesOnBackdrop', $flags)
+Check 'the feedback panel closes on an outside click' (($null -ne $backdrop) -and $backdropFlag.GetValue($feedbackWindow)) ''
+$windowType.GetMethod('CloseOverlay').Invoke($feedbackWindow, $null) | Out-Null
+$windowType.GetMethod('ShowNetworkSettings').Invoke($feedbackWindow, $null) | Out-Null
+Check 'other dialogs keep their own exit' ($backdropFlag.GetValue($feedbackWindow) -eq $false) ''
+$windowType.GetMethod('CloseOverlay').Invoke($feedbackWindow, $null) | Out-Null
+$windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
+Pump 60
+$windowType.GetMethod('CloseOverlay').Invoke($feedbackWindow, $null) | Out-Null
 # Reopening used to throw "the specified element is already the logical child of another element":
 # the frame was rebuilt around the same cached form. Open, close, open again.
 $windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
