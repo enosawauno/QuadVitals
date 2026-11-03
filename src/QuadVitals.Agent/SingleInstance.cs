@@ -18,15 +18,18 @@ namespace QuadVitals.Agent
         private readonly Mutex _mutex;
         private readonly EventWaitHandle _activate;
         private readonly EventWaitHandle _quit;
+        private readonly EventWaitHandle _restart;
         private readonly bool _isOwner;
         private Thread _watch;
         private bool _disposed;
 
-        private SingleInstance(Mutex mutex, EventWaitHandle activate, EventWaitHandle quit, bool isOwner)
+        private SingleInstance(Mutex mutex, EventWaitHandle activate, EventWaitHandle quit,
+                               EventWaitHandle restart, bool isOwner)
         {
             _mutex = mutex;
             _activate = activate;
             _quit = quit;
+            _restart = restart;
             _isOwner = isOwner;
         }
 
@@ -38,6 +41,9 @@ namespace QuadVitals.Agent
         /// <summary>Raised (on a worker thread) when another launch asked us to quit.</summary>
         public event Action QuitRequested;
 
+        /// <summary>Raised when the dashboard asked for a new process (manual sensor restart).</summary>
+        public event Action RestartRequested;
+
         public static SingleInstance Acquire()
         {
             Mutex mutex = new Mutex(false, MutexName);
@@ -45,6 +51,8 @@ namespace QuadVitals.Agent
                 AgentControl.ActivateEventName);
             EventWaitHandle quit = new EventWaitHandle(false, EventResetMode.AutoReset,
                 AgentControl.QuitEventName);
+            EventWaitHandle restart = new EventWaitHandle(false, EventResetMode.AutoReset,
+                AgentControl.RestartEventName);
 
             bool owned;
             try
@@ -57,10 +65,10 @@ namespace QuadVitals.Agent
                 owned = true;
             }
 
-            return new SingleInstance(mutex, activate, quit, owned);
+            return new SingleInstance(mutex, activate, quit, restart, owned);
         }
 
-        /// <summary>Owner only: start listening for activate/quit pokes.</summary>
+        /// <summary>Owner only: start listening for activate/quit/restart pokes.</summary>
         public void StartWatching()
         {
             if (!_isOwner || _watch != null) return;
@@ -74,7 +82,7 @@ namespace QuadVitals.Agent
 
         private void Watch()
         {
-            WaitHandle[] handles = { _activate, _quit };
+            WaitHandle[] handles = { _activate, _quit, _restart };
             while (true)
             {
                 int index = WaitHandle.WaitAny(handles, 500);
@@ -89,6 +97,11 @@ namespace QuadVitals.Agent
                     Action handler = QuitRequested;
                     if (handler != null) handler();
                     return;
+                }
+                else if (index == 2)
+                {
+                    Action handler = RestartRequested;
+                    if (handler != null) handler();
                 }
                 else if (index == WaitHandle.WaitTimeout)
                 {
@@ -107,6 +120,12 @@ namespace QuadVitals.Agent
         public static bool PokeQuit()
         {
             return AgentControl.RequestQuit();
+        }
+
+        /// <summary>Asks the running agent to hand over to a fresh process (band menu).</summary>
+        public static bool PokeRestart()
+        {
+            return AgentControl.RequestRestart();
         }
 
         public void Dispose()

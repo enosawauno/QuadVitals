@@ -32,13 +32,18 @@ namespace QuadVitals.Agent
             _stampPath = Path.Combine(string.IsNullOrEmpty(dir) ? "." : dir, "agent-restart.txt");
         }
 
-        /// <summary>Runs at most once per process: a second stall is ignored.</summary>
-        public bool Request(string reason, Action quit, bool spawn = true)
+        /// <param name="force">
+        /// Manual restarts skip both the once-per-process guard and the hourly stamp: the user asked for it,
+        /// and consuming the automatic budget would then block a real stall from being cured.
+        /// </param>
+        public bool Request(string reason, Action quit, bool spawn = true, bool force = false)
         {
-            if (Interlocked.CompareExchange(ref _used, 1, 0) != 0) return false;
+            if (force) Interlocked.Exchange(ref _used, 1);
+            else if (Interlocked.CompareExchange(ref _used, 1, 0) != 0) return false;
 
             DateTime last = ReadStamp();
-            if (last != DateTime.MinValue && (DateTime.UtcNow - last).TotalMilliseconds < MinIntervalMs)
+            if (!force && last != DateTime.MinValue &&
+                (DateTime.UtcNow - last).TotalMilliseconds < MinIntervalMs)
             {
                 _log.Report("跳过自动重启：" + reason + "（" + last.ToLocalTime().ToString("HH:mm") +
                             " 已重启过，一小时内只允许一次）");
@@ -76,8 +81,8 @@ namespace QuadVitals.Agent
                 }
             }
 
-            WriteStamp(DateTime.UtcNow);
-            _log.Report("自动重启 Agent：" + reason + "（旧 pid " + pid + " 退出后由新进程接管）");
+            if (!force) WriteStamp(DateTime.UtcNow);
+            _log.Report("重启 Agent：" + reason + "（旧 pid " + pid + " 退出后由新进程接管）");
             if (quit != null) quit();
             return true;
         }

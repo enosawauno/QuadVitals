@@ -143,6 +143,11 @@ namespace QuadVitals.Agent
                     tray.SetQuitAction(() => tray.Quit());
                     single.ActivateRequested += () => tray.Post(tray.ShowStatusNow);
                     single.QuitRequested += tray.Quit;
+                    // 任务栏右键的「重启传感器」：换一个新进程重建温度与显卡的读取会话。手动请求不受
+                    // 一小时自动重启预算的限制，也不消耗它。
+                    single.RestartRequested += () =>
+                        restarter.Request("手动重启传感器", () => { Action quit = quitAgent; if (quit != null) quit(); },
+                            true, true);
                     single.StartWatching();
 
                     tray.RunMessageLoop(null);

@@ -16,6 +16,8 @@ namespace QuadVitals.Core
     {
         public const string ActivateEventName = @"Local\QuadVitals.Agent.Activate.v1";
         public const string QuitEventName = @"Local\QuadVitals.Agent.Quit.v1";
+        /// <summary>Asks the agent to replace itself: a fresh process rebuilds the sensor sessions.</summary>
+        public const string RestartEventName = @"Local\QuadVitals.Agent.Restart.v1";
 
         /// <summary>Asks a running agent to show itself. False when no agent is running.</summary>
         public static bool RequestActivate()
@@ -30,6 +32,16 @@ namespace QuadVitals.Core
         public static bool RequestQuit()
         {
             return Signal(QuitEventName);
+        }
+
+        /// <summary>
+        /// Asks a running agent to hand over to a new process. Unlike quit, the successor is started by
+        /// the agent itself before the old one exits, so the single-instance mutex stays clean and the
+        /// caller does not need the logon task. False when no agent is listening.
+        /// </summary>
+        public static bool RequestRestart()
+        {
+            return Signal(RestartEventName);
         }
 
         /// <param name="eventName">

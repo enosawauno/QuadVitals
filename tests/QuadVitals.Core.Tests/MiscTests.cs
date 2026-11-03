@@ -355,6 +355,10 @@ namespace QuadVitals.Core.Tests
             True(AgentControl.ActivateEventName.StartsWith(@"Local\"), "激活事件限定在当前会话");
             True(AgentControl.QuitEventName != AgentControl.ActivateEventName, "退出与激活是两个事件");
             True(AgentControl.QuitEventName != MetricsChannel.MapName, "控制事件与指标通道分开");
+            True(AgentControl.RestartEventName.StartsWith(@"Local\"), "重启事件限定在当前会话");
+            True(AgentControl.RestartEventName != AgentControl.QuitEventName, "重启与退出是两个事件");
+            True(AgentControl.RestartEventName != AgentControl.ActivateEventName, "重启与激活是两个事件");
+            True(!AgentControl.RequestRestart() || true, "无 Agent 时重启请求不会抛异常");
 
             // Use a throwaway name: the probe must never be able to quit the agent that is running.
             string probe = @"Local\QuadVitals.Agent.Control.test." + Guid.NewGuid().ToString("N");
