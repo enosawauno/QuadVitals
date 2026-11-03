@@ -895,6 +895,25 @@ if ($null -ne $feedbackClose) {
     $feedbackClose.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
     Check 'closing the panel puts the overlay away' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
 }
+# Reopening used to throw "the specified element is already the logical child of another element":
+# the frame was rebuilt around the same cached form. Open, close, open again.
+$windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
+Pump 60
+$feedbackRoot.UpdateLayout()
+Check 'the panel reopens after being closed' ($overlay.Visibility -eq [System.Windows.Visibility]::Visible) ''
+$formCount = 0
+$scan = New-Object 'System.Collections.Queue'
+$scan.Enqueue($feedbackRoot)
+while ($scan.Count -gt 0) {
+    $node = $scan.Dequeue()
+    if ($node.GetType() -eq $feedbackPageType) { $formCount++ }
+    if ($node -is [System.Windows.Media.Visual]) {
+        $kids = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($node)
+        for ($i = 0; $i -lt $kids; $i++) { $scan.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($node, $i)) }
+    }
+}
+Check 'reopening keeps a single form instance' ($formCount -eq 1) "count=$formCount"
+$windowType.GetMethod('CloseOverlay').Invoke($feedbackWindow, $null) | Out-Null
 $feedbackWindow.Close()
 
 "== sidebar: sliding selection pill =="

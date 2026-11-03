@@ -46,6 +46,7 @@ namespace QuadVitals.Settings
         private Button _agentPill;
         // 反馈从侧边条搬到了标题栏气泡：表单实例活到窗口关，重开面板能接着草稿与结果卡。
         private FeedbackPage _feedbackPage;
+        private FrameworkElement _feedbackPanel;
         private TextBlock _feedbackHeading;
         private MetricsChannel.Reader _statusReader;
         private DateTime _statusReaderAttemptUtc = DateTime.MinValue;
@@ -350,8 +351,11 @@ namespace QuadVitals.Settings
                 {
                     if (_feedbackHeading != null) _feedbackHeading.Text = text;
                 };
+                // Built once and reused: a UserControl can only have one logical parent, so rebuilding
+                // the frame around the same form is what WPF rejects when the panel is opened twice.
+                _feedbackPanel = BuildFeedbackPanel();
             }
-            ShowOverlay(BuildFeedbackPanel());
+            ShowOverlay(_feedbackPanel);
         }
 
         /// <summary>
