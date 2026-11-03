@@ -955,6 +955,8 @@ Check 'submitted: the title row and its cross are gone' ($head.Visibility -ne [S
 # "saved locally, not uploaded", with the reason and the path on their own lines.
 $lastResultField = $feedbackPageType.GetField('_lastResult', $flags)
 $lastResultField.SetValue($feedbackPage, $result)
+$idLine = $feedbackPageType.GetField('_successId', $flags).GetValue($feedbackPage)
+Check 'submitted: the local id line is shown' ($idLine.Visibility -eq [System.Windows.Visibility]::Visible) ''
 $feedbackPageType.GetMethod('ShowUploadFailure', $flags).Invoke($feedbackPage, @('timeout')) | Out-Null
 Pump 60
 $reasonLine = $feedbackPageType.GetField('_failureReason', $flags).GetValue($feedbackPage)
@@ -963,6 +965,7 @@ $retryBtn = $feedbackPageType.GetField('_retry', $flags).GetValue($feedbackPage)
 Check 'failed upload: the headline stops saying sent' (-not ([string]$headlineLine.Text).Contains((U @(0x5DF2, 0x53D1, 0x9001)))) ("text=" + $headlineLine.Text)
 Check 'failed upload: the reason gets its own line' ($reasonLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $reasonLine.Visibility)
 Check 'failed upload: no file path on the card' ($null -eq $feedbackPageType.GetField('_failurePath', $flags)) ''
+Check 'failed upload: the local id line is gone' ($idLine.Visibility -ne [System.Windows.Visibility]::Visible) ("visibility=" + $idLine.Visibility)
 Check 'failed upload: retry is offered next to close' (($retryBtn.Visibility -eq [System.Windows.Visibility]::Visible) -and ([string]$closeResult.Content -eq (U @(0x5173, 0x95ED)))) ("retry=" + $retryBtn.Visibility + " close=" + $closeResult.Content)
 Check 'failed upload: retry sits right of close' ((Screen-X $retryBtn) -gt (Screen-X $closeResult)) ("retry=" + [math]::Round((Screen-X $retryBtn)) + " close=" + [math]::Round((Screen-X $closeResult)))
 Check 'failed upload: retry wears the primary colour' (([string]$retryBtn.Background) -eq ([string]$submitBtn.Background)) ("retry=" + $retryBtn.Background + " submit=" + $submitBtn.Background)

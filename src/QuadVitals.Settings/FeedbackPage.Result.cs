@@ -139,6 +139,7 @@ namespace QuadVitals.Settings
         private void ShowSuccess(FeedbackResult result)
         {
             _successId.Text = "编号：" + result.Id + "　·　" + result.AttachmentCount + " 个附件";
+            _successId.Visibility = Visibility.Visible;
             _successUpload.Text = "准备上传…";
             _successUpload.Foreground = Theme.TextSecondaryBrush;
             _retry.Visibility = Visibility.Collapsed;
@@ -218,6 +219,7 @@ namespace QuadVitals.Settings
                 _successUpload.Foreground = Theme.AccentGreenBrush;
                 _resultMark.Content = SuccessMark();
                 _resultHeadline.Text = "反馈已发送成功";
+                _successId.Visibility = Visibility.Visible;
                 _failureReason.Visibility = Visibility.Collapsed;
                 return;
             }
@@ -238,6 +240,8 @@ namespace QuadVitals.Settings
             if (_closeResult != null) _closeResult.Content = "关闭";
             _resultMark.Content = FailureMark();
             _resultHeadline.Text = "反馈上传失败";
+            // 失败时本地编号这行没有用处（包还在本机，编号在台账里），收起来让下面两行上移。
+            _successId.Visibility = Visibility.Collapsed;
 
             _successUpload.Text = "本地包已生成，可重新上传";
             _successUpload.Foreground = Theme.TextSecondaryBrush;
