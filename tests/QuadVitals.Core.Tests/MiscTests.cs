@@ -217,5 +217,153 @@ namespace QuadVitals.Core.Tests
             }
             True(monotonic, "色阶亮度单调下降");
         }
+
+        // ---- metric sanity and the data watchdog --------------------------------------
+
+        private static MetricsSnapshot SanitySnapshot()
+        {
+            return new MetricsSnapshot
+            {
+                Flags = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.TemperatureValid |
+                        MetricFlags.NetworkValid | MetricFlags.AgentAlive | MetricFlags.GpuValid |
+                        MetricFlags.GpuTemperatureValid | MetricFlags.DiskValid | MetricFlags.DiskIoValid |
+                        MetricFlags.CpuPowerValid | MetricFlags.GpuPowerValid | MetricFlags.GpuClockValid,
+                CpuPercent = 12.5f,
+                MemoryPercent = 34.0f,
+                TemperatureC = 55.0f,
+                NetUpBytesPerSec = 1024.0,
+                NetDownBytesPerSec = 2048.0,
+                GpuLoadPercent = 45.0f,
+                GpuTemperatureC = 61.0f,
+                DiskPercent = 72.0f
+            };
+        }
+
+        private static void MetricSanityBehaviour()
+        {
+            MetricsSnapshot good = SanitySnapshot();
+            Equal(good.Flags, MetricSanity.EffectiveFlags(good), "合理数值保留全部标志");
+
+            MetricsSnapshot cpu = SanitySnapshot();
+            cpu.CpuPercent = float.NaN;
+            True((MetricSanity.EffectiveFlags(cpu) & MetricFlags.CpuValid) == 0, "CPU NaN 视为没有数据");
+
+            MetricsSnapshot memory = SanitySnapshot();
+            memory.MemoryPercent = 101.0f;
+            True((MetricSanity.EffectiveFlags(memory) & MetricFlags.MemoryValid) == 0, "内存 101% 视为没有数据");
+
+            MetricsSnapshot gpu = SanitySnapshot();
+            gpu.GpuLoadPercent = -1.0f;
+            True((MetricSanity.EffectiveFlags(gpu) & MetricFlags.GpuValid) == 0, "显卡负载为负视为没有数据");
+
+            MetricsSnapshot disk = SanitySnapshot();
+            disk.DiskPercent = float.NaN;
+            True((MetricSanity.EffectiveFlags(disk) & MetricFlags.DiskValid) == 0, "磁盘占比 NaN 视为没有数据");
+
+            MetricsSnapshot temperature = SanitySnapshot();
+            temperature.TemperatureC = 200.0f;
+            True((MetricSanity.EffectiveFlags(temperature) & MetricFlags.TemperatureValid) == 0, "温度 200 视为异常");
+
+            MetricsSnapshot network = SanitySnapshot();
+            network.NetDownBytesPerSec = -5.0;
+            True((MetricSanity.EffectiveFlags(network) & MetricFlags.NetworkValid) == 0, "负速率视为没有数据");
+
+            Equal(MetricFlags.None, MetricSanity.EffectiveFlags(null), "空快照没有任何可信标志");
+        }
+
+        private static void MetricWatchdogBehaviour()
+        {
+            DateTime t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            MetricFlags healthy = MetricFlags.CpuValid | MetricFlags.MemoryValid |
+                                  MetricFlags.DiskValid | MetricFlags.AgentAlive;
+            MetricFlags noCpu = MetricFlags.MemoryValid | MetricFlags.DiskValid | MetricFlags.AgentAlive;
+
+            MetricWatchdog watch = new MetricWatchdog();
+            MetricFlags missing;
+            True(!watch.Observe(noCpu, true, false, t0, out missing), "CPU 刚缺失时不立即重启");
+            True((missing & MetricFlags.CpuValid) != 0, "缺失集合里包含 CPU");
+            True(!watch.Observe(noCpu, true, false, t0.AddSeconds(9), out missing), "持续 9 秒仍不重启");
+            True(watch.Observe(noCpu, true, false, t0.AddSeconds(10), out missing), "持续 10 秒后触发重启");
+            Equal(1, watch.Attempts, "第一次重启记录了一次尝试");
+            True(!watch.Observe(noCpu, true, false, t0.AddSeconds(12), out missing), "退避 3 秒内不重复重启");
+            True(watch.Observe(noCpu, true, false, t0.AddSeconds(13), out missing), "退避到期后允许第二次");
+
+            MetricWatchdog capped = new MetricWatchdog();
+            int attempts = 0;
+            for (int i = 0; i < 6; i++)
+            {
+                if (capped.Observe(noCpu, true, false, t0.AddSeconds(i * 100), out missing)) attempts++;
+            }
+            Equal(5, attempts, "连续失败最多重启五次");
+            Equal(MetricWatchdog.MaxAttempts, capped.Attempts, "尝试次数停在五次");
+
+            MetricWatchdog jitter = new MetricWatchdog();
+            jitter.Observe(healthy, true, false, t0, out missing);
+            jitter.Observe(noCpu, true, false, t0.AddSeconds(1), out missing);
+            jitter.Observe(healthy, true, false, t0.AddSeconds(5), out missing);
+            jitter.Observe(noCpu, true, false, t0.AddSeconds(6), out missing);
+            True(!jitter.Observe(noCpu, true, false, t0.AddSeconds(15), out missing), "抖动后重新计宽限，9 秒不触发");
+            True(jitter.Observe(noCpu, true, false, t0.AddSeconds(16), out missing), "抖动后持续 10 秒才触发");
+
+            MetricWatchdog recovered = new MetricWatchdog();
+            recovered.Observe(noCpu, true, false, t0, out missing);
+            recovered.Observe(noCpu, true, false, t0.AddSeconds(10), out missing);
+            recovered.Observe(healthy, true, false, t0.AddSeconds(20), out missing);
+            recovered.Observe(healthy, true, false, t0.AddSeconds(81), out missing);
+            Equal(0, recovered.Attempts, "连续健康 60 秒后尝试预算恢复");
+
+            MetricWatchdog temperature = new MetricWatchdog();
+            True(!temperature.Observe(healthy, true, false, t0.AddSeconds(120), out missing), "从未有效的温度不触发重启");
+
+            MetricFlags noGpu = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.DiskValid | MetricFlags.AgentAlive;
+            MetricWatchdog nvidia = new MetricWatchdog();
+            nvidia.Observe(noGpu, true, true, t0, out missing);
+            True(nvidia.Observe(noGpu, true, true, t0.AddSeconds(10), out missing), "NVIDIA 显卡缺失即使从未有效也重启");
+            Equal("显卡", MetricWatchdog.Describe(missing), "缺失原因指向显卡");
+
+            MetricWatchdog notNvidia = new MetricWatchdog();
+            True(!notNvidia.Observe(noGpu, true, false, t0.AddSeconds(120), out missing), "非 NVIDIA 机器不追显卡数据");
+
+            MetricFlags gpuThenGone = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.GpuValid |
+                                      MetricFlags.DiskValid | MetricFlags.AgentAlive;
+            MetricWatchdog seen = new MetricWatchdog();
+            seen.Observe(gpuThenGone, true, false, t0, out missing);
+            seen.Observe(noGpu, true, false, t0.AddSeconds(1), out missing);
+            True(seen.Observe(noGpu, true, false, t0.AddSeconds(11), out missing), "曾经有效的显卡失效后重启");
+
+            MetricWatchdog offline = new MetricWatchdog();
+            offline.Observe(noCpu, true, false, t0, out missing);
+            offline.Observe(noCpu, true, false, t0.AddSeconds(10), out missing);
+            True(!offline.Observe(MetricFlags.None, false, false, t0.AddSeconds(20), out missing), "离线时不按指标重启");
+            Equal(MetricFlags.None, missing, "离线时缺失集合清空");
+            Equal(1, offline.Attempts, "离线保留已经用掉的尝试次数");
+            True(!offline.Observe(noCpu, true, false, t0.AddSeconds(31), out missing), "重新上线先重新计宽限");
+            True(offline.Observe(noCpu, true, false, t0.AddSeconds(41), out missing), "重新上线后按剩余退避继续");
+
+            MetricWatchdog reset = new MetricWatchdog();
+            reset.Observe(noCpu, true, false, t0, out missing);
+            reset.Observe(noCpu, true, false, t0.AddSeconds(10), out missing);
+            reset.Reset();
+            Equal(0, reset.Attempts, "手动重启清空尝试预算");
+        }
+
+        // ---- agent control events ------------------------------------------------------
+
+        private static void AgentControlBehaviour()
+        {
+            True(AgentControl.QuitEventName.StartsWith(@"Local\"), "退出事件限定在当前会话");
+            True(AgentControl.ActivateEventName.StartsWith(@"Local\"), "激活事件限定在当前会话");
+            True(AgentControl.QuitEventName != AgentControl.ActivateEventName, "退出与激活是两个事件");
+            True(AgentControl.QuitEventName != MetricsChannel.MapName, "控制事件与指标通道分开");
+
+            // Use a throwaway name: the probe must never be able to quit the agent that is running.
+            string probe = @"Local\QuadVitals.Agent.Control.test." + Guid.NewGuid().ToString("N");
+            using (EventWaitHandle expected = new EventWaitHandle(false, EventResetMode.AutoReset, probe))
+            {
+                True(AgentControl.Signal(probe), "控制事件可被同会话置位");
+                True(expected.WaitOne(1000), "置位后等待方能立刻醒来");
+            }
+            True(!AgentControl.Signal(probe), "事件不存在时报告未送达");
+        }
     }
 }

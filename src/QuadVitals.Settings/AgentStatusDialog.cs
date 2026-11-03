@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using QuadVitals.Core;
 using QuadVitals.UI;
 
 namespace QuadVitals.Settings
@@ -17,11 +18,13 @@ namespace QuadVitals.Settings
         public bool HasSnapshot;
         public double AgeSeconds;
         public DateTime LastUpdateLocal;
+        /// <summary>Validity flags after <see cref="MetricSanity"/>; the data watchdog reads these.</summary>
+        public MetricFlags Flags;
     }
 
     /// <summary>
     /// The title-bar agent chip opens this panel: what the agent is doing right now, and one
-    /// button that acts on it (refresh when it is alive, start it when it is not).
+    /// button that acts on it (restart when it is alive, start it when it is not).
     ///
     /// The badge used to be a read-only label, so a dead agent left the user with a red-ish chip
     /// and no way back: the dashboard would never recover until the next logon.
@@ -72,14 +75,19 @@ namespace QuadVitals.Settings
                 Margin = new Thickness(0, 20, 0, 0)
             };
 
-            FlatButton action = new FlatButton(state.Alive ? "刷新" : "启动传感器", true);
+            FlatButton action = new FlatButton(state.Alive ? "重启传感器" : "启动传感器", true);
             action.MinWidth = 96;
+            if (state.Alive) action.ToolTip = "重新启动传感器进程，重新读取温度与显卡数据";
             AutomationProperties.SetAutomationId(action, "AgentAction");
             action.Click += (sender, e) =>
             {
                 if (state.Alive)
                 {
-                    _window.RequestAgentRefresh();
+                    // 重启要等旧进程退出、新进程写出第一帧，按钮必须立刻显示“在做事”，
+                    // 否则点下去到面板重建之间看起来像没反应。
+                    action.IsEnabled = false;
+                    action.Content = "重启中…";
+                    _window.RestartAgentFromDialog();
                 }
                 else
                 {

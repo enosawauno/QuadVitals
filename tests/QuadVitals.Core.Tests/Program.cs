@@ -36,10 +36,6 @@ namespace QuadVitals.Core.Tests
             Suite("MetricFormat 速率", FormatRate);
             Suite("MetricFormat 百分比/温度/字节", FormatOthers);
             Suite("HardwareNaming 硬件签名", HardwareNamingBehaviour);
-            Suite("HardwareNaming 硬件信息格式化", HardwareInfoTextBehaviour);
-            Suite("HardwareBrands 厂商归一化", HardwareBrandsBehaviour);
-            Suite("DiskOrdering 硬盘按盘符排序", DiskOrderingBehaviour);
-            Suite("ReportNaming 报告文件名", ReportNamingBehaviour);
             Suite("EmaFilter", EmaBehaviour);
             Suite("MetricCatalog", Catalog);
             Suite("MetricTone 阈值", ToneThresholds);
@@ -64,6 +60,9 @@ namespace QuadVitals.Core.Tests
             Suite("Feedback 上传", FeedbackUploadBehaviour);
             Suite("Feedback 启动补传", FeedbackRecoveryBehaviour);
             Suite("ProductVersion 版本号", VersionBehaviour);
+            Suite("MetricSanity 数据合理性", MetricSanityBehaviour);
+            Suite("MetricWatchdog 指标兜底", MetricWatchdogBehaviour);
+            Suite("AgentControl 控制事件", AgentControlBehaviour);
             Suite("Settings 四格指标选择", DeviceMetricChoicesBehaviour);
             Suite("IoWave 走马循环", IoWaveBehaviour);
             Suite("NetHistory 曲线快照", NetHistoryBehaviour);

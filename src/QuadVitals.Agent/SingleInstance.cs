@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using QuadVitals.Core;
 
 namespace QuadVitals.Agent
 {
@@ -13,8 +14,6 @@ namespace QuadVitals.Agent
     internal sealed class SingleInstance : IDisposable
     {
         private const string MutexName = @"Local\QuadVitals.Agent.SingleInstance.v1";
-        private const string ActivateName = @"Local\QuadVitals.Agent.Activate.v1";
-        private const string QuitName = @"Local\QuadVitals.Agent.Quit.v1";
 
         private readonly Mutex _mutex;
         private readonly EventWaitHandle _activate;
@@ -42,8 +41,10 @@ namespace QuadVitals.Agent
         public static SingleInstance Acquire()
         {
             Mutex mutex = new Mutex(false, MutexName);
-            EventWaitHandle activate = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateName);
-            EventWaitHandle quit = new EventWaitHandle(false, EventResetMode.AutoReset, QuitName);
+            EventWaitHandle activate = new EventWaitHandle(false, EventResetMode.AutoReset,
+                AgentControl.ActivateEventName);
+            EventWaitHandle quit = new EventWaitHandle(false, EventResetMode.AutoReset,
+                AgentControl.QuitEventName);
 
             bool owned;
             try
@@ -99,33 +100,13 @@ namespace QuadVitals.Agent
         /// <summary>Second instance: ask the running one to surface, then leave.</summary>
         public static bool PokeActivate()
         {
-            try
-            {
-                using (EventWaitHandle handle = EventWaitHandle.OpenExisting(ActivateName))
-                {
-                    return handle.Set();
-                }
-            }
-            catch (WaitHandleCannotBeOpenedException)
-            {
-                return false;
-            }
+            return AgentControl.RequestActivate();
         }
 
         /// <summary>Second instance: ask the running one to exit (used by --exit and uninstall).</summary>
         public static bool PokeQuit()
         {
-            try
-            {
-                using (EventWaitHandle handle = EventWaitHandle.OpenExisting(QuitName))
-                {
-                    return handle.Set();
-                }
-            }
-            catch (WaitHandleCannotBeOpenedException)
-            {
-                return false;
-            }
+            return AgentControl.RequestQuit();
         }
 
         public void Dispose()

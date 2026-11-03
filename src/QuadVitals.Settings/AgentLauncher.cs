@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using QuadVitals.Core;
 
 namespace QuadVitals.Settings
 {
@@ -14,6 +15,8 @@ namespace QuadVitals.Settings
     internal static class AgentLauncher
     {
         public const string TaskName = "QuadVitals Agent";
+        /// <summary>Process name without the .exe suffix, as the task manager reports it.</summary>
+        public const string ProcessName = "QuadVitals.Agent";
 
         /// <summary>Full path of the agent exe, or null when it cannot be found.</summary>
         public static string ResolveExe()
@@ -66,12 +69,65 @@ namespace QuadVitals.Settings
             }
         }
 
-        /// <summary>True when the logon task exists and accepted the run request.</summary>
-        private static bool TryRunTask()
+        /// <summary>
+        /// Asks the running agent to exit. The quit event is the same channel <c>--exit</c> and the
+        /// uninstaller use, so an elevated instance closes its sensor handles instead of being
+        /// terminated. Falls back to ending the logon task when the event cannot be reached.
+        /// </summary>
+        public static bool RequestExit()
+        {
+            if (AgentControl.RequestQuit()) return true;
+            return RunSchtasks("/End");
+        }
+
+        /// <summary>True when no agent process is left within the timeout.</summary>
+        public static bool WaitForExit(int timeoutMs)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (!IsRunning()) return true;
+                System.Threading.Thread.Sleep(150);
+            }
+            return !IsRunning();
+        }
+
+        /// <summary>True when an agent process appears within the timeout.</summary>
+        public static bool WaitForStart(int timeoutMs)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (IsRunning()) return true;
+                System.Threading.Thread.Sleep(150);
+            }
+            return IsRunning();
+        }
+
+        public static bool IsRunning()
         {
             try
             {
-                ProcessStartInfo info = new ProcessStartInfo("schtasks.exe", "/Run /TN \"" + TaskName + "\"")
+                return Process.GetProcessesByName(ProcessName).Length > 0;
+            }
+            catch (Exception)
+            {
+                // Failing to enumerate processes is not evidence that the agent is gone.
+                return true;
+            }
+        }
+
+        /// <summary>True when the logon task exists and accepted the run request.</summary>
+        private static bool TryRunTask()
+        {
+            return RunSchtasks("/Run");
+        }
+
+        private static bool RunSchtasks(string verb)
+        {
+            try
+            {
+                ProcessStartInfo info = new ProcessStartInfo("schtasks.exe", verb + " /TN \"" + TaskName + "\"")
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
@@ -94,7 +150,7 @@ namespace QuadVitals.Settings
             }
             catch (Exception)
             {
-                // No task (or no schtasks): fall through to a direct start.
+                // No task (or no schtasks): callers decide whether to fall back.
                 return false;
             }
         }

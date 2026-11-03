@@ -63,6 +63,37 @@ namespace QuadVitals.Settings
             get { lock (Gate) { return _gpuName; } }
         }
 
+        /// <summary>
+        /// True when the adapter is NVIDIA. GPU load comes from NVML only, so this is the one
+        /// case where a never-valid GpuValid flag means a broken sampler rather than unsupported
+        /// hardware; the dashboard uses it to decide whether a restart is worth trying.
+        /// </summary>
+        public static bool HasNvidiaGpu
+        {
+            get
+            {
+                string name = GpuName;
+                if (string.IsNullOrEmpty(name)) return false;
+                bool nvidia = name.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              name.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              name.IndexOf("Quadro", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              name.IndexOf("Tesla", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!nvidia) return false;
+
+                // No nvml.dll means NVML is not installed at all; a restart cannot add it, so the
+                // watchdog should not burn its attempts on a machine that simply lacks the source.
+                try
+                {
+                    return File.Exists(System.IO.Path.Combine(Environment.SystemDirectory, "nvml.dll"));
+                }
+                catch (Exception)
+                {
+                    // Unable to check: assume the driver is present and let one restart decide.
+                    return true;
+                }
+            }
+        }
+
         /// <summary>System drive label with the colon, e.g. "C:". Empty when unknown.</summary>
         public static string SystemDrive
         {

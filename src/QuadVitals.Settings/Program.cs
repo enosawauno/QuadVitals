@@ -56,7 +56,7 @@ namespace QuadVitals.Settings
                         }
                         else if (arg != null && arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))
                         {
-                            // --page=overview|elements|tools|network|feedback|about
+                            // --page=overview|elements|network|feedback|about
                             startPage = arg.Substring("--page=".Length);
                         }
                     }
