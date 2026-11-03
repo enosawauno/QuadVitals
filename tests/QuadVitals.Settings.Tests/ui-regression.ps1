@@ -564,7 +564,9 @@ foreach ($block in $linkBlocks) {
     $blockOrigin = $block.TransformToAncestor($aboutRoot).Transform((New-Object System.Windows.Point(0, 0)))
     $padProbe = New-Object System.Windows.Point(($blockOrigin.X + 2), ($blockOrigin.Y + $block.ActualHeight / 2))
     if (Has-HandAncestor ($aboutRoot.InputHitTest($padProbe))) { $padHits++ }
-    $labelProbe = New-Object System.Windows.Point(($rowOrigin.X + $row.ActualWidth * 0.2), ($rowOrigin.Y + $row.ActualHeight / 2))
+    # 20 px in is label territory for both row styles: left-aligned values start at 96 px,
+    # right-aligned ones sit at the far edge.
+    $labelProbe = New-Object System.Windows.Point(($rowOrigin.X + 20), ($rowOrigin.Y + $row.ActualHeight / 2))
     if (Has-HandAncestor ($aboutRoot.InputHitTest($labelProbe))) { $labelHits++ }
 }
 Check 'a click in the value block padding lands on the link' ($padHits -eq $linkBlocks.Count) "pads=$padHits"

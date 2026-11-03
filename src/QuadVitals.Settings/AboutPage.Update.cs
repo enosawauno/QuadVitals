@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using QuadVitals.Core;
@@ -112,12 +113,69 @@ namespace QuadVitals.Settings
                 Margin = new Thickness(0, 10, 0, 0)
             });
 
-            // 明细放在卡的末尾：左边是说明，右边是可点的地址，与开发者卡同一套行。
-            FrameworkElement changelog = LinkRow("日志明细", "GitHub", OpenChangelog);
+            // 明细与卡里其它行同一条竖向基准：标签在 96 px 列，值紧跟其后。原来用右对齐的
+            // LinkRow，整张卡就变成"只有最后一行贴到右边"，看着像两张表拼在一起。
+            FrameworkElement changelog = ValueLinkRow("日志明细", "GitHub", OpenChangelog);
             AutomationProperties.SetAutomationId(changelog, "AboutUpdateChangelog");
             changelog.Margin = new Thickness(0, 8, 0, 0);
             card.Content.Children.Add(changelog);
             return card;
+        }
+
+        /// <summary>
+        /// Same geometry as <see cref="KeyValueRow"/> - label in the 96 px column, value right after it -
+        /// but the value is a green link.
+        /// </summary>
+        private static FrameworkElement ValueLinkRow(string label, string value, Action onClick)
+        {
+            Grid row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            TextBlock caption = new TextBlock
+            {
+                Text = label,
+                FontSize = 12,
+                Foreground = Theme.TextTertiaryBrush
+            };
+            Grid.SetColumn(caption, 0);
+            row.Children.Add(caption);
+
+            StackPanel link = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            link.Children.Add(new TextBlock
+            {
+                Text = value,
+                FontSize = 12,
+                Foreground = Theme.AccentGreenBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            link.Children.Add(new TextBlock
+            {
+                Text = "\uE8A7",   // Segoe MDL2: open in new window
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 10,
+                Foreground = Theme.AccentGreenBrush,
+                Margin = new Thickness(5, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            // A null-background container is not hit-testable, so the click lives on a transparent
+            // border that also covers the gap between text and arrow.
+            Border hit = new Border
+            {
+                Background = Brushes.Transparent,
+                Padding = new Thickness(0, 0, 6, 0),
+                Cursor = Cursors.Hand,
+                Child = link
+            };
+            hit.MouseLeftButtonUp += (sender, e) => onClick();
+            Grid.SetColumn(hit, 1);
+            row.Children.Add(hit);
+            return row;
         }
 
         private void BeginUpdateFlow()
