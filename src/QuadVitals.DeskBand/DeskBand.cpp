@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "CustomDialog.h"
 #include "CustomMenu.h"
 #include "CustomTooltip.h"
 #include "Json.h"
@@ -43,6 +44,7 @@ static const UINT_PTR kTimerId = 1;
 static const UINT_PTR kTooltipTimerId = 2;
 static const UINT kTooltipDelayMs = 2000;   // hover this long before the card appears
 static const UINT_PTR kClickTimerId = 3;
+static const UINT_PTR kExitTimerId = 4;     // exit runs one beat after the dialog closes
 static const UINT kMsgSettingsChanged = WM_APP + 1;
 
 namespace
@@ -569,10 +571,11 @@ private:
         HideTooltip();
 
         std::vector<pb::CustomMenu::Item> items;
-        items.push_back({ 1, L"\u7ACB\u5373\u5237\u65B0", true });
-        items.push_back({ 6, L"\u53D1\u9001\u53CD\u9988\u2026", true });
+        items.push_back({ 1, L"\u91CD\u542F\u4F20\u611F\u5668", true });
+        items.push_back({ 6, L"\u53D1\u9001\u53CD\u9988", true });
         items.push_back({ 0, L"", true });
         items.push_back({ 4, L"\u5173\u4E8E QuadVitals", true });
+        items.push_back({ 8, L"\u9000\u51FA", true });
 
         POINT cursor;
         GetCursorPos(&cursor);
@@ -581,14 +584,115 @@ private:
 
         switch (command)
         {
-        case 1: Refresh(true); break;
+        case 1: RestartSensor(); break;
         case 4: OpenDashboard(L"--about"); break;
         case 6: OpenDashboard(L"--feedback"); break;
+        case 8: ConfirmAndExit(); break;
         default: break;
         }
     }
 
 
+
+    /// <summary>
+    /// Rebuilds the sensor sessions without touching the dashboard: the agent starts its successor and
+    /// then exits (it owns the single-instance mutex, so that is the only safe order).
+    /// </summary>
+    void RestartSensor()
+    {
+        if (SignalAgentEvent(L"Local\\QuadVitals.Agent.Restart.v1")) return;
+        // No agent listening: start it the way a logon does. ShellExecute only, never a wait.
+        std::wstring task = L"/Run /TN ";
+        task += L'"' + std::wstring(L"QuadVitals Agent") + L'"';
+        ShellExecuteW(_hwnd, L"open", L"schtasks.exe", task.c_str(), nullptr, SW_HIDE);
+    }
+
+    /// <summary>
+    /// Quit asks first: it stops the taskbar readout until the app is started again. The wording says
+    /// what disappears instead of "are you sure", which is the question nobody reads.
+    /// </summary>
+    void ConfirmAndExit()
+    {
+        pb::CustomDialog dialog;
+        bool confirmed = dialog.Confirm(
+            _hwnd,
+            L"\u9000\u51FA QuadVitals",
+            L"\u9000\u51FA\u540E\u4EFB\u52A1\u680F\u4E0D\u518D\u663E\u793A CPU\u3001\u5185\u5B58"
+            L"\u3001\u6E29\u5EA6\u4E0E\u7F51\u7EDC\u6570\u636E\uFF0C\u9700\u8981\u65F6\u4ECE"
+            L"\u5F00\u59CB\u83DC\u5355\u91CD\u65B0\u542F\u52A8\u3002",
+            L"\u9000\u51FA", L"\u53D6\u6D88", DpiScaleOf(_hwnd));
+        if (!confirmed) return;
+
+        SignalAgentEvent(L"Local\\QuadVitals.Agent.Quit.v1");
+        EnumWindows(CloseSettingsProc, 0);
+
+        // The band removes itself one beat later: hiding it destroys this window, and doing that from
+        // inside the menu/dialog stack would tear the object down while its own frame is running.
+        SetTimer(_hwnd, kExitTimerId, 160, nullptr);
+    }
+
+    static bool SignalAgentEvent(const wchar_t* name)
+    {
+        HANDLE handle = OpenEventW(EVENT_MODIFY_STATE, FALSE, name);
+        if (handle == nullptr) return false;
+        SetEvent(handle);
+        CloseHandle(handle);
+        return true;
+    }
+
+    static BOOL CALLBACK CloseSettingsProc(HWND hwnd, LPARAM)
+    {
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == 0) return TRUE;
+
+        HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (process == nullptr) return TRUE;
+        wchar_t path[MAX_PATH * 2] = { 0 };
+        DWORD size = ARRAYSIZE(path);
+        bool ours = false;
+        if (QueryFullProcessImageNameW(process, 0, path, &size))
+        {
+            std::wstring full(path);
+            size_t slash = full.find_last_of(L'\\');
+            std::wstring name = slash == std::wstring::npos ? full : full.substr(slash + 1);
+            ours = CompareStringOrdinal(name.c_str(), -1, L"QuadVitals.Settings.exe", -1, TRUE) == CSTR_EQUAL;
+        }
+        CloseHandle(process);
+        if (ours) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        return TRUE;
+    }
+
+    /// <summary>
+    /// Removes the band from the toolbar through the shell's own manager - the same call the uninstaller
+    /// makes from a separate process. Slots this file never calls keep their vtable order and are
+    /// deliberately not named after the shell's show/hide pair.
+    /// </summary>
+    void HideBand()
+    {
+        struct ITrayDeskBandManager : public IUnknown
+        {
+            virtual HRESULT SlotShow(REFCLSID) = 0;
+            virtual HRESULT HideDeskBand(REFCLSID) = 0;
+            virtual HRESULT SlotIsShown(REFCLSID) = 0;
+            virtual HRESULT SlotRegistrationChanged() = 0;
+        };
+
+        static const CLSID kManager =
+        { 0xE6442437, 0x6C68, 0x4F52, { 0x94, 0xDD, 0x2C, 0xFE, 0xD2, 0x67, 0xEF, 0xB9 } };
+        static const IID kInterface =
+        { 0x6D67E846, 0x5B9C, 0x4DB8, { 0x9C, 0xBC, 0xDD, 0xE1, 0x2F, 0x42, 0x54, 0xF1 } };
+
+        ITrayDeskBandManager* manager = nullptr;
+        HRESULT hr = CoCreateInstance(kManager, nullptr, CLSCTX_INPROC_SERVER, kInterface,
+                                      reinterpret_cast<void**>(&manager));
+        if (FAILED(hr) || manager == nullptr) return;
+
+        CLSID band = CLSID_QuadVitalsDeskBand;
+        manager->HideDeskBand(band);
+        manager->Release();
+    }
 
     void OpenTaskManager()
     {
@@ -678,6 +782,12 @@ private:
             {
                 KillTimer(hwnd, kTooltipTimerId);
                 self->ShowTooltip();
+                return 0;
+            }
+            if (wParam == kExitTimerId && self != nullptr)
+            {
+                KillTimer(hwnd, kExitTimerId);
+                self->HideBand();   // last thing this object does: the shell tears it down
                 return 0;
             }
             if (wParam == kTimerId && self != nullptr)
