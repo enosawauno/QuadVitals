@@ -241,8 +241,11 @@ namespace QuadVitals.Setup
             {
                 Text = _uninstall
                     ? "任务栏上的条目会随 Explorer 刷新而消失"
-                    : "请查看任务栏上是否出现仪表盘\r\n" +
-                      "如未显示，右键任务栏>工具栏>勾选QuadVitals，若提示「Windows不兼容」，选「是」即可",
+                    : _bandRestored
+                        ? "任务栏条已随资源管理器重新加载\r\n" +
+                          "如未显示，右键任务栏>工具栏>勾选QuadVitals"
+                        : "请查看任务栏上是否出现仪表盘\r\n" +
+                          "如未显示，右键任务栏>工具栏>勾选QuadVitals，若提示「Windows不兼容」，选「是」即可",
                 Foreground = Theme.TextTertiaryBrush,
                 FontSize = 11.5,
                 LineHeight = 19,

@@ -332,9 +332,12 @@ namespace QuadVitals.Setup
 
             if (desktopShortcut) CreateDesktopShortcut(installDir);
 
-            // Bringing the shell back runs here, unhooked from the elevated child: an elevated process
-            // must never be the one that restarts Explorer.
+            // Bringing the shell back, and swapping the band module it still has mapped, runs here rather
+            // than in the elevated child: an elevated process must never restart Explorer.
             RestoreShellIfStopped();
+            bool shellRestarted;
+            bool bandRestored;
+            ActivateBandModule(out shellRestarted, out bandRestored);
 
             // 应用和功能 needs a copy of this exe that outlives the download, otherwise the uninstall
             // command breaks the moment the user deletes the file they downloaded.
@@ -342,7 +345,10 @@ namespace QuadVitals.Setup
             RegisterUninstallEntry(installDir, copied);
             CreateStartMenuEntries(installDir, copied);
 
-            return InstallResult.Success(copied);
+            InstallResult success = InstallResult.Success(copied);
+            success.ShellRestarted = shellRestarted;
+            success.BandRestored = bandRestored;
+            return success;
         }
 
         // ---- shell ---------------------------------------------------------------------
@@ -352,11 +358,10 @@ namespace QuadVitals.Setup
 
         /// <summary>
         /// Puts the shell back if the install script had to kill it to replace a locked file - and nothing
-        /// else. Restarting the shell or asking it to show the band is what makes Explorer raise its own
-        /// 「是否要在任务栏上显示 QuadVitals 工具栏?」 and 「工具栏与此版本的 Windows 不兼容」 dialogs, and
-        /// answering those is a race against the shell (three attempts lost it that way). So the taskbar is
-        /// left alone: a band the user already enabled comes back by itself, a fresh install gets it by
-        /// ticking 右键任务栏 -> 工具栏, which the finish page says.
+        /// else. Asking the shell to show the band is what makes Explorer raise its own
+        /// 「是否要在任务栏上显示 QuadVitals 工具栏?」 and 「工具栏与此版本的 Windows 不兼容」 dialogs,
+        /// and answering those is a race against the shell (three attempts lost it that way). Swapping the
+        /// loaded band module is done by <see cref="ActivateBandModule"/>, which only restarts Explorer.
         /// </summary>
         private void RestoreShellIfStopped()
         {
@@ -392,6 +397,84 @@ namespace QuadVitals.Setup
             {
                 Log("重启资源管理器失败：" + ex.GetType().Name);
                 return false;
+            }
+        }
+
+        // The band is a COM object Explorer loads once and keeps until the shell restarts. A new build
+        // writes a new file and points the registration at it, but the module already in memory keeps
+        // drawing the old code - which is why an upgrade used to show last version's taskbar bar until
+        // the next logon. So the shell is restarted once, here and unelevated, and nothing else: asking
+        // the shell to show the band is what raises Explorer's own toolbar dialogs.
+        private void ActivateBandModule(out bool shellRestarted, out bool bandRestored)
+        {
+            shellRestarted = false;
+            bandRestored = false;
+            try
+            {
+                if (Process.GetProcessesByName("explorer").Length == 0)
+                {
+                    // No shell to swap. Starting one here would hand the desktop an admin token, so the
+                    // finish page falls back to the manual instruction.
+                    Log("没有正在运行的任务栏，任务栏条需要手动勾选");
+                    return;
+                }
+
+                Log("重启资源管理器以加载新的任务栏组件");
+                foreach (Process shell in Process.GetProcessesByName("explorer"))
+                {
+                    try { shell.Kill(); } catch (Exception) { }
+                }
+                for (int i = 0; i < 40 && Process.GetProcessesByName("explorer").Length > 0; i++)
+                {
+                    System.Threading.Thread.Sleep(150);
+                }
+                shellRestarted = true;
+                EnsureShellRunning();
+
+                // Explorer rebuilds the taskbar before it rebuilds the bands: poll instead of guessing a
+                // fixed delay, and treat "not back yet" as a manual step rather than a failure.
+                for (int i = 0; i < 45; i++)
+                {
+                    if (BandWindowPresent())
+                    {
+                        bandRestored = true;
+                        break;
+                    }
+                    System.Threading.Thread.Sleep(200);
+                }
+                Log(bandRestored ? "任务栏条已随资源管理器重新加载" : "任务栏条没有自动回来，需要手动勾选");
+            }
+            catch (Exception ex)
+            {
+                Log("重启资源管理器失败：" + ex.GetType().Name);
+            }
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr childAfter, string className, string windowName);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr hwnd, StringBuilder name, int count);
+
+        /// <summary>True when the band's own window sits anywhere under the taskbar.</summary>
+        internal static bool BandWindowPresent()
+        {
+            IntPtr tray = FindWindow("Shell_TrayWnd", null);
+            if (tray == IntPtr.Zero) return false;
+            return ContainsChildClass(tray, "QuadVitalsBandWindow", 5);
+        }
+
+        private static bool ContainsChildClass(IntPtr parent, string className, int depth)
+        {
+            IntPtr child = IntPtr.Zero;
+            while (true)
+            {
+                child = FindWindowEx(parent, child, null, null);
+                if (child == IntPtr.Zero) return false;
+                StringBuilder name = new StringBuilder(64);
+                if (GetClassName(child, name, name.Capacity) > 0 &&
+                    string.Equals(name.ToString(), className, StringComparison.Ordinal)) return true;
+                if (depth > 1 && ContainsChildClass(child, className, depth - 1)) return true;
             }
         }
 
@@ -1045,6 +1128,15 @@ namespace QuadVitals.Setup
         /// noise around one sentence they need to read.
         /// </summary>
         public bool ShowLog { get; set; } = true;
+
+        /// <summary>True when the install restarted Explorer to pick up the new band module.</summary>
+        public bool ShellRestarted { get; set; }
+
+        /// <summary>
+        /// True when the band's own window reappeared after that restart. False means the user has to
+        /// tick the toolbar entry by hand, which is what the finish page then says.
+        /// </summary>
+        public bool BandRestored { get; set; }
 
         public static InstallResult Success(string copiedSetupPath)
         {

@@ -58,7 +58,11 @@ namespace QuadVitals.Setup
                 {
                     _running = false;
                     SetBusy(false);
-                    if (result.Succeeded) ShowResult(installDir);
+                    if (result.Succeeded)
+                    {
+                        _bandRestored = result.BandRestored;
+                        ShowResult(installDir);
+                    }
                     else ShowFailure(result.Error, result.ShowLog);
                 }));
             });

@@ -49,6 +49,7 @@ $S_DONE             = Str 0x5B8C,0x6210                                         
 $S_OPEN_DASHBOARD   = Str 0x6253,0x5F00,0x4EEA,0x8868,0x76D8                     # open dashboard
 $S_REINSTALL        = Str 0x91CD,0x65B0,0x5B89,0x88C5                            # reinstall
 $S_REUNINSTALL      = Str 0x91CD,0x65B0,0x5378,0x8F7D                            # re-uninstall
+$S_BAND_RELOADED    = Str 0x5DF2,0x968F,0x8D44,0x6E90,0x7BA1,0x7406,0x5668       # "band reloaded"
 
 function New-Win([bool]$uninstall) {
     $ctor = $windowType.GetConstructor([type[]]@([string], [bool], [string]))
@@ -168,6 +169,34 @@ $host4 = Host $win4
 $dashboard = Find-Button $host4 $S_OPEN_DASHBOARD
 Check 'finish: dashboard button exists' ($dashboard -ne $null) ''
 Check 'finish: dashboard closes the window' (Close-Fired $win4 { Click $dashboard }) ''
+
+# ---- finish page: the band hint follows what the install actually achieved ---------------------
+
+$bandField = $windowType.GetField('_bandRestored', [Reflection.BindingFlags]'NonPublic,Instance')
+Check 'finish: the band hint has a switch' ($bandField -ne $null) ''
+
+$winBand = New-Win $false
+$bandField.SetValue($winBand, $true)
+$showResult.Invoke($winBand, [object[]]@($installDirArg)) | Out-Null
+Check 'finish: a reloaded band is reported' (Has-Text (Host $winBand) $S_BAND_RELOADED) ''
+
+$winNoBand = New-Win $false
+$bandField.SetValue($winNoBand, $false)
+$showResult.Invoke($winNoBand, [object[]]@($installDirArg)) | Out-Null
+Check 'finish: a missing band keeps the manual step' (-not (Has-Text (Host $winNoBand) $S_BAND_RELOADED)) ''
+
+$winUnBand = New-Win $true
+$bandField.SetValue($winUnBand, $true)
+$showResult.Invoke($winUnBand, [object[]]@($installDirArg)) | Out-Null
+Check 'uninstall finish never talks about reloading the band' (-not (Has-Text (Host $winUnBand) $S_BAND_RELOADED)) ''
+
+$resultType = $asm.GetType('QuadVitals.Setup.InstallResult')
+$successResult = $resultType.GetMethod('Success', [Reflection.BindingFlags]'Public,Static').Invoke($null, @('C:\x\QuadVitals-Setup.exe'))
+Check 'install result: shell restart and band both default to not done' ((-not $successResult.ShellRestarted) -and (-not $successResult.BandRestored)) ''
+
+$bandProbe = $coreType.GetMethod('BandWindowPresent', [Reflection.BindingFlags]'Public,NonPublic,Static')
+Check 'the band window probe exists' ($bandProbe -ne $null) ''
+Check 'the band window probe answers without throwing' ($bandProbe -ne $null -and $bandProbe.Invoke($null, $null) -is [bool]) ''
 
 # ---- failure page: wording per flow, task manager only when the stop step failed -------------
 
