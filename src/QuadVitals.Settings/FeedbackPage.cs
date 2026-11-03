@@ -477,21 +477,23 @@ namespace QuadVitals.Settings
             _submit.Click += OnSubmit;
             actions.Children.Add(_submit);
 
-            // Result state: 重新上传 (only after a failed upload) and 关闭 sit together at the bottom right.
-            _retry.Margin = new Thickness(0, 0, 8, 0);
-            _retry.Visibility = Visibility.Collapsed;
-            _retry.Click += async (sender, e) => await RunUploadAsync();
-            actions.Children.Add(_retry);
-
+            // Result state: 关闭 on the left, then the primary action on the right - the same
+            // secondary-then-primary rhythm the form uses for 清空 / 提交反馈.
             _closeResult = new FlatButton("关闭");
             AutomationProperties.SetAutomationId(_closeResult, "FeedbackCloseResult");
             _closeResult.Visibility = Visibility.Collapsed;
+            _closeResult.Margin = new Thickness(0, 0, 8, 0);
             _closeResult.Click += (sender, e) =>
             {
                 StopAutoClose();
                 _window.CloseOverlay();
             };
             actions.Children.Add(_closeResult);
+
+            // Only after a failed upload; green because retrying is the action worth taking.
+            _retry.Visibility = Visibility.Collapsed;
+            _retry.Click += async (sender, e) => await RunUploadAsync();
+            actions.Children.Add(_retry);
 
             Grid.SetColumn(actions, 1);
             row.Children.Add(actions);

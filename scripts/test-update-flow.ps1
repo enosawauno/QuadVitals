@@ -55,7 +55,7 @@ $probe = Join-Path $work 'update-flow-probe.exe'
 # The probe is a private copy: keep the Core it links against beside it instead of relying on the
 # process working directory.
 Copy-Item -LiteralPath $coreDll -Destination $work -Force
-& $csc /nologo /target:exe /langversion:7.3 /platform:anycpu /optimize+ /out:$probe `
+& $csc /nologo /target:exe /langversion:7.3 /codepage:65001 /platform:anycpu /optimize+ /out:$probe `
     /r:$coreDll (Join-Path $PSScriptRoot 'update-flow-probe.cs')
 if ($LASTEXITCODE -ne 0) { throw "probe compile failed ($LASTEXITCODE)" }
 

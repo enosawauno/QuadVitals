@@ -39,7 +39,7 @@ if (Test-Path -LiteralPath $trayIcon) {
 $icon = Join-Path $root 'assets\icon\app.ico'
 $iconArg = if (Test-Path -LiteralPath $icon) { '/win32icon:' + $icon } else { $null }
 
-& $csc /nologo /target:winexe /langversion:7.3 /platform:anycpu /optimize+ /debug- `
+& $csc /nologo /target:winexe /langversion:7.3 /codepage:65001 /platform:anycpu /optimize+ /debug- `
     /out:"$exe" `
     /r:"$coreDll" `
     /r:System.Net.NetworkInformation.dll `

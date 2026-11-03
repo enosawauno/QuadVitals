@@ -151,7 +151,9 @@ $arguments = @(
     ('/resource:' + $zip + ',QuadVitals.Payload.zip'),
     ('/resource:' + $uiDll + ',QuadVitals.UI.dll'),
     ('/resource:' + $coreDll + ',QuadVitals.Core.dll'),
-    ('/win32manifest:' + $manifest)
+    ('/win32manifest:' + $manifest),
+    # Sources are UTF-8 without BOM: without this every Chinese literal compiles as ANSI mojibake.
+    '/codepage:65001'
 )
 if (Test-Path -LiteralPath $icon) { $arguments += ('/win32icon:' + $icon) }
 $arguments += $sources

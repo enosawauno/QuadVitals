@@ -965,6 +965,8 @@ Check 'failed upload: the headline stops saying sent' (-not ([string]$headlineLi
 Check 'failed upload: the reason gets its own line' ($reasonLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $reasonLine.Visibility)
 Check 'failed upload: the path gets its own line' ($pathLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $pathLine.Visibility)
 Check 'failed upload: retry is offered next to close' (($retryBtn.Visibility -eq [System.Windows.Visibility]::Visible) -and ([string]$closeResult.Content -eq (U @(0x5173, 0x95ED)))) ("retry=" + $retryBtn.Visibility + " close=" + $closeResult.Content)
+Check 'failed upload: retry sits right of close' ((Screen-X $retryBtn) -gt (Screen-X $closeResult)) ("retry=" + [math]::Round((Screen-X $retryBtn)) + " close=" + [math]::Round((Screen-X $closeResult)))
+Check 'failed upload: retry wears the primary colour' (([string]$retryBtn.Background) -eq ([string]$submitBtn.Background)) ("retry=" + $retryBtn.Background + " submit=" + $submitBtn.Background)
 Check 'failed upload: the countdown is stopped' (-not $overlay.Visibility -eq [System.Windows.Visibility]::Collapsed) ''
 Pump 1300
 Check 'failed upload: the panel stays open for the retry' ($overlay.Visibility -eq [System.Windows.Visibility]::Visible) ''

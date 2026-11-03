@@ -17,7 +17,7 @@ namespace QuadVitals.Settings
     /// </summary>
     internal sealed partial class FeedbackPage
     {
-        private readonly FlatButton _retry = new FlatButton("重新上传");
+        private readonly FlatButton _retry = new FlatButton("重新上传", true);
         private readonly TextBlock _successUpload = new TextBlock();
         private readonly ContentControl _resultMark = new ContentControl();
         private readonly TextBlock _resultHeadline = new TextBlock();
@@ -248,7 +248,7 @@ namespace QuadVitals.Settings
             StopAutoClose();
             if (_closeResult != null) _closeResult.Content = "关闭";
             _resultMark.Content = FailureMark();
-            _resultHeadline.Text = "上传未完成，反馈已保存到本机";
+            _resultHeadline.Text = "反馈上传失败";
 
             _successUpload.Text = "本地包已生成，可重新上传";
             _successUpload.Foreground = Theme.TextSecondaryBrush;

@@ -22,7 +22,7 @@ $testExe = Join-Path $outTest 'QuadVitals.Core.Tests.exe'
 $coreSources = Get-ChildItem -Path $coreDir -Filter '*.cs' | ForEach-Object { $_.FullName }
 # Version metadata for every managed binary lives in one file; see QuadVitals.Core.ProductVersion.
 $sharedAssemblyInfo = Join-Path $root 'src\SharedAssemblyInfo.cs'
-& $csc /nologo /target:library /langversion:7.3 /platform:anycpu /optimize+ /debug- `
+& $csc /nologo /target:library /langversion:7.3 /codepage:65001 /platform:anycpu /optimize+ /debug- `
     /out:"$coreDll" `
     /r:System.Runtime.Serialization.dll `
     /r:System.IO.Compression.dll `
@@ -34,7 +34,7 @@ if ($LASTEXITCODE -ne 0) { throw "core build failed ($LASTEXITCODE)" }
 "core -> $coreDll"
 
 $testSources = Get-ChildItem -Path $testDir -Filter '*.cs' | ForEach-Object { $_.FullName }
-& $csc /nologo /target:exe /langversion:7.3 /platform:anycpu /optimize+ /debug- `
+& $csc /nologo /target:exe /langversion:7.3 /codepage:65001 /platform:anycpu /optimize+ /debug- `
     /out:"$testExe" `
     /r:"$coreDll" `
     /r:System.IO.Compression.dll `
