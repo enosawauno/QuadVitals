@@ -1521,11 +1521,11 @@ if ($null -ne $ovPage) {
         Check 'fan settings offers the motion switch' ($null -ne $motionBox) ''
         if ($null -ne $motionBox) {
             Check 'the fan motion switch has the two modes' ($motionBox.Items.Count -eq 2) ("items=" + $motionBox.Items.Count)
-            # 6b884818：气流右侧不许再切出硬边——场景不再裁剪，靠流线自己羽化。
+            # 气流右侧不许再切出硬边：场景不再裁剪，靠流线自己羽化。
             $scene = Find-ById $ovRoot 'FanScene'
             Check 'the fan scene does not clip the airflow' (($null -ne $scene) -and (-not $scene.ClipToBounds)) ''
 
-            # 5a2d5df2：草稿恢复出文字后，占位提示必须收起来（原来只认 TextChanged）。
+            # 草稿恢复出文字后，占位提示必须收起来（原来只认 TextChanged）。
             $fbWindow = [Activator]::CreateInstance($windowType, @('overview'))
             $fbWindow.ShowActivated = $false
             $fbWindow.ShowInTaskbar = $false

@@ -11,7 +11,7 @@ namespace QuadVitals.Settings
     /// Static hardware identification for the overview page.
     ///
     /// This is *identity* data (model names, capacity), not a metric: it is read once, cached for
-    /// the process lifetime and never published through the IPC snapshot — the 256-byte layout
+    /// the process lifetime and never published through the IPC snapshot — the snapshot layout
     /// and the "agent owns the sensors" rule both stay untouched.
     ///
     /// WMI can take a few hundred milliseconds on a cold start, so the callers use

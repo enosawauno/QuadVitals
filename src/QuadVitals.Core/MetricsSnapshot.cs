@@ -511,7 +511,7 @@ namespace QuadVitals.Core
                 {
                     cores[i] = buffer[CorePercentsOffset + i];
                     systems[i] = buffer[CoreSystemPercentsOffset + i];
-                    // user share is the remainder: it is not stored a third time (no room in 256 B)
+                    // user share is the remainder: it is not stored a third time
                     int user = cores[i] - systems[i];
                     users[i] = (byte)(user < 0 ? 0 : user);
                 }
