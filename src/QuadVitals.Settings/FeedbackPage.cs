@@ -410,27 +410,31 @@ namespace QuadVitals.Settings
 
         private FrameworkElement BuildFooter()
         {
+            // 三个槽：清空在左、状态在中间、提交在右。清空原来跟提交挤在右下角，和上一行的
+            // 「查看将包含的信息 / 添加文件」凑成一个四按钮方块，看着像一坨；现在按从轻到重
+            // 左右分开，右下角只剩一个主操作。
             Grid footer = new Grid();
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            FlatButton clear = new FlatButton("清空");
+            clear.Margin = new Thickness(0, 0, 14, 0);
+            clear.Click += (sender, e) => ClearForm();
+            Grid.SetColumn(clear, 0);
+            footer.Children.Add(clear);
 
             _status.FontSize = 12;
             _status.Foreground = Theme.TextTertiaryBrush;
             _status.TextWrapping = TextWrapping.Wrap;
             _status.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(_status, 0);
+            _status.Margin = new Thickness(0, 0, 14, 0);
+            Grid.SetColumn(_status, 1);
             footer.Children.Add(_status);
 
-            StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal };
-            FlatButton clear = new FlatButton("清空");
-            clear.Margin = new Thickness(0, 0, 8, 0);
-            clear.Click += (sender, e) => ClearForm();
-            buttons.Children.Add(clear);
-
             _submit.Click += OnSubmit;
-            buttons.Children.Add(_submit);
-            Grid.SetColumn(buttons, 1);
-            footer.Children.Add(buttons);
+            Grid.SetColumn(_submit, 2);
+            footer.Children.Add(_submit);
             return footer;
         }
 
