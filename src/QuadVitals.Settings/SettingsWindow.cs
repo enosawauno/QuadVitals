@@ -380,10 +380,11 @@ namespace QuadVitals.Settings
                             : Visibility.Visible;
                     }
                     if (_feedbackHeading != null) _feedbackHeading.Text = text;
+                    // 结果态也用同一块板：只收标题行，不改面板尺寸（改尺寸会让两次弹出的位置都跳一下）。
                     if (_feedbackPanel != null)
                     {
-                        _feedbackPanel.Width = result ? FeedbackResultWidth : FeedbackPanelWidth;
-                        _feedbackPanel.Height = result ? double.NaN : FeedbackPanelHeight;
+                        _feedbackPanel.Width = FeedbackPanelWidth;
+                        _feedbackPanel.Height = FeedbackPanelHeight;
                     }
                 };
                 // Built once and reused: a UserControl can only have one logical parent, so rebuilding
@@ -394,8 +395,8 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// Frame for the feedback panel: title row with a close button, then the form. 880×640 keeps the
-        /// attachment rows and the syntax preview usable without turning the panel into a second window.
+        /// Frame for the feedback panel: title row with a close button, then the form. 640×427 is the
+        /// same board the settings dialogs use; the form scrolls inside it when attachments pile up.
         /// </summary>
         private FrameworkElement BuildFeedbackPanel()
         {
@@ -408,6 +409,7 @@ namespace QuadVitals.Settings
                 Padding = new Thickness(24),
                 SnapsToDevicePixels = true
             };
+            AutomationProperties.SetAutomationId(panel, "FeedbackPanel");
 
             Grid grid = new Grid();
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -442,11 +444,12 @@ namespace QuadVitals.Settings
             return panel;
         }
 
-        /// <summary>Panel size: big enough for the form plus the diagnostics row, small enough to feel like a dialog.</summary>
-        private const double FeedbackPanelWidth = 800;
-        private const double FeedbackPanelHeight = 580;
-        /// <summary>The submitted state is a short centred block, like the installer's finish page.</summary>
-        private const double FeedbackResultWidth = 520;
+        /// <summary>
+        /// 与通用设置、网络、设备状态的齿轮弹窗同一块板（640×427）：反馈不再比它们大一圈，
+        /// 也不再随结果态缩成另一个尺寸，四个入口的浮层尺寸一致。
+        /// </summary>
+        private const double FeedbackPanelWidth = 640;
+        private const double FeedbackPanelHeight = 427;
 
         /// <summary>Small ✕ for panel headers: a third the weight of the caption button, same colour rules.</summary>
         private static Button PanelCloseButton(string automationId)

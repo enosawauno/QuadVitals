@@ -1012,6 +1012,8 @@ while ($pageQueue.Count -gt 0 -and $null -eq $feedbackPage) {
     }
 }
 Check 'the feedback page is reachable' ($null -ne $feedbackPage) ''
+$feedbackPanel = Find-ById $feedbackRoot 'FeedbackPanel'
+Check 'the feedback panel is the settings dialog board' (($null -ne $feedbackPanel) -and ([math]::Abs($feedbackPanel.Width - 640) -le 0.5) -and ([math]::Abs($feedbackPanel.Height - 427) -le 0.5)) ("size=" + $feedbackPanel.Width + "x" + $feedbackPanel.Height)
 if ($null -ne $feedbackPage) {
     $previewBox = $feedbackPageType.GetField('_previewBox', $flags).GetValue($feedbackPage)
     Check 'the preview box retints the scrollbar corner' ($previewBox.Resources.Contains([System.Windows.SystemColors]::ControlBrushKey)) ''
@@ -1053,8 +1055,8 @@ if (($null -ne $clearButton) -and ($null -ne $attachButton) -and ($null -ne $sub
     Check 'the actions run clear / attach / submit' (($cx -lt $ax) -and ($ax -lt $sx)) ("x=" + [math]::Round($cx) + "/" + [math]::Round($ax) + "/" + [math]::Round($sx))
 } else { Check 'the three actions are present' $false '' }
 
-# Submitted state: the form actions step aside for a single close, and the panel fits its content
-# instead of framing a mostly empty 580 px card.
+# Submitted state: the form actions step aside for a single close; the panel keeps the same board
+# as the settings dialogs instead of resizing between states.
 # FeedbackResult lives in QuadVitals.Core.dll. Resolve it by assembly-qualified name so the object
 # stays a plain CLR instance - New-Object would wrap it in a PSObject and Invoke refuses that.
 $resultType = $coreAsm.GetType('QuadVitals.Core.FeedbackResult')
@@ -1073,9 +1075,10 @@ $submitBtn = $feedbackPageType.GetField('_submit', $flags).GetValue($feedbackPag
 $overlayHost = $windowType.GetField('_overlayContent', $flags).GetValue($feedbackWindow)
 $panelBorder = $overlayHost.Content
 Check 'submitted: form actions give way to one close' (($clearBtn.Visibility -ne [System.Windows.Visibility]::Visible) -and ($addBtn.Visibility -ne [System.Windows.Visibility]::Visible) -and ($submitBtn.Visibility -ne [System.Windows.Visibility]::Visible) -and ($closeResult.Visibility -eq [System.Windows.Visibility]::Visible)) ''
+Check 'submitted: the panel keeps the same size' (([math]::Abs($panelBorder.ActualWidth - 640) -le 0.5) -and ([math]::Abs($panelBorder.ActualHeight - 427) -le 0.5)) ("size=" + [math]::Round($panelBorder.ActualWidth) + "x" + [math]::Round($panelBorder.ActualHeight))
 Check 'submitted: the diagnostics block hides with the form' ($logBlock.Visibility -ne [System.Windows.Visibility]::Visible) ''
-Check 'submitted: the panel fits its content' ([double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)
-Check 'submitted: the card narrows to the result width' ([math]::Abs($panelBorder.Width - 520) -lt 1) ("width=" + $panelBorder.Width)
+Check 'submitted: the panel height stays fixed' ([math]::Abs($panelBorder.Height - 427) -lt 1) ("height=" + $panelBorder.Height)
+Check 'submitted: the card keeps the dialog width' ([math]::Abs($panelBorder.Width - 640) -lt 1) ("width=" + $panelBorder.Width)
 $visibleButtons = 0
 $scan = New-Object 'System.Collections.Queue'
 $scan.Enqueue($feedbackPageType.GetField('_resultBody', $flags).GetValue($feedbackPage))
@@ -1089,7 +1092,7 @@ while ($scan.Count -gt 0) {
 }
 Check 'submitted: no buttons inside the result block' ($visibleButtons -eq 0) ("buttons=" + $visibleButtons)
 $head = $windowType.GetField('_feedbackHead', $flags).GetValue($feedbackWindow)
-Check 'submitted: the panel is shorter than the form' (($panelBorder.ActualHeight -gt 150) -and ($panelBorder.ActualHeight -lt 400)) ("actual=" + [math]::Round($panelBorder.ActualHeight))
+Check 'submitted: the result block is narrower than the panel' ($resultBody.ActualWidth -lt $panelBorder.ActualWidth) ("result=" + [math]::Round($resultBody.ActualWidth) + " panel=" + [math]::Round($panelBorder.ActualWidth))
 Check 'submitted: the close button counts down from five' (([string]$closeResult.Content) -eq ((5).ToString() + (U @(0x79D2, 0x540E, 0x81EA, 0x52A8, 0x5173, 0x95ED)))) ("text=" + $closeResult.Content)
 Pump 1100
 Check 'submitted: the countdown ticks down' (([string]$closeResult.Content) -match '^[0-4]') ("text=" + $closeResult.Content)
