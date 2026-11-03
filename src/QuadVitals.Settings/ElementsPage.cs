@@ -376,17 +376,30 @@ namespace QuadVitals.Settings
             Grid.SetColumn(box, 1);
             row.Children.Add(box);
 
-            TextBlock unit = new TextBlock
+            // 单位与范围说明拆成两块：单位贴着输入框（离数字 8 px），说明再隔 16 px。挤进同一个
+            // 字符串时单位会被读成说明的首词，也没法单独调字号或颜色。两块同字号同色，
+            // 所以单位不会比后面的说明小一档。
+            StackPanel trail = new StackPanel
             {
-                Text = "px　0–40；改动后任务栏条会重建一次",
-                // 与标签同字号、同一条垂直中线：混着 11.5 和 12 会让两行文字看起来没对齐。
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            trail.Children.Add(new TextBlock
+            {
+                Text = "px",
                 FontSize = 12,
                 Foreground = Theme.TextTertiaryBrush,
-                VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(8, 0, 0, 0)
-            };
-            Grid.SetColumn(unit, 2);
-            row.Children.Add(unit);
+            });
+            trail.Children.Add(new TextBlock
+            {
+                Text = "0–40；改动后任务栏条会重建一次",
+                FontSize = 12,
+                Foreground = Theme.TextTertiaryBrush,
+                Margin = new Thickness(16, 0, 0, 0)
+            });
+            Grid.SetColumn(trail, 2);
+            row.Children.Add(trail);
 
             Action commit = () =>
             {

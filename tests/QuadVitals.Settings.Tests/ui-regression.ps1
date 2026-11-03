@@ -131,6 +131,25 @@ if ($null -ne $spacingBox) {
     Check 'the spacing value is centred in its box' ($spacingBox.TextAlignment -eq [System.Windows.TextAlignment]::Center) ("align=" + $spacingBox.TextAlignment)
     # One size for the whole row: the box ships 12.5 by default and stood out next to the labels.
     Check 'the spacing row keeps one font size' ([math]::Abs($spacingBox.FontSize - 12) -lt 0.01) ("size=" + $spacingBox.FontSize)
+    # The unit used to be glued into the hint string ("px　0-40..."), so it could not share the hint's
+    # size and read as the first word of the sentence instead of the field's unit.
+    $spacingRow = $spacingBox.Parent
+    $trail = $null
+    foreach ($child in $spacingRow.Children) {
+        if ([System.Windows.Controls.Grid]::GetColumn($child) -eq 2) { $trail = $child; break }
+    }
+    Check 'the unit and its hint are separate blocks' ($null -ne $trail -and $trail.Children.Count -eq 2) ''
+    if ($null -ne $trail -and $trail.Children.Count -eq 2) {
+        $unitBlock = $trail.Children[0]
+        $hintBlock = $trail.Children[1]
+        Check 'the unit reads px' ($unitBlock.Text -eq 'px') "text=$($unitBlock.Text)"
+        Check 'the unit keeps the hint font size' ([math]::Abs($unitBlock.FontSize - $hintBlock.FontSize) -lt 0.01) ("unit=" + $unitBlock.FontSize + " hint=" + $hintBlock.FontSize)
+        $unitX = $unitBlock.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).X
+        $hintX = $hintBlock.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).X
+        $boxRight = $spacingBox.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point($spacingBox.ActualWidth, 0))).X
+        Check 'the unit sits right after the box, before the hint' ($unitX -gt $boxRight -and $unitX -lt $hintX) ("boxRight=" + [math]::Round($boxRight) + " unit=" + [math]::Round($unitX) + " hint=" + [math]::Round($hintX))
+        Check 'the unit hugs the number, the hint does not' (($hintX - $unitX) -gt ($unitX - $boxRight)) ("near=" + [math]::Round($unitX - $boxRight) + " far=" + [math]::Round($hintX - $unitX))
+    }
     # The field sits on the second tile column (64 px tile + 8 px gap), which is where the
     # dashed add tile lands once the second row holds one element.
     $firstTile = Find-ById $spacingCase.Page 'ElementTile'
