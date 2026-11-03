@@ -832,6 +832,9 @@ $feedbackRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
 $feedbackRoot.UpdateLayout()
 
 # The entry is an icon between the sensor chip and the minimise button, not a sidebar row.
+function Screen-Y($element) {
+    return $element.TransformToAncestor($feedbackRoot).Transform((New-Object System.Windows.Point(0, 0))).Y
+}
 function Screen-X($element) {
     return $element.TransformToAncestor($feedbackRoot).Transform((New-Object System.Windows.Point(0, 0))).X
 }
@@ -976,6 +979,17 @@ Check 'failed upload: the panel stays open for the retry' ($overlay.Visibility -
 $feedbackPageType.GetMethod('RestoreForm', $flags).Invoke($feedbackPage, $null) | Out-Null
 Pump 60
 Check 'back to the form restores its height' (-not [double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)
+
+# The failed-upload retry left the form row: retrying belongs to the result card. What the form gets
+# instead is a "resend what never went out" switch, off-screen until something is actually pending.
+$historyBox = $feedbackPageType.GetField('_uploadHistory', $flags).GetValue($feedbackPage)
+$includeLogsBox = $feedbackPageType.GetField('_includeLogs', $flags).GetValue($feedbackPage)
+$retryInForm = $feedbackPageType.GetField('_retry', $flags).GetValue($feedbackPage)
+Check 'the form row carries no retry button' ($retryInForm.Visibility -ne [System.Windows.Visibility]::Visible) ("visibility=" + $retryInForm.Visibility)
+Check 'the history switch exists and defaults to on' (($null -ne $historyBox) -and ($historyBox.IsChecked -eq $true)) ''
+$historyBox.Visibility = [System.Windows.Visibility]::Visible
+$feedbackRoot.UpdateLayout()
+Check 'the history switch sits above the diagnostics switch' ((Screen-Y $historyBox) -lt (Screen-Y $includeLogsBox)) ("history=" + [math]::Round((Screen-Y $historyBox)) + " logs=" + [math]::Round((Screen-Y $includeLogsBox)))
 
 # The ✕ belongs to the form state only; the result carries its own close button.
 Check 'the form keeps a close cross' ($null -ne (Find-ById $feedbackRoot 'FeedbackClose')) ''

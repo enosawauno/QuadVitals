@@ -39,6 +39,8 @@ namespace QuadVitals.Settings
         // 大块书写区不要绿色焦点描边：整圈高亮看着像选中状态，光标本身已经说明焦点在这。
         private readonly DarkTextBox _text = new DarkTextBox(false);
         private readonly DarkCheckBox _includeLogs = new DarkCheckBox();
+        // 只在本地还有没送出去的包时出现：勾上就把它们跟着这次一起再传一次。
+        private readonly DarkCheckBox _uploadHistory = new DarkCheckBox();
         private readonly StackPanel _attachmentRows = new StackPanel();
         private readonly TextBlock _attachmentHint = new TextBlock();
         private readonly TextBlock _status = new TextBlock();
@@ -179,6 +181,7 @@ namespace QuadVitals.Settings
                 {
                     if (_scroll != null) _scroll.ScrollToTop();
                     UpdateAgentPill();
+                    UpdateHistoryOption();
                 }),
                 DispatcherPriority.Loaded);
         }
@@ -400,6 +403,14 @@ namespace QuadVitals.Settings
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             StackPanel left = new StackPanel();
+
+            _uploadHistory.Content = "同时上传失败历史";
+            _uploadHistory.IsChecked = true;
+            _uploadHistory.Margin = new Thickness(0, 0, 0, 10);
+            _uploadHistory.Visibility = Visibility.Collapsed;
+            AutomationProperties.SetAutomationId(_uploadHistory, "FeedbackUploadHistory");
+            left.Children.Add(_uploadHistory);
+
             _includeLogs.Content = "附带诊断日志";
             _includeLogs.IsChecked = true;
 
@@ -539,7 +550,29 @@ namespace QuadVitals.Settings
                 _closeResult.Visibility = Visibility.Collapsed;
                 _closeResult.Content = "关闭";
             }
+            // 重新上传是结果态的动作：表单行里只该有 清空 / 添加附件 / 提交反馈。
+            _retry.Visibility = Visibility.Collapsed;
             StopAutoClose();
+        }
+
+        /// <summary>
+        /// Shows the "resend what never went out" switch only while there is something to resend: a zip
+        /// still sitting in the feedback folder means an earlier upload never finished.
+        /// </summary>
+        private void UpdateHistoryOption()
+        {
+            bool pending = false;
+            try
+            {
+                string inbox = FeedbackStore.FeedbackRoot(DataDirectory);
+                pending = Directory.Exists(inbox) && Directory.GetFiles(inbox, "*.zip").Length > 0;
+            }
+            catch (Exception)
+            {
+                // 读不到目录就当没有待传的包，开关不出现。
+            }
+            _uploadHistory.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
+            if (pending) _uploadHistory.IsChecked = true;
         }
 
         /// <summary>The placeholder is only visible while the box is empty.</summary>
@@ -1047,6 +1080,14 @@ namespace QuadVitals.Settings
                     _lastRequest = request;
                     _uploadTempDirectory = tempDirectory;
                     await RunUploadAsync();
+
+                    // 勾了就顺手把之前没送出去的包也再传一次：它们留在本地只会越积越多。
+                    if (_uploadHistory.IsChecked == true && _uploadHistory.Visibility == Visibility.Visible)
+                    {
+                        FeedbackRecovery.Outcome swept = await Task.Run(
+                            () => FeedbackRecovery.Flush(DataDirectory, _transport));
+                        if (swept.Uploaded > 0) UpdateHistoryOption();
+                    }
                 }
                 else
                 {
