@@ -214,7 +214,18 @@ namespace QuadVitals.Settings
             }
 
             if (_lastResult != null) FeedbackStore.AppendUploadFailed(DataDirectory, _lastResult.Id, upload.Error);
-            _successUpload.Text = "仅本机保存：上传失败（" + upload.Error + "）　文件：" +
+            ShowUploadFailure(upload.Error);
+        }
+
+        /// <summary>
+        /// Upload failed: the local package stays, so the panel has to stay too. The countdown is
+        /// stopped here - it exists to dismiss a finished result, not to hide the only retry button.
+        /// </summary>
+        private void ShowUploadFailure(string reason)
+        {
+            StopAutoClose();
+            if (_closeResult != null) _closeResult.Content = "关闭";
+            _successUpload.Text = "仅本机保存：上传失败（" + reason + "）　文件：" +
                                   (_lastResult == null ? string.Empty : _lastResult.PackagePath);
             _successUpload.Foreground = Theme.AccentRedBrush;
             _retry.Visibility = Visibility.Visible;

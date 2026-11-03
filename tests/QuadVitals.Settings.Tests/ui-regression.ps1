@@ -937,6 +937,8 @@ while ($scan.Count -gt 0) {
     }
 }
 Check 'submitted: no buttons inside the result block' ($visibleButtons -eq 0) ("buttons=" + $visibleButtons)
+$head = $windowType.GetField('_feedbackHead', $flags).GetValue($feedbackWindow)
+Check 'submitted: the title row and its cross are gone' ($head.Visibility -ne [System.Windows.Visibility]::Visible) ''
 Check 'submitted: the panel is shorter than the form' (($panelBorder.ActualHeight -gt 150) -and ($panelBorder.ActualHeight -lt 400)) ("actual=" + [math]::Round($panelBorder.ActualHeight))
 Check 'submitted: the close button counts down from five' (([string]$closeResult.Content) -eq ((5).ToString() + (U @(0x79D2, 0x540E, 0x81EA, 0x52A8, 0x5173, 0x95ED)))) ("text=" + $closeResult.Content)
 Pump 1100
@@ -952,9 +954,10 @@ $feedbackPageType.GetMethod('RestoreForm', $flags).Invoke($feedbackPage, $null) 
 Pump 60
 Check 'back to the form restores its height' (-not [double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)
 
-# No title row and no ✕ any more: the panel closes on Esc, on an outside click, or with the result's
-# 关闭 button.
-Check 'the panel has no close cross' ($null -eq (Find-ById $feedbackRoot 'FeedbackClose')) ''
+# The ✕ belongs to the form state only; the result carries its own close button.
+Check 'the form keeps a close cross' ($null -ne (Find-ById $feedbackRoot 'FeedbackClose')) ''
+$headField = $windowType.GetField('_feedbackHead', $flags)
+Check 'the form shows its title row' ($headField.GetValue($feedbackWindow).Visibility -eq [System.Windows.Visibility]::Visible) ''
 # The same button still closes immediately when clicked; the countdown is a suggestion, not a lock.
 $feedbackPageType.GetMethod('ShowSuccess', $flags).Invoke($feedbackPage, @($result)) | Out-Null
 Pump 60
