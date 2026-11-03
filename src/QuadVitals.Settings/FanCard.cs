@@ -547,9 +547,10 @@ namespace QuadVitals.Settings
             if (shown == colour) return;
             Color from = shown;
             shown = colour;
-            if (!SystemParameters.ClientAreaAnimation)
+            if (!SystemParameters.ClientAreaAnimation || RenderEnvironment.AnimationsDisabled)
             {
-                // 系统关闭了动画：直接落色，颜色仍然随转速变，只是不做 320 ms 过渡。
+                // 系统关闭了动画，或当前是 RDP/Tier 0：直接落色，颜色仍然随转速变，
+                // 只是不做 320 ms 过渡。
                 SetImmediate(brush, colour);
                 return;
             }
@@ -572,7 +573,14 @@ namespace QuadVitals.Settings
                 ApplyStaticPumpGlow();
                 return;
             }
+            // Start() 仍要调用：RDP/Tier 0 下它只登记意愿、不挂钩；环境恢复时
+            // FrameLoop 会通过 RenderEnvironment.Changed 自己续上。
             _loop.Start();
+            if (RenderEnvironment.AnimationsDisabled)
+            {
+                _flow.Tick(0);
+                ApplyStaticPumpGlow();
+            }
         }
 
         private void Stop()

@@ -454,6 +454,64 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $animWindow.WindowState = [System.Windows.WindowState]::Normal
             Pump 300
             Check 'restoring resumes the overview refresh' ($animTimer.IsEnabled) ''
+
+            # RDP / WPF tier 0: stop every frame loop, but keep the 1 Hz data refresh alive.
+            $envType = $uiAsm.GetType('QuadVitals.UI.RenderEnvironment')
+            Check 'the render environment gate exists' ($null -ne $envType) ''
+            $setOverride = $envType.GetMethod('SetOverrideForTests', [Reflection.BindingFlags]'NonPublic,Static')
+            try {
+                $setOverride.Invoke($null, @($true)) | Out-Null
+                Pump 250
+                Check 'RDP or tier 0 stops the fan loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+                $before = [long]$animLoop.FramesDelivered
+                Pump 700
+                $frames = [long]$animLoop.FramesDelivered - $before
+                Check 'RDP or tier 0 delivers no fan frames' ($frames -eq 0) "frames=$frames"
+
+                $barType = $uiAsm.GetType('QuadVitals.UI.MetricBar')
+                $bar = [Activator]::CreateInstance($barType, @([QuadVitals.UI.Theme]::AccentGreen, [QuadVitals.UI.Theme]::TrackGrey))
+                $barSet = @($barType.GetMethods() | Where-Object { $_.Name -eq 'SetValue' -and $_.GetParameters().Count -eq 1 })[0]
+                $barSet.Invoke($bar, @(0.2)) | Out-Null
+                $barSet.Invoke($bar, @(0.8)) | Out-Null
+                $barDisplay = [double]$barType.GetField('_displayValue', $flags).GetValue($bar)
+                Check 'RDP or tier 0 snaps bar values' ([Math]::Abs($barDisplay - 0.8) -lt 0.001) "display=$barDisplay"
+                $barType.GetMethod('SetIoWave').Invoke($bar, @(1.0, 1.0)) | Out-Null
+                Check 'RDP or tier 0 starts no bar loop' (-not [bool]$barType.GetProperty('IsRunningForTests').GetValue($bar, $null)) ''
+            }
+            finally {
+                $setOverride.Invoke($null, @($null)) | Out-Null
+            }
+            Pump 250
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 250
+            Check 'leaving RDP or tier 0 resumes the fan loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+
+            # Battery: pause by default, but the user can turn the policy off and animations return.
+            $configureBattery = $envType.GetMethod('ConfigureBatteryPolicy')
+            $setPower = $envType.GetMethod('SetPowerLineStatusForTests', [Reflection.BindingFlags]'NonPublic,Static')
+            try {
+                # Keep the window's own settings in sync: its 1 Hz policy tick would otherwise
+                # put the default (pause=true) back within the same second.
+                $animWindow.CurrentSettings.PauseAnimationsOnBattery = $true
+                $setPower.Invoke($null, @([System.Windows.PowerLineStatus]::Offline)) | Out-Null
+                $configureBattery.Invoke($null, @($true)) | Out-Null
+                Pump 250
+                Check 'battery mode pauses animations' ([bool]$envType.GetProperty('AnimationsDisabled').GetValue($null)) ''
+                Check 'battery mode stops the fan loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+                $animWindow.CurrentSettings.PauseAnimationsOnBattery = $false
+                $configureBattery.Invoke($null, @($false)) | Out-Null
+                Pump 250
+                Check 'turning the battery policy off restores animations' (-not [bool]$envType.GetProperty('AnimationsDisabled').GetValue($null)) ''
+                $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+                $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+                Pump 200
+                Check 'battery override resumes the fan loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            }
+            finally {
+                $setPower.Invoke($null, @($null)) | Out-Null
+                $configureBattery.Invoke($null, @($true)) | Out-Null
+            }
         }
         $animWindow.Close()
 

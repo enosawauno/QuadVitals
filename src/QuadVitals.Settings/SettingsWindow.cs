@@ -152,6 +152,8 @@ namespace QuadVitals.Settings
             DispatcherTimer chipTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             chipTimer.Tick += (sender, e) =>
             {
+                // RDP 接入/断开、Tier 与电源变化不会都发事件；每秒读一次足够便宜。
+                ApplyRenderPolicy();
                 AgentStateInfo state = ReadAgentState();
                 SetAgentStatus(state.Alive, state.AgeSeconds);
                 TrackAgentHealth(state);
@@ -1007,6 +1009,15 @@ namespace QuadVitals.Settings
             // 缓存被清空后当前页可能被“保留”在屏幕上；换页时它才真正离开视觉树，这里补 Dispose。
             if (_keptPage != null && ReferenceEquals(_host.Content, _keptPage)) DisposeKeptPage();
             _host.Content = page;
+            // 窗口建好之后再读一次 Tier：静态初始化时可能还没完成首帧渲染。
+            ApplyRenderPolicy();
+        }
+
+        private void ApplyRenderPolicy()
+        {
+            AppSettings s = _settings;
+            RenderEnvironment.ConfigureBatteryPolicy(s == null || s.PauseAnimationsOnBattery != false);
+            RenderEnvironment.Refresh();
         }
 
         public AppSettings CurrentSettings { get { return _settings; } }
@@ -1125,6 +1136,7 @@ namespace QuadVitals.Settings
             // “常驻动画”刚保存就永久停转。其他缓存页照旧释放，导航回来时重建。
             DisposeCachedPages(true);
             _cache.Clear();
+            ApplyRenderPolicy();
         }
 
         public void SaveSettings(AppSettings edited, int widthBefore)

@@ -587,23 +587,33 @@ if ($null -ne $autoStart) {
     $saved = [bool]$generalWindow.CurrentSettings.StartAgentWithWindows
     Check 'the switch reflects the saved preference' ($autoStart.IsChecked -eq $saved) ("checked=" + $autoStart.IsChecked + " saved=" + $saved)
 }
+$batterySwitch = Find-ById $generalRoot 'GeneralBatteryAnimations'
+Check 'the panel carries the battery animation switch' ($null -ne $batterySwitch) ''
+if ($null -ne $batterySwitch) {
+    $savedBattery = $generalWindow.CurrentSettings.PauseAnimationsOnBattery -ne $false
+    Check 'the battery switch reflects the saved preference' (($batterySwitch.IsChecked -eq $true) -eq $savedBattery) ("checked=" + $batterySwitch.IsChecked + " saved=" + $savedBattery)
+}
 Check 'the panel no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
 # 面板是“取消 / 保存”：勾选只是草稿，点保存才写盘。
 $generalSave = Find-ById $generalRoot 'GeneralSave'
 $generalClose = Find-ById $generalRoot 'GeneralClose'
 Check 'the panel has cancel and save buttons' (($null -ne $generalSave) -and ($null -ne $generalClose)) ''
-if (($null -ne $generalSave) -and ($null -ne $autoStart)) {
+if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch)) {
     $before = [bool]$generalWindow.CurrentSettings.StartAgentWithWindows
+    $beforeBattery = $generalWindow.CurrentSettings.PauseAnimationsOnBattery -ne $false
     $autoStart.IsChecked = -not $before
+    $batterySwitch.IsChecked = -not $beforeBattery
     Pump 150
     Check 'toggling the switch alone changes nothing on disk' ([bool]$generalWindow.CurrentSettings.StartAgentWithWindows -eq $before) ''
     $generalSave.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
     Pump 200
     Check 'saving applies the draft' ([bool]$generalWindow.CurrentSettings.StartAgentWithWindows -eq (-not $before)) ''
+    Check 'saving applies the battery preference' ($generalWindow.CurrentSettings.PauseAnimationsOnBattery -eq (-not $beforeBattery)) ''
     Check 'saving closes the panel' (-not [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
     # 还原这次写入的设置
     $restore = $generalWindow.CurrentSettings.Clone()
     $restore.StartAgentWithWindows = $before
+    $restore.PauseAnimationsOnBattery = $beforeBattery
     $restore.Normalize()
     $windowType.GetMethod('SaveSettingsQuietly').Invoke($generalWindow, @($restore)) | Out-Null
 }

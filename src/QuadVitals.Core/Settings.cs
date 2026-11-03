@@ -389,6 +389,13 @@ namespace QuadVitals.Core
         public string AnimationMode { get; set; }
 
         /// <summary>
+        /// Pause all dashboard animations while on battery. Default true; the user can turn it off
+        /// and then the battery state no longer caps animations (RDP/tier 0 still do).
+        /// </summary>
+        [DataMember(Name = "pauseAnimationsOnBattery")]
+        public bool? PauseAnimationsOnBattery { get; set; }
+
+        /// <summary>
         /// 概览四格各自显示哪个指标（设置弹窗里的四个下拉）。不在目录里的值回退到占用，
         /// 因为“占用”永远是有的那个指标。
         /// </summary>
@@ -429,6 +436,7 @@ namespace QuadVitals.Core
                 CurveStyle = CurveSmooth,
                 IndicatorStyle = IndicatorSegments,
                 AnimationMode = AnimationHover,
+                PauseAnimationsOnBattery = true,
                 DeviceMetrics = new DeviceMetricChoices(),
                 StartAgentWithWindows = false
             };
@@ -609,6 +617,7 @@ namespace QuadVitals.Core
                 if (!string.IsNullOrEmpty(AnimationMode)) warnings.Add("animationMode 非法，已恢复为悬停才动");
                 AnimationMode = AnimationHover;
             }
+            if (!PauseAnimationsOnBattery.HasValue) PauseAnimationsOnBattery = true;
 
             if (!IsKnownIndicatorStyle(IndicatorStyle))
             {

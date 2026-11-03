@@ -150,6 +150,15 @@ namespace QuadVitals.Core.Tests
             kept.AnimationMode = Settings.AnimationAlways;
             kept.Normalize();
             Equal(Settings.AnimationAlways, kept.AnimationMode, "常驻模式不会被 Normalize 改掉");
+
+            Settings battery = Settings.CreateDefault();
+            Equal(true, battery.PauseAnimationsOnBattery, "电池模式默认暂停动画");
+            Settings old = new Settings();
+            old.Normalize();
+            Equal(true, old.PauseAnimationsOnBattery, "旧配置缺字段时按暂停处理");
+            battery.PauseAnimationsOnBattery = false;
+            battery.Normalize();
+            Equal(false, battery.PauseAnimationsOnBattery, "用户关闭电池暂停后保持关闭");
         }
 
         private static void FanToneLatchReset()
@@ -707,6 +716,7 @@ namespace QuadVitals.Core.Tests
             original.CurveStyle = Settings.CurvePolyline;
             original.IndicatorStyle = Settings.IndicatorCapsule;
             original.AnimationMode = Settings.AnimationAlways;
+            original.PauseAnimationsOnBattery = false;
             original.Items[1].Lines[0].Color = "#FF00CC6A";
             original.Save(path);
 
@@ -717,6 +727,7 @@ namespace QuadVitals.Core.Tests
             True(json.Contains("\"curveStyle\""), "JSON 含 curveStyle");
             True(json.Contains("\"indicatorStyle\""), "JSON 含 indicatorStyle");
             True(json.Contains("\"animationMode\""), "JSON 含 animationMode");
+            True(json.Contains("\"pauseAnimationsOnBattery\""), "JSON 含 pauseAnimationsOnBattery");
             True(!json.Contains("\"fill2\""), "JSON 不再写 fill2");
             True(!json.Contains("\"verticalSpacing\""), "JSON 不再写 verticalSpacing");
             True(!json.Contains("\"theme\""), "JSON 不再写 theme");
@@ -732,6 +743,7 @@ namespace QuadVitals.Core.Tests
             Equal(Settings.CurvePolyline, loaded.CurveStyle, "曲线样式保持");
             Equal(Settings.IndicatorCapsule, loaded.IndicatorStyle, "指示器样式保持");
             Equal(Settings.AnimationAlways, loaded.AnimationMode, "动效模式保持");
+            Equal(false, loaded.PauseAnimationsOnBattery, "电池暂停偏好保持");
             Equal("#FF00CC6A", loaded.Items[1].Lines[0].Color, "行颜色保持");
             Equal(16, loaded.Items[0].HistoryColumns, "柱数保持");
             Equal(3, loaded.Band.HorizontalSpacing, "间距保持");

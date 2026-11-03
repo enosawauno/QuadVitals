@@ -249,6 +249,17 @@ namespace QuadVitals.UI
         {
             // 系统关了“动画效果”（WPF 侧的 prefers-reduced-motion）：只上淡入度，不转。
             if (!System.Windows.SystemParameters.ClientAreaAnimation) cyclesPerSecond = 0;
+            if (RenderEnvironment.AnimationsDisabled)
+            {
+                // RDP / Tier 0：保持静态色阶，既不滚动也不缓动。
+                _waveTarget = 0;
+                _speedTarget = 0;
+                _release = 1;
+                _wavedOpacity = 0;
+                Unhook();
+                InvalidateVisual();
+                return;
+            }
             _waveTarget = waveOpacity <= 0 ? 0 : (waveOpacity > 1 ? 1 : waveOpacity);
             _speedTarget = cyclesPerSecond <= 0 ? 0 : cyclesPerSecond;
             if (_waveTarget > 0.001 || _speedTarget > 0.001) Hook();
@@ -347,6 +358,11 @@ namespace QuadVitals.UI
         /// <summary>Band change: ease the fill colour over <paramref name="milliseconds"/>.</summary>
         public void SetToneSmooth(Color color, int milliseconds)
         {
+            if (RenderEnvironment.AnimationsDisabled)
+            {
+                SetTone(color);
+                return;
+            }
             if (_onColor == color) return;
             _onColor = color;
             SolidColorBrush brush = _on as SolidColorBrush;
@@ -379,6 +395,14 @@ namespace QuadVitals.UI
             if (!_displayInitialised) { _displayValue = value; _displayInitialised = true; }
             if (Math.Abs(_value - value) < 0.001) return;
             _value = value;
+            if (RenderEnvironment.AnimationsDisabled)
+            {
+                // 环境禁用：直接落位，不启动缓动循环。
+                _displayValue = _value;
+                Unhook();
+                InvalidateVisual();
+                return;
+            }
             // 大幅变化才演：数值每秒都在动，若每次都从当前值缓动过去，这个逐帧循环几乎
             // 永不静止——而分层窗口每帧都要整窗重推（实测 GPU 8–10%、CPU 20–30%）。
             // 1–2 个百分点的日常抖动直接落位，肉眼看不出，代价却差一个数量级。

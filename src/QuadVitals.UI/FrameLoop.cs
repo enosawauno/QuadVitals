@@ -41,6 +41,7 @@ namespace QuadVitals.UI
         private readonly double _minFrameSeconds;
         private readonly EventHandler _renderHandler;
         private readonly EventHandler _stateChangedHandler;
+        private readonly Action _environmentHandler;
         private readonly EventHandler _activatedHandler;
         private readonly EventHandler _deactivatedHandler;
         private readonly DependencyPropertyChangedEventHandler _visibilityHandler;
@@ -71,6 +72,7 @@ namespace QuadVitals.UI
             _minFrameSeconds = 1.0 / maxFps;
             _renderHandler = OnRendering;
             _stateChangedHandler = OnHostStateChanged;
+            _environmentHandler = OnEnvironmentChanged;
             _activatedHandler = OnHostActivated;
             _deactivatedHandler = OnHostDeactivated;
             _visibilityHandler = OnHostVisibilityChanged;
@@ -93,6 +95,7 @@ namespace QuadVitals.UI
             {
                 _wantRunning = true;
                 _owner.IsVisibleChanged += _visibilityHandler;
+                RenderEnvironment.Changed += _environmentHandler;
                 HookWindow();
             }
             // Start() may be called again after a pause while the loop was already attached to
@@ -122,6 +125,7 @@ namespace QuadVitals.UI
             }
             _wantRunning = false;
             _owner.IsVisibleChanged -= _visibilityHandler;
+            RenderEnvironment.Changed -= _environmentHandler;
             UnhookWindow();
             Unhook();
         }
@@ -135,6 +139,7 @@ namespace QuadVitals.UI
 
         private bool CanRender()
         {
+            if (RenderEnvironment.AnimationsDisabled) return false;
             if (_focusSuspended) return false;
             if (!_owner.IsVisible) return false;
             Window window = _window ?? Window.GetWindow(_owner);
@@ -216,6 +221,11 @@ namespace QuadVitals.UI
             if (!_everActivated) return;
             _focusSuspended = true;
             Refresh();
+        }
+
+        private void OnEnvironmentChanged()
+        {
+            if (_wantRunning) Refresh();
         }
 
         private void OnHostStateChanged(object sender, EventArgs e)

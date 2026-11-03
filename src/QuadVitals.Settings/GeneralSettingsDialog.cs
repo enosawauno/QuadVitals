@@ -8,10 +8,9 @@ using AppSettings = QuadVitals.Core.Settings;
 namespace QuadVitals.Settings
 {
     /// <summary>
-    /// 登录自启开关。挂在标题栏齿轮上（反馈气泡左边），和网速卡、设备状态卡的齿轮一样是就地弹窗。
+    /// 登录自启与电池动画偏好。挂在标题栏齿轮上（反馈气泡左边），和网速卡、设备状态卡的齿轮一样是就地弹窗。
     ///
-    /// 这一页原本是侧栏里的「通用设置」，只剩一个开关，占一整页就为了一个复选框。弹窗里
-    /// 改动即写盘：没有保存按钮，也没有草稿，关掉面板不会留下没提交的改动。
+    /// 面板用草稿 + 保存：勾选只改控件状态，点「保存」才写盘，取消/Esc 丢弃。
     /// </summary>
     internal sealed class GeneralSettingsDialog
     {
@@ -70,6 +69,15 @@ namespace QuadVitals.Settings
             // 只是草稿：勾选框本身不写盘。
             body.Children.Add(autostart);
 
+            CheckBox battery = new DarkCheckBox
+            {
+                Content = "电池模式下暂停动画",
+                IsChecked = settings.PauseAnimationsOnBattery != false,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+            AutomationProperties.SetAutomationId(battery, "GeneralBatteryAnimations");
+            body.Children.Add(battery);
+
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
 
@@ -86,7 +94,7 @@ namespace QuadVitals.Settings
 
             FlatButton save = new FlatButton("保存", true);
             AutomationProperties.SetAutomationId(save, "GeneralSave");
-            save.Click += (sender, e) => SavePanel(autostart);
+            save.Click += (sender, e) => SavePanel(autostart, battery);
             buttons.Children.Add(save);
             Grid.SetRow(buttons, 2);
             grid.Children.Add(buttons);
@@ -95,18 +103,17 @@ namespace QuadVitals.Settings
             return panel;
         }
 
-        /// <summary>
-        /// Writes just this field onto the latest settings (adapter / refresh rate / elements may
-        /// have changed elsewhere since the panel was built) and saves silently.
-        /// </summary>
         /// <summary>把面板里的草稿写回最新设置（别处可能已经改过网卡/刷新等字段）。</summary>
-        private void SavePanel(CheckBox autostart)
+        private void SavePanel(CheckBox autostart, CheckBox battery)
         {
             AppSettings latest = _window.CurrentSettings.Clone();
-            bool wanted = autostart.IsChecked == true;
+            bool wantedAutostart = autostart.IsChecked == true;
+            bool wantedBatteryPause = battery.IsChecked == true;
             _window.CloseOverlay();
-            if (latest.StartAgentWithWindows == wanted) return;
-            latest.StartAgentWithWindows = wanted;
+            if (latest.StartAgentWithWindows == wantedAutostart &&
+                latest.PauseAnimationsOnBattery == wantedBatteryPause) return;
+            latest.StartAgentWithWindows = wantedAutostart;
+            latest.PauseAnimationsOnBattery = wantedBatteryPause;
             latest.Normalize();
             _window.SaveSettingsQuietly(latest);
         }

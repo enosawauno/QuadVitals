@@ -212,7 +212,7 @@ namespace QuadVitals.Settings
             light.Children.Add(halo);
             light.Children.Add(dot);
 
-            if (alive)
+            if (alive && !RenderEnvironment.AnimationsDisabled)
             {
                 Duration cycle = TimeSpan.FromMilliseconds(2000);
                 SineEase ease = new SineEase { EasingMode = EasingMode.EaseInOut };
