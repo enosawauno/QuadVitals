@@ -17,7 +17,12 @@ namespace QuadVitals.UI
     /// </summary>
     public class DarkTextBox : TextBox
     {
-        public DarkTextBox()
+        /// <param name="focusEdge">
+        /// False drops the green edge this box paints while focused. The feedback form uses it: the box
+        /// there is a large writing area, and a full-frame accent outline reads as a selection, not as
+        /// "the caret is here" - the caret already says that.
+        /// </param>
+        public DarkTextBox(bool focusEdge = true)
         {
             Background = Theme.SurfaceHoverBrush;
             Foreground = Theme.TextPrimaryBrush;
@@ -38,17 +43,23 @@ namespace QuadVitals.UI
             // 与 DarkComboBox / FlatButton 同高（30），否则同一列里输入框比下拉矮一截。
             Height = 30;
 
-            // No black dotted focus rectangle: the template already turns the edge green on focus.
+            // No black dotted focus rectangle: the template can turn the edge green on focus instead.
             FocusVisualStyle = null;
+            _focusEdge = focusEdge;
 
             // 圆角要靠自建模板：TextBox 没有 CornerRadius，用系统模板时永远是直角，
             // 和圆角的下拉/按钮并排就显得不齐。
             // 内边距交给外层 Border、让 PART_ContentHost 自己撑满：放到 ScrollViewer 的 Margin
             // 上会把文字挤到只剩上半截。
-            Template = BuildTemplate();
+            Template = BuildTemplate(focusEdge);
         }
 
-        private static ControlTemplate BuildTemplate()
+        private readonly bool _focusEdge;
+
+        /// <summary>True when the template paints the accent edge while focused.</summary>
+        public bool HasFocusEdge { get { return _focusEdge; } }
+
+        private static ControlTemplate BuildTemplate(bool focusEdge)
         {
             ControlTemplate template = new ControlTemplate(typeof(TextBox));
 
@@ -75,11 +86,14 @@ namespace QuadVitals.UI
             border.AppendChild(host);
             template.VisualTree = border;
 
-            Trigger focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true };
-            Setter focusEdge = new Setter(Border.BorderBrushProperty, Theme.AccentGreenBrush);
-            focusEdge.TargetName = "border";
-            focus.Setters.Add(focusEdge);
-            template.Triggers.Add(focus);
+            if (focusEdge)
+            {
+                Trigger focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true };
+                Setter focusSetter = new Setter(Border.BorderBrushProperty, Theme.AccentGreenBrush);
+                focusSetter.TargetName = "border";
+                focus.Setters.Add(focusSetter);
+                template.Triggers.Add(focus);
+            }
 
             Trigger mouse = new Trigger { Property = IsMouseOverProperty, Value = true };
             Setter mouseEdge = new Setter(Border.BorderBrushProperty, Theme.BorderStrongBrush);

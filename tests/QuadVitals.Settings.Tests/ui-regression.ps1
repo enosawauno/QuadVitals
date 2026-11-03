@@ -877,6 +877,10 @@ if ($null -ne $feedbackPage) {
     # typed text, otherwise it reads as a separate line sitting above and to the left.
     $hintBox = $feedbackPageType.GetField('_placeholder', $flags).GetValue($feedbackPage)
     $textBox = $feedbackPageType.GetField('_text', $flags).GetValue($feedbackPage)
+    # The large writing area drops the accent focus edge: the template keeps only the hover trigger.
+    Check 'the feedback box has no accent focus edge' ($textBox.HasFocusEdge -eq $false) ''
+    Check 'its template keeps just the hover edge' ($textBox.Template.Triggers.Count -eq 1) "triggers=$($textBox.Template.Triggers.Count)"
+
     $feedbackRoot.UpdateLayout()
     $textOrigin = $textBox.GetRectFromCharacterIndex(0)
     Check 'the hint starts on the typed text column' ([math]::Abs($hintBox.Margin.Left - $textOrigin.X) -le 1) "hint=$($hintBox.Margin.Left) text=$($textOrigin.X)"

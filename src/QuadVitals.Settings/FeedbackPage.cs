@@ -36,7 +36,8 @@ namespace QuadVitals.Settings
         private const double HintCaretInset = 2;
 
         private readonly ComboBox _kind = new DarkComboBox();
-        private readonly DarkTextBox _text = new DarkTextBox();
+        // 大块书写区不要绿色焦点描边：整圈高亮看着像选中状态，光标本身已经说明焦点在这。
+        private readonly DarkTextBox _text = new DarkTextBox(false);
         private readonly DarkCheckBox _includeLogs = new DarkCheckBox();
         private readonly StackPanel _attachmentRows = new StackPanel();
         private readonly TextBlock _attachmentHint = new TextBlock();
