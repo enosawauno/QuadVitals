@@ -73,6 +73,8 @@ namespace QuadVitals.Settings
             if (handler != null) handler((_compact && text == "反馈内容") ? "反馈" : text);
         }
         private Grid _formBody;
+        // 诊断日志开关与说明：跟着表单一起显示/隐藏（结果态不需要它）。
+        private FrameworkElement _logBlock;
         private readonly TextBlock _placeholder = new TextBlock();
         private StackPanel _resultBody;
         private readonly TextBlock _successId = new TextBlock();
@@ -324,16 +326,11 @@ namespace QuadVitals.Settings
                 Content = flow
             };
 
-            // 诊断日志与两个动作原来贴在输入框下面，现在压到卡片底部：它们是"提交前顺手确认"的
-            // 东西，不是写正文的一部分，放在按钮行上方更顺。
+            // 表单只剩输入区：诊断日志那一块挪到页脚，和三个动作同排、下沿对齐。
             Grid form = new Grid();
             form.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetRow(_scroll, 0);
             form.Children.Add(_scroll);
-            FrameworkElement band = BuildCardFooter();
-            Grid.SetRow(band, 1);
-            form.Children.Add(band);
             _formBody = form;
 
             _previewBox.IsReadOnly = true;
@@ -391,7 +388,7 @@ namespace QuadVitals.Settings
         /// </summary>
         private FrameworkElement BuildCardFooter()
         {
-            Grid row = new Grid { Margin = new Thickness(0, 16, 0, 0) };
+            Grid row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -428,28 +425,36 @@ namespace QuadVitals.Settings
 
         private FrameworkElement BuildFooter()
         {
-            // 三个槽：清空在左、状态在中间、提交在右。清空原来跟提交挤在右下角，和上一行的
-            // 「查看将包含的信息 / 添加文件」凑成一个四按钮方块，看着像一坨；现在按从轻到重
-            // 左右分开，右下角只剩一个主操作。
+            // 两行：上面留状态文案（右对齐），下面一行左边是诊断日志、右边是三个动作。
+            // 诊断那块与按钮都贴下沿，所以它最后一行小字的底边和按钮下边缘齐平。
             Grid footer = new Grid();
-            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // 三个动作都靠右，从左到右：清空 / 添加附件 / 提交反馈。主操作与两个次要动作之间留一格
-            // 多一点的间距，不然三个同色按钮排成一排分不出主次。
             _status.FontSize = 12;
             _status.Foreground = Theme.TextTertiaryBrush;
             _status.TextWrapping = TextWrapping.Wrap;
-            _status.VerticalAlignment = VerticalAlignment.Center;
-            _status.Margin = new Thickness(0, 0, 14, 0);
-            Grid.SetColumn(_status, 0);
+            _status.TextAlignment = TextAlignment.Right;
+            _status.HorizontalAlignment = HorizontalAlignment.Right;
+            _status.Margin = new Thickness(0, 0, 0, 8);
+            Grid.SetRow(_status, 0);
             footer.Children.Add(_status);
 
+            Grid row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            _logBlock = BuildCardFooter();
+            _logBlock.VerticalAlignment = VerticalAlignment.Bottom;
+            Grid.SetColumn(_logBlock, 0);
+            row.Children.Add(_logBlock);
+
+            // 三个动作靠右，从左到右：清空 / 添加附件 / 提交反馈；主操作前多留一格间距。
             StackPanel actions = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Bottom
             };
 
             FlatButton clear = new FlatButton("清空");
@@ -466,7 +471,10 @@ namespace QuadVitals.Settings
             actions.Children.Add(_submit);
 
             Grid.SetColumn(actions, 1);
-            footer.Children.Add(actions);
+            row.Children.Add(actions);
+
+            Grid.SetRow(row, 1);
+            footer.Children.Add(row);
             return footer;
         }
 
@@ -542,6 +550,7 @@ namespace QuadVitals.Settings
             SetHeading("反馈内容");
             _resultBody.Visibility = Visibility.Collapsed;
             _formBody.Visibility = Visibility.Visible;
+            if (_logBlock != null) _logBlock.Visibility = Visibility.Visible;
         }
 
         /// <summary>The placeholder is only visible while the box is empty.</summary>
@@ -1080,6 +1089,7 @@ namespace QuadVitals.Settings
             // 同一块区域原地变成结果：表单收起，结果顶上来。
             SetHeading("反馈已保存");
             _formBody.Visibility = Visibility.Collapsed;
+            if (_logBlock != null) _logBlock.Visibility = Visibility.Collapsed;
             _resultBody.Visibility = Visibility.Visible;
             FadeIn(_resultBody);
 
