@@ -32,6 +32,19 @@ function Invoke-Step([string]$title, [string]$script, [string[]]$arguments) {
 
 Push-Location $root
 try {
+    # The owner's rule: nothing moves while the release notes are unconfirmed. This runs first on
+    # purpose - a version bump or a packaging run on unapproved wording is exactly the drift the
+    # gate exists to prevent. The gate itself lives in the local-only gate folder, so a published
+    # checkout without it simply has no notes to confirm.
+    $freezeGate = Join-Path $root 'scripts\maintenance\check-release-freeze.ps1'
+    if (Test-Path -LiteralPath $freezeGate) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $freezeGate | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host '[verify] FAILED: release notes are not confirmed (see scripts\maintenance\check-release-freeze.ps1)' -ForegroundColor Red
+            exit 1
+        }
+    }
+
     [void](Invoke-Step 'Core build + assertions' 'scripts\build-core.ps1' @())
 
     if (-not $SkipUi) {
