@@ -658,6 +658,8 @@ if ($null -ne $aboutPage) {
             $buttonOrigin = $actionButton.TransformToAncestor($updateCard).Transform((New-Object System.Windows.Point(0, 0)))
             Check 'the update action sits at the card bottom-left' ([math]::Abs($buttonOrigin.X - $rowOrigin.X) -le 2) ("button=" + [math]::Round($buttonOrigin.X) + " row=" + [math]::Round($rowOrigin.X))
             Check 'the update action sits below the version row' ($buttonOrigin.Y -gt ($rowOrigin.Y + 20)) ("button=" + [math]::Round($buttonOrigin.Y) + " row=" + [math]::Round($rowOrigin.Y))
+            $cardWidth = $updateCard.ActualWidth
+            Check 'the update action spans the card' ($actionButton.ActualWidth -gt ($cardWidth * 0.8)) ("button=" + [math]::Round($actionButton.ActualWidth) + " card=" + [math]::Round($cardWidth))
         } else { Check 'the update action is inside the card' $false '' }
     }
     Check 'the status line starts hidden' ($statusText.Visibility -eq [System.Windows.Visibility]::Collapsed) "visibility=$($statusText.Visibility)"

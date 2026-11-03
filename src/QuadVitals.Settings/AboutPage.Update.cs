@@ -46,47 +46,38 @@ namespace QuadVitals.Settings
             KeyValueRow current = new KeyValueRow("当前版本", ProductVersion.SemVer);
             AutomationProperties.SetAutomationId(current, "AboutUpdateCurrent");
 
-            StackPanel actions = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Right
-            };
+            // 动作占满整行：检查更新是这张卡唯一的主操作，做成通栏比在角落里缩成一小块清楚。
+            Grid actions = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+            actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             _checkButton = new FlatButton("检查更新", true);
+            _checkButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+            _checkButton.HorizontalContentAlignment = HorizontalAlignment.Center;
             AutomationProperties.SetAutomationId(_checkButton, "AboutUpdateCheck");
             _checkButton.Click += (sender, e) => BeginUpdateFlow();
+            Grid.SetColumn(_checkButton, 0);
             actions.Children.Add(_checkButton);
 
             _cancelButton = new FlatButton("取消");
             AutomationProperties.SetAutomationId(_cancelButton, "AboutUpdateCancel");
             _cancelButton.Margin = new Thickness(8, 0, 0, 0);
+            _cancelButton.VerticalAlignment = VerticalAlignment.Center;
             _cancelButton.Visibility = Visibility.Collapsed;
             _cancelButton.Click += (sender, e) =>
             {
                 _updateCancelled = true;
                 SetStatus("正在取消…", Theme.TextSecondary);
             };
+            Grid.SetColumn(_cancelButton, 1);
             actions.Children.Add(_cancelButton);
 
-            TextBlock note = new TextBlock
-            {
-                Text = "更新包从 GitHub Releases 获取；下载完成后按发布清单校验 SHA-256，通过才会启动安装程序。",
-                FontSize = 11.5,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                // 值列缩进：说明接在版本号下面，而不是回到标签列，整卡才是一条竖线。
-                Margin = new Thickness(96, 2, 0, 0)
-            };
-
-            actions.HorizontalAlignment = HorizontalAlignment.Left;
-            actions.Margin = new Thickness(0, 12, 0, 0);
+            actions.Margin = new Thickness(0, 14, 0, 0);
 
             card.Content.Children.Add(current);
             FrameworkElement changelogEarly = ValueLinkRow("日志明细", "GitHub", OpenChangelog);
             AutomationProperties.SetAutomationId(changelogEarly, "AboutUpdateChangelog");
             card.Content.Children.Add(changelogEarly);
-            card.Content.Children.Add(note);
             card.Content.Children.Add(actions);
 
             _progressTrack = new Grid
