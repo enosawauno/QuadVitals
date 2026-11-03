@@ -365,6 +365,8 @@ namespace QuadVitals.Settings
             TextBox box = new DarkTextBox
             {
                 Width = 72,
+                // 整行统一 12 px：DarkTextBox 默认 12.5，数字会比旁边的标签和单位大一号。
+                FontSize = 12,
                 TextAlignment = TextAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };

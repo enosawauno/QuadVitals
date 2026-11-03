@@ -129,6 +129,8 @@ if ($null -ne $spacingBox) {
     $gap = $boxY - ($rowY + $secondRow.ActualHeight)
     Check 'the spacing box follows the row without a dead band' ($gap -lt 26) ("gap=" + [math]::Round($gap))
     Check 'the spacing value is centred in its box' ($spacingBox.TextAlignment -eq [System.Windows.TextAlignment]::Center) ("align=" + $spacingBox.TextAlignment)
+    # One size for the whole row: the box ships 12.5 by default and stood out next to the labels.
+    Check 'the spacing row keeps one font size' ([math]::Abs($spacingBox.FontSize - 12) -lt 0.01) ("size=" + $spacingBox.FontSize)
     # The field sits on the second tile column (64 px tile + 8 px gap), which is where the
     # dashed add tile lands once the second row holds one element.
     $firstTile = Find-ById $spacingCase.Page 'ElementTile'
