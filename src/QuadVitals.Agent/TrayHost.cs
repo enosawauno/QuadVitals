@@ -62,7 +62,7 @@ namespace QuadVitals.Agent
             ToolStripMenuItem dashboard = new ToolStripMenuItem("打开仪表盘", null, (sender, e) => OpenDashboard());
             menu.Items.Add(dashboard);
 
-            ToolStripMenuItem feedback = new ToolStripMenuItem("发送反馈…", null, (sender, e) => OpenDashboard("--feedback"));
+            ToolStripMenuItem feedback = new ToolStripMenuItem("发送反馈", null, (sender, e) => OpenDashboard("--feedback"));
             menu.Items.Add(feedback);
 
             ToolStripMenuItem settingsItem = new ToolStripMenuItem("打开设置文件", null, (sender, e) => OpenSettingsFile());
