@@ -23,7 +23,7 @@ namespace QuadVitals.Settings
         /// <summary>进度刷新节流：每 80 ms 一次，够平滑也不会把 UI 线程喂满。</summary>
         private const int ProgressIntervalMs = 80;
 
-        private TextBlock _updateStatus;
+        private DispatcherTimer _statusReset;
         private Border _progressFill;
         private Grid _progressTrack;
         private FlatButton _checkButton;
@@ -102,19 +102,6 @@ namespace QuadVitals.Settings
             };
             _progressTrack.Children.Add(_progressFill);
             card.Content.Children.Add(_progressTrack);
-
-            // 进度、结果与失败原因共用这一行：空的时候不占位，所以卡里不会留一行“尚未检查更新”。
-            _updateStatus = new TextBlock
-            {
-                Text = string.Empty,
-                FontSize = 12,
-                Foreground = Theme.TextSecondaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                Visibility = Visibility.Collapsed,
-                Margin = new Thickness(0, 10, 0, 0)
-            };
-            AutomationProperties.SetAutomationId(_updateStatus, "AboutUpdateStatus");
-            card.Content.Children.Add(_updateStatus);
 
             return card;
         }
@@ -354,21 +341,53 @@ namespace QuadVitals.Settings
             }
         }
 
+        /// <summary>
+        /// Status lives on the button, not on a line under it: the card only has room for the data rows
+        /// and one action, and a second line of text underneath broke that shape. Whatever the flow says
+        /// shows on the button and drops back to the idle label after a few seconds.
+        /// </summary>
         private void SetStatus(string text, Color colour)
         {
-            if (_updateStatus == null) return;
-            _updateStatus.Text = text;
-            _updateStatus.Foreground = new SolidColorBrush(colour);
-            // The line has no place in the idle card: it only exists while there is something to say,
-            // and it keeps the final outcome after the flow ends.
-            _updateStatus.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+            if (_checkButton == null) return;
+            if (string.IsNullOrEmpty(text))
+            {
+                StopStatusReset();
+                SetButtonLabel(IdleActionLabel);
+                return;
+            }
+
+            _checkButton.Content = text;
+            StartStatusReset();
         }
+
+        private const string IdleActionLabel = "检查更新";
 
         /// <summary>The button doubles as the phase indicator: its width is fixed by the longest label.</summary>
         private void SetButtonLabel(string text)
         {
             if (_checkButton == null) return;
             _checkButton.Content = text;
+        }
+
+        /// <summary>After the outcome has been readable for a while the button goes back to what it does.</summary>
+        private void StartStatusReset()
+        {
+            StopStatusReset();
+            _statusReset = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _statusReset.Tick += (sender, e) =>
+            {
+                StopStatusReset();
+                if (_updateRunning) return;
+                SetButtonLabel(IdleActionLabel);
+            };
+            _statusReset.Start();
+        }
+
+        private void StopStatusReset()
+        {
+            if (_statusReset == null) return;
+            _statusReset.Stop();
+            _statusReset = null;
         }
 
         private void SetProgress(double fraction)

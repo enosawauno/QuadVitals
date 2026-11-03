@@ -618,8 +618,9 @@ while ($aboutQueue.Count -gt 0 -and $null -eq $aboutPage) {
 }
 Check 'the update card is hosted by the about page' ($null -ne $aboutPage) ''
 if ($null -ne $aboutPage) {
-    $statusText = Find-ById $aboutRoot 'AboutUpdateStatus'
-    Check 'the update card keeps the status line for real messages' ($null -ne $statusText) ''
+    # The status no longer has its own line: it is printed on the action button and drops back to
+    # the idle label five seconds later.
+    Check 'the status line is gone from the card' ($null -eq (Find-ById $aboutRoot 'AboutUpdateStatus')) ''
     # The idle card must not carry placeholder rows: 最新版本 / 安装包校验 and the empty status line
     # were pure noise. They must not come back, and the card keeps exactly one labelled row.
     Check 'the placeholder rows are gone' (($null -eq $aboutPageType.GetField('_packageRow', $flags)) -and ($null -eq $aboutPageType.GetField('_latestVersionRow', $flags))) ''
@@ -666,10 +667,12 @@ if ($null -ne $aboutPage) {
             Check 'the full-width action does not scale on hover' (-not ($actionButton.RenderTransform -is [System.Windows.Media.ScaleTransform])) ("transform=" + $actionButton.RenderTransform)
         } else { Check 'the update action is inside the card' $false '' }
     }
-    Check 'the status line starts hidden' ($statusText.Visibility -eq [System.Windows.Visibility]::Collapsed) "visibility=$($statusText.Visibility)"
     $ink = [System.Windows.Media.Color]::FromRgb(0x8F, 0x8F, 0x8F)
+    $checkBtn = Find-ById $updateCard 'AboutUpdateCheck'
+    $idleLabel = [string]$checkBtn.Content
     $aboutPageType.GetMethod('SetStatus', $flags).Invoke($aboutPage, @('checking', $ink)) | Out-Null
-    Check 'a real message makes the status line appear' ($statusText.Visibility -eq [System.Windows.Visibility]::Visible) "visibility=$($statusText.Visibility)"
+    Check 'a real message is printed on the action button' (([string]$checkBtn.Content) -eq 'checking') ("content=" + $checkBtn.Content)
+    Check 'a status reset timer is armed' ($null -ne $aboutPageType.GetField('_statusReset', $flags).GetValue($aboutPage)) ''
     $fillField = $aboutPageType.GetField('_progressFill', $flags)
     $trackField = $aboutPageType.GetField('_progressTrack', $flags)
     $fill = $fillField.GetValue($aboutPage)
@@ -682,6 +685,10 @@ if ($null -ne $aboutPage) {
     $aboutPageType.GetMethod('SetProgress', $flags).Invoke($aboutPage, @(1.7)) | Out-Null
     $scale = ($fill.RenderTransform).ScaleX
     Check 'progress beyond the end is clamped' ([math]::Abs($scale - 1.0) -le 0.001) "scale=$scale"
+
+    # Cleared status returns the button to its own label.
+    $aboutPageType.GetMethod('SetStatus', $flags).Invoke($aboutPage, @('', $ink)) | Out-Null
+    Check 'clearing the status restores the button label' (([string]$checkBtn.Content) -eq $idleLabel) ("content=" + $checkBtn.Content + " idle=" + $idleLabel)
 
     # Title-bar buttons were shrunk on request; the invariant that must survive is the ✕ right
     # edge sitting on the card right edge (it moved once when the glyph geometry changed).
