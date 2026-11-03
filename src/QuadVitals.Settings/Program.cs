@@ -54,9 +54,14 @@ namespace QuadVitals.Settings
                             // driving the pointer, otherwise it cannot be screenshotted or tested.
                             openAgentStatus = true;
                         }
+                        else if (string.Equals(arg, "--general", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // The general settings are a title-bar dialog; same reason as --about.
+                            startPage = "general";
+                        }
                         else if (arg != null && arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))
                         {
-                            // --page=overview|elements|network|about（feedback 不再是页，传它开面板）
+                            // --page=overview|elements|about（feedback 与 general 开面板，不是页）
                             startPage = arg.Substring("--page=".Length);
                         }
                     }

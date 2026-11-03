@@ -507,15 +507,43 @@ $zone0 = Find-ById $c.Page 'ElementTempZone0'
 Check 'temperature rows explain nothing they cannot change' ($null -eq $zone0) ('zone0=' + [bool]($null -ne $zone0))
 
 
-# --- general page: the band card is gone, spacing lives with the element list -------------------
-$generalWindow = [Activator]::CreateInstance($windowType, @('network'))
+# --- general settings: a title-bar gear panel, not a sidebar page -------------------------------
+$generalWindow = [Activator]::CreateInstance($windowType, @('overview'))
 $generalWindow.Width = 1280
 $generalWindow.Height = 853
 $generalRoot = $generalWindow.Content
 $generalRoot.Measure((New-Object System.Windows.Size(1280, 853)))
 $generalRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
 $generalRoot.UpdateLayout()
-Check 'the general page no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
+$gearPill = Find-ById $generalRoot 'GeneralPill'
+Check 'the title bar carries the general gear' ($null -ne $gearPill) ''
+$feedbackPill = Find-ById $generalRoot 'FeedbackPill'
+if (($null -ne $gearPill) -and ($null -ne $feedbackPill)) {
+    $gearX = $gearPill.TransformToAncestor($generalRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+    $feedbackX = $feedbackPill.TransformToAncestor($generalRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+    Check 'the gear sits left of the feedback entry' ($gearX -lt $feedbackX) ("gear=" + [math]::Round($gearX) + " feedback=" + [math]::Round($feedbackX))
+}
+else { Check 'the feedback entry is still in the title bar' $false '' }
+$windowType.GetMethod('ShowGeneralSettings', $pubFlags).Invoke($generalWindow, @()) | Out-Null
+Pump 200
+Check 'the gear opens a panel over the window' ([bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
+$generalPanel = Find-ById $generalRoot 'GeneralSettingsPanel'
+Check 'the panel is the general settings panel' ($null -ne $generalPanel) ''
+$autoStart = Find-ById $generalRoot 'GeneralAutostart'
+Check 'the panel carries the autostart switch' ($null -ne $autoStart) ''
+if ($null -ne $autoStart) {
+    $saved = [bool]$generalWindow.CurrentSettings.StartAgentWithWindows
+    Check 'the switch reflects the saved preference' ($autoStart.IsChecked -eq $saved) ("checked=" + $autoStart.IsChecked + " saved=" + $saved)
+}
+Check 'the panel no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
+$generalClose = Find-ById $generalRoot 'GeneralClose'
+Check 'the panel has a close button' ($null -ne $generalClose) ''
+if ($null -ne $generalClose) {
+    $generalClose.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+    Pump 120
+    Check 'closing the panel removes it' (-not [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
+}
+$generalWindow.Close()
 
 "== disk I/O editor: rows =="
 $c = New-Case 1
@@ -1139,13 +1167,14 @@ if ($null -ne $navGlider) {
     $afterSwitch = $navShift.Y
     Check 'a second switch keeps the current position' ($afterSwitch -ge ($mid - 1.0)) "before=$mid after=$afterSwitch"
     Pump 400
-    Check 'the pill slides to the selected item' ([math]::Abs($navShift.Y - 144) -le 1) "y=$($navShift.Y)"
+    Check 'the pill slides to the selected item' ([math]::Abs($navShift.Y - 96) -le 1) "y=$($navShift.Y)"
 }
 $navItems = $windowType.GetField('_navItems', $flags).GetValue($navWindow)
 $navOrder = ($navItems | ForEach-Object { [string]$_.Tag }) -join ','
-Check 'the sidebar holds four screens, feedback is not one of them' ($navOrder -eq 'overview,elements,network,about') "order=$navOrder"
+Check 'the sidebar holds three screens, feedback and general are not pages' ($navOrder -eq 'overview,elements,about') "order=$navOrder"
 $pageFactories = $windowType.GetField('_pages', $flags).GetValue($navWindow)
 Check 'the tools page is no longer registered' (-not $pageFactories.ContainsKey('tools')) ''
+Check 'the general settings are no longer a page' (-not $pageFactories.ContainsKey('network')) ''
 Check 'the feedback page is no longer registered' (-not $pageFactories.ContainsKey('feedback')) ''
 $navWindow.Close()
 
@@ -1168,7 +1197,6 @@ function Page-Title([string]$key) {
 $expectedTitles = @{}
 $expectedTitles['overview'] = U @(0x6982, 0x89C8)
 $expectedTitles['elements'] = U @(0x663E, 0x793A, 0x9879)
-$expectedTitles['network'] = U @(0x901A, 0x7528, 0x8BBE, 0x7F6E)
 $expectedTitles['about'] = U @(0x5173, 0x4E8E)
 foreach ($key in $expectedTitles.Keys) {
     $pair = Page-Title $key

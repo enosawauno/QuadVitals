@@ -120,10 +120,13 @@ namespace QuadVitals.Settings
 
 
             Content = BuildRoot();
-            // "feedback" is no longer a page: the flag still works, it just opens the title-bar panel.
+            // "feedback" and "general" are not pages: the flags still work, they open the title-bar panel
+            // and the title-bar gear dialog.
             bool startFeedback = string.Equals(startPage, "feedback", StringComparison.OrdinalIgnoreCase);
+            bool startGeneral = string.Equals(startPage, "general", StringComparison.OrdinalIgnoreCase);
             ShowPage(_pages.ContainsKey(startPage) ? startPage : "overview");
             if (startFeedback) Loaded += (sender, e) => ShowFeedback();
+            if (startGeneral) Loaded += (sender, e) => ShowGeneralSettings();
 
             // 关闭前把网速曲线落盘：下次打开接着上一张图的右端继续跑。
             Closed += (sender, e) => OverviewPage.FlushHistory();
@@ -201,7 +204,6 @@ namespace QuadVitals.Settings
         {
             _pages["overview"] = () => { _overviewPage = new OverviewPage(this); return _overviewPage; };
             _pages["elements"] = () => new ElementsPage(this);
-            _pages["network"] = () => new NetworkPage(this);
             _pages["about"] = () => new AboutPage(this);
         }
 
@@ -345,6 +347,13 @@ namespace QuadVitals.Settings
         {
             if (IsOverlayOpen) return;
             ShowOverlay(new NetworkSettingsDialog(this).Build());
+        }
+
+        /// <summary>Title-bar gear: the general settings live in a panel, not in a sidebar page.</summary>
+        public void ShowGeneralSettings()
+        {
+            if (IsOverlayOpen) return;
+            ShowOverlay(new GeneralSettingsDialog(this).Build());
         }
 
         /// <summary>
@@ -549,6 +558,43 @@ namespace QuadVitals.Settings
             return canvas;
         }
 
+        /// <summary>
+        /// 标题栏齿轮：与右边三个图标同一套“实心、粗笔画”的视觉语言。字体里的齿轮字形是细线描边，
+        /// 夹在实心气泡与 3 px 的 ✕ 中间看着像另一个控件，所以这里用 17 px 画布拼一个实心齿轮，
+        /// 质量与气泡相当（圆盘 + 8 个齿，中间挖孔）。
+        /// </summary>
+        private static FrameworkElement BuildGearGlyph(Button owner)
+        {
+            const double size = 17;
+            const double center = size / 2;
+            // 齿顶半径 7.2、盘半径 5.0：外廓比气泡（16）小一圈，与 ✕ 的 11 px 笔画区组成同一条视觉带。
+            Geometry body = new EllipseGeometry(new Point(center, center), 5.0, 5.0);
+            for (int i = 0; i < 8; i++)
+            {
+                RectangleGeometry tooth = new RectangleGeometry(
+                    new Rect(center - 1.4, center - 7.2, 2.8, 3.6));
+                tooth.Transform = new RotateTransform(i * 45, center, center);
+                body = Geometry.Combine(body, tooth, GeometryCombineMode.Union, null);
+            }
+            Geometry gear = Geometry.Combine(body,
+                new EllipseGeometry(new Point(center, center), 2.0, 2.0),
+                GeometryCombineMode.Exclude, null);
+            gear.Freeze();
+
+            System.Windows.Shapes.Path path = new System.Windows.Shapes.Path
+            {
+                Data = gear,
+                Width = size,
+                Height = size
+            };
+            path.SetBinding(Shape.FillProperty,
+                new System.Windows.Data.Binding("Foreground") { Source = owner });
+
+            Canvas canvas = new Canvas { Width = size, Height = size };
+            canvas.Children.Add(path);
+            return canvas;
+        }
+
         /// <summary>设备状态卡右上角齿轮的入口。第一个设置项是指示器样式。</summary>
         public void ShowDeviceSettings()
         {
@@ -610,6 +656,11 @@ namespace QuadVitals.Settings
             _agentPill.MouseLeave += (sender, e) => _agentPill.Background = idleChip;
             _agentPill.Click += (sender, e) => ShowAgentStatus();
             right.Children.Add(_agentPill);
+
+            // 通用设置只剩一个开关，挂在标题栏齿轮上，不再占侧栏一整页。
+            Button general = IconButton("GeneralPill", "通用设置", "通用设置", BuildGearGlyph, ShowGeneralSettings);
+            general.Margin = new Thickness(0, 0, 4, 0);
+            right.Children.Add(general);
 
             // Feedback lives in the title bar, not in the sidebar: it is opened on demand and closed
             // again, while the sidebar holds the screens that stay on screen.
@@ -804,7 +855,6 @@ namespace QuadVitals.Settings
             StackPanel stack = new StackPanel();
             AddNav(stack, "overview", "概览");
             AddNav(stack, "elements", "显示项");
-            AddNav(stack, "network", "通用设置");
             AddNav(stack, "about", "关于");
 
             host.Children.Add(stack);
@@ -920,7 +970,7 @@ namespace QuadVitals.Settings
         /// <summary>Saves and tells the user what will and will not take effect immediately.</summary>
         /// <summary>
         /// Persists a change made by an auto-saving control (no 保存 button, no page rebuild, no
-        /// toast). Used by the 通用设置 page, where flipping a switch IS the confirmation — a
+        /// toast). Used by the general settings dialog, where flipping a switch IS the confirmation — a
         /// toast on every toggle would be noise. Band width is not involved, so the
         /// "re-tick the toolbar" prompt cannot be needed here.
         /// </summary>
