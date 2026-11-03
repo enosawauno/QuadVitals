@@ -51,7 +51,8 @@ namespace QuadVitals.Settings
             actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            _checkButton = new FlatButton("检查更新", true);
+            // 通栏按钮不缩放：hover 时整体放大 5% 会顶到卡片边框。
+            _checkButton = new FlatButton("检查更新", true, spring: false);
             _checkButton.HorizontalAlignment = HorizontalAlignment.Stretch;
             _checkButton.HorizontalContentAlignment = HorizontalAlignment.Center;
             AutomationProperties.SetAutomationId(_checkButton, "AboutUpdateCheck");

@@ -1082,7 +1082,11 @@ namespace QuadVitals.UI
     /// <summary>Flat button that follows the theme, including a "primary" variant.</summary>
     public class FlatButton : Button
     {
-        public FlatButton(string text, bool primary = false)
+        /// <param name="spring">
+        /// False for buttons that fill their container: the hover/press scale grows a full-width
+        /// control past the card padding, so those get a background lift instead of a transform.
+        /// </param>
+        public FlatButton(string text, bool primary = false, bool spring = true)
         {
             Content = text;
             FontSize = 12.5;
@@ -1100,7 +1104,31 @@ namespace QuadVitals.UI
             FocusVisualStyle = null;
 
             Template = BuildTemplate(primary);
-            Interactions.AttachSpring(this);
+
+            if (spring)
+            {
+                Interactions.AttachSpring(this);
+            }
+            else
+            {
+                SolidColorBrush idle = Background as SolidColorBrush;
+                if (idle != null)
+                {
+                    SolidColorBrush hover = new SolidColorBrush(Lift(idle.Color));
+                    hover.Freeze();
+                    MouseEnter += (sender, e) => Background = hover;
+                    MouseLeave += (sender, e) => Background = idle;
+                }
+            }
+        }
+
+        /// <summary>One step towards white: enough to read as feedback, not enough to look like another colour.</summary>
+        private static Color Lift(Color color)
+        {
+            return Color.FromRgb(
+                (byte)(color.R + (255 - color.R) * 0.14),
+                (byte)(color.G + (255 - color.G) * 0.14),
+                (byte)(color.B + (255 - color.B) * 0.14));
         }
 
         private static ControlTemplate BuildTemplate(bool primary)

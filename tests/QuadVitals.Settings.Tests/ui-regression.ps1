@@ -660,6 +660,10 @@ if ($null -ne $aboutPage) {
             Check 'the update action sits below the version row' ($buttonOrigin.Y -gt ($rowOrigin.Y + 20)) ("button=" + [math]::Round($buttonOrigin.Y) + " row=" + [math]::Round($rowOrigin.Y))
             $cardWidth = $updateCard.ActualWidth
             Check 'the update action spans the card' ($actionButton.ActualWidth -gt ($cardWidth * 0.8)) ("button=" + [math]::Round($actionButton.ActualWidth) + " card=" + [math]::Round($cardWidth))
+            # A full-width button must not scale on hover: 5% of 940 px pushes it over the card edge.
+            # The spring attaches a ScaleTransform that grows the control; identity means the
+            # full-width button cannot creep over the card edge on hover.
+            Check 'the full-width action does not scale on hover' (-not ($actionButton.RenderTransform -is [System.Windows.Media.ScaleTransform])) ("transform=" + $actionButton.RenderTransform)
         } else { Check 'the update action is inside the card' $false '' }
     }
     Check 'the status line starts hidden' ($statusText.Visibility -eq [System.Windows.Visibility]::Collapsed) "visibility=$($statusText.Visibility)"
