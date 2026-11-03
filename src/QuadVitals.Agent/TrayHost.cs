@@ -1,7 +1,6 @@
 using System;
 using System.Drawing;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using WinFormsTimer = System.Windows.Forms.Timer;
@@ -68,7 +67,7 @@ namespace QuadVitals.Agent
             ToolStripMenuItem settingsItem = new ToolStripMenuItem("打开设置文件", null, (sender, e) => OpenSettingsFile());
             menu.Items.Add(settingsItem);
 
-            ToolStripMenuItem diagnostics = new ToolStripMenuItem("诊断信息…", null, (sender, e) => ShowStatus());
+            ToolStripMenuItem diagnostics = new ToolStripMenuItem("诊断信息…", null, (sender, e) => OpenDiagnostics());
             menu.Items.Add(diagnostics);
 
             menu.Items.Add(new ToolStripSeparator());
@@ -123,42 +122,17 @@ namespace QuadVitals.Agent
 
         public void ShowStatusNow()
         {
-            ShowStatus();
+            OpenDiagnostics();
         }
 
-        private void ShowStatus()
+        /// <summary>
+        /// The diagnostics entry now opens the dashboard's dark window instead of a system
+        /// MessageBox. Keeping the content in the Settings process means the tray and the
+        /// dashboard use one visual language and one snapshot reader.
+        /// </summary>
+        private static void OpenDiagnostics()
         {
-            MetricsSnapshot snapshot = _runtime.Last;
-            StringBuilder text = new StringBuilder();
-            text.AppendLine("QuadVitals Agent");
-            text.AppendLine("版本     : " + ProductVersion.SemVer);
-            text.AppendLine();
-            if (snapshot == null)
-            {
-                text.AppendLine("尚无采样数据");
-            }
-            else
-            {
-                text.AppendLine("CPU      : " + (snapshot.Has(MetricFlags.CpuValid) ? MetricFormat.PercentDetailed(snapshot.CpuPercent) : MetricFormat.Invalid));
-                text.AppendLine("内存     : " + (snapshot.Has(MetricFlags.MemoryValid)
-                    ? MetricFormat.PercentDetailed(snapshot.MemoryPercent) + "  " + MetricFormat.MemoryPair(snapshot.MemoryUsedBytes, snapshot.MemoryTotalBytes)
-                    : MetricFormat.Invalid));
-                text.AppendLine("温度     : " + (snapshot.Has(MetricFlags.TemperatureValid) ? MetricFormat.TemperatureDetailed(snapshot.TemperatureC) : MetricFormat.Invalid)
-                                 + "  （" + _runtime.TemperatureDiagnostic + "）");
-                text.AppendLine("网速     : ↑" + MetricFormat.Rate(snapshot.NetUpBytesPerSec) + "   ↓" + MetricFormat.Rate(snapshot.NetDownBytesPerSec));
-                text.AppendLine("网卡     : " + (string.IsNullOrEmpty(snapshot.AdapterName) ? "—" : snapshot.AdapterName));
-                text.AppendLine("采样时间 : " + snapshot.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")
-                                 + "（" + (int)snapshot.Age(DateTime.UtcNow).TotalMilliseconds + " ms 前）");
-                text.AppendLine("flags    : " + snapshot.Flags);
-            }
-            text.AppendLine();
-            text.AppendLine("采样次数 : " + _runtime.TickCount);
-            text.AppendLine("采样周期 : " + _runtime.PeriodMs + " ms（设置改动自动重载，已应用 " +
-                             _runtime.SettingsRevision + " 次）");
-            text.AppendLine("设置文件 : " + Settings.DefaultPath);
-            text.AppendLine("共享内存 : " + MetricsChannel.MapName);
-
-            MessageBox.Show(text.ToString(), "QuadVitals Agent", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OpenDashboard("--diagnostics");
         }
 
         /// <summary>Launches the WPF dashboard/settings window.</summary>

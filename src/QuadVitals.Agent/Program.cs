@@ -130,7 +130,7 @@ namespace QuadVitals.Agent
             };
 
             using (AgentLoop loop = new AgentLoop(settings, temperature, gpu,
-                       TemperatureWorker.DefaultIntervalMs, onStall))
+                       TemperatureWorker.DefaultIntervalMs, onStall, elevated))
             using (SettingsMonitor monitor = new SettingsMonitor(Settings.DefaultPath))
             using (AgentRuntime runtime = new AgentRuntime(loop, settings.RefreshMs, monitor))
             using (gpu)
@@ -199,7 +199,9 @@ namespace QuadVitals.Agent
                 }
             }
 
-            using (AgentLoop loop = new AgentLoop(settings, temperature, gpu))
+            bool elevated = IsElevated();
+            using (AgentLoop loop = new AgentLoop(settings, temperature, gpu,
+                       TemperatureWorker.DefaultIntervalMs, null, elevated))
             using (SettingsMonitor monitor = new SettingsMonitor(Settings.DefaultPath))
             using (AgentRuntime runtime = new AgentRuntime(loop, period, monitor, intervalMs <= 0))
             using (gpu)
@@ -280,6 +282,17 @@ namespace QuadVitals.Agent
                 Console.WriteLine("  diskIo   : " + (snapshot.Has(MetricFlags.DiskIoValid)
                     ? MetricFormat.Rate(snapshot.DiskIoReadBytesPerSec) + " 读 / " + MetricFormat.Rate(snapshot.DiskIoWriteBytesPerSec) + " 写"
                     : MetricFormat.Invalid));
+                if (snapshot.Has(MetricFlags.FanValid) && snapshot.Fans != null)
+                {
+                    foreach (MetricsSnapshot.FanReading fan in snapshot.Fans)
+                    {
+                        Console.WriteLine("  fan #" + fan.Channel + "   : " + FanLabels.For(fan.Kind, fan.Channel) + "  " + fan.Rpm + " RPM");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("  fan      : " + MetricFormat.Invalid);
+                }
                 if (snapshot.Volumes != null && snapshot.Volumes.Length > 0)
                 {
                     foreach (MetricsSnapshot.VolumeIo volume in snapshot.Volumes)

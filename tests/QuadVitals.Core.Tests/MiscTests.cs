@@ -331,6 +331,23 @@ namespace QuadVitals.Core.Tests
             seen.Observe(noGpu, true, false, t0.AddSeconds(1), out missing);
             True(seen.Observe(noGpu, true, false, t0.AddSeconds(11), out missing), "曾经有效的显卡失效后重启");
 
+            // 风扇：见过一次之后才预期，风扇板/无风扇头的主板不会被重启。
+            MetricFlags fansThenGone = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.DiskValid |
+                                       MetricFlags.FanValid | MetricFlags.AgentAlive;
+            MetricFlags noFans = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.DiskValid |
+                                 MetricFlags.AgentAlive;
+            MetricWatchdog fans = new MetricWatchdog();
+            fans.Observe(fansThenGone, true, false, t0, out missing);
+            fans.Observe(noFans, true, false, t0.AddSeconds(1), out missing);
+            True(fans.Observe(noFans, true, false, t0.AddSeconds(11), out missing), "曾经有效的风扇失效后重启");
+            Equal("风扇", MetricWatchdog.Describe(missing), "缺失原因指向风扇");
+
+            MetricWatchdog fanless = new MetricWatchdog();
+            True(!fanless.Observe(noFans, true, false, t0.AddSeconds(120), out missing), "从未有效的风扇不触发重启");
+
+            Equal(3, MetricWatchdog.RetryDelaysSeconds[0], "退避从 3 秒起");
+            Equal(30, MetricWatchdog.RetryDelaysSeconds[MetricWatchdog.RetryDelaysSeconds.Length - 1], "最长退避 30 秒");
+
             MetricWatchdog offline = new MetricWatchdog();
             offline.Observe(noCpu, true, false, t0, out missing);
             offline.Observe(noCpu, true, false, t0.AddSeconds(10), out missing);
@@ -345,6 +362,87 @@ namespace QuadVitals.Core.Tests
             reset.Observe(noCpu, true, false, t0.AddSeconds(10), out missing);
             reset.Reset();
             Equal(0, reset.Attempts, "手动重启清空尝试预算");
+
+            // 见到过一次就永久期待，是“风扇曾经有效、之后换回不带风扇的版本”时每轮重启五次的根因。
+            MetricWatchdog cycle = new MetricWatchdog();
+            cycle.Observe(fansThenGone, true, false, t0, out missing);
+            cycle.Reset();
+            True(!cycle.Observe(noFans, true, false, t0.AddSeconds(120), out missing), "手动重启后重新证明，不再追风扇");
+            Equal(MetricFlags.None, missing, "重置之后缺失集合为空");
+
+            // Agent 换进程 = 换一套传感器能力，之前的“曾经有效”不再作数。
+            MetricWatchdog newProcess = new MetricWatchdog();
+            newProcess.Observe(fansThenGone, true, false, t0, out missing);
+            newProcess.Observe(noFans, true, false, t0.AddSeconds(1), out missing);
+            newProcess.Observe(noFans, true, false, t0.AddSeconds(11), out missing);
+            Equal(1, newProcess.Attempts, "换进程前已经重试过一次");
+            newProcess.AgentRestarted();
+            True(!newProcess.Observe(noFans, true, false, t0.AddSeconds(30), out missing), "换进程后不再按旧能力追风扇");
+            Equal(1, newProcess.Attempts, "换进程保留已用掉的尝试预算");
+
+            // 连续五次都救不回来的指标：本会话熔断，不再反复重启。
+            MetricWatchdog breaker = new MetricWatchdog();
+            breaker.Observe(fansThenGone, true, false, t0, out missing);
+            for (int i = 0; i < 6; i++)
+            {
+                breaker.Observe(noFans, true, false, t0.AddSeconds(20 + i * 40), out missing);
+            }
+            Equal(MetricWatchdog.MaxAttempts, breaker.Attempts, "熔断前用满五次");
+            // 用满配额的那一次仍然如实报告“缺”，但不再重启；下一次起这一项被移出期待集合。
+            True(!breaker.Observe(noFans, true, false, t0.AddSeconds(400), out missing), "用满五次后不再重启");
+            Equal(MetricFlags.FanValid, missing, "那一次仍报告缺失");
+            True(!breaker.Observe(noFans, true, false, t0.AddSeconds(500), out missing), "熔断后不再重启");
+            Equal(MetricFlags.None, missing, "熔断的指标不再出现在缺失集合里");
+        }
+
+        // ---- agent diagnostics box ------------------------------------------------------
+
+        private static void AgentDiagnosticsBehaviour()
+        {
+            MetricsSnapshot snap = new MetricsSnapshot();
+            snap.Flags = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.AgentAlive;
+            snap.NetUpBytesPerSec = 10;
+            snap.NetDownBytesPerSec = 10;
+
+            // 未采样的网速不能打印数字：字节计数器保留着上一帧，看起来像网络是活的。
+            Equal("--", AgentDiagnostics.NetworkLine(snap), "网络无效时不打印速率");
+            snap.Flags |= MetricFlags.NetworkValid;
+            True(AgentDiagnostics.NetworkLine(snap).Contains("/s"), "网络有效时打印速率");
+            Equal("--", AgentDiagnostics.NetworkLine(null), "没有快照时给 --");
+
+            string missing = AgentDiagnostics.MissingLine(snap);
+            True(missing.Contains("温度"), "缺失行点名温度: " + missing);
+            True(missing.Contains("网络") == false, "网络有效时不列网络");
+            True(!missing.Contains("CPU"), "CPU 有效时不列 CPU");
+
+            snap.Flags = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.TemperatureValid |
+                         MetricFlags.NetworkValid | MetricFlags.GpuValid | MetricFlags.GpuTemperatureValid |
+                         MetricFlags.DiskValid | MetricFlags.DiskIoValid | MetricFlags.AgentAlive;
+            Equal("全部有效", AgentDiagnostics.MissingLine(snap), "全有效时说全部有效");
+
+            // 刚重启的头几帧：温度还没到 5 秒节拍、网络还没有窗口，说明一句而不是让人以为坏了。
+            MetricsSnapshot cold = new MetricsSnapshot();
+            cold.Flags = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.AgentAlive;
+            True(AgentDiagnostics.WarmupLine(2, cold, 1000) != null, "第 2 帧缺温度网络时给一句说明");
+            Equal(null, AgentDiagnostics.WarmupLine(9, cold, 1000), "稳定之后不再提示");
+            Equal(null, AgentDiagnostics.WarmupLine(2, snap, 1000), "什么都不缺时不必说明");
+            Equal(null, AgentDiagnostics.WarmupLine(2, null, 1000), "没有快照时不提示");
+
+            // 提权状态：新 Agent 明确报告，旧 Agent 什么都不说，不能把旧版当成“未提权”。
+            MetricsSnapshot unelevated = new MetricsSnapshot { Flags = MetricFlags.AgentAlive | MetricFlags.ElevationKnown };
+            MetricsSnapshot elevated = new MetricsSnapshot { Flags = MetricFlags.AgentAlive | MetricFlags.ElevationKnown | MetricFlags.Elevated };
+            MetricsSnapshot oldAgent = new MetricsSnapshot { Flags = MetricFlags.AgentAlive };
+            True(AgentDiagnostics.IsKnownUnelevated(unelevated), "已知未提权");
+            True(!AgentDiagnostics.IsKnownUnelevated(elevated), "已提权不算未提权");
+            True(!AgentDiagnostics.IsKnownUnelevated(oldAgent), "旧 Agent 不声称未提权");
+            Equal("传感器未提权，温度不可用", AgentDiagnostics.TemperatureUnavailableLine(unelevated), "未提权温度文案");
+            Equal("温度数据读取失败，请重启传感器", AgentDiagnostics.TemperatureUnavailableLine(elevated), "已提权但温度缺失走重启文案");
+            Equal("温度数据读取失败，请重启传感器", AgentDiagnostics.TemperatureUnavailableLine(oldAgent), "旧 Agent 保持原文案");
+            Equal("传感器未提权，风扇不可用", AgentDiagnostics.FanUnavailableLine(unelevated), "未提权风扇文案");
+            Equal("风扇数据读取失败，请重启传感器", AgentDiagnostics.FanUnavailableLine(elevated), "已提权且温度也缺时是会话失效");
+            elevated.Flags |= MetricFlags.TemperatureValid;
+            Equal("未读取到主板风扇", AgentDiagnostics.FanUnavailableLine(elevated), "温度正常只是没有风扇通道");
+            Equal("未读取到主板风扇", AgentDiagnostics.FanUnavailableLine(oldAgent), "旧 Agent 风扇文案不变");
         }
 
         // ---- agent control events ------------------------------------------------------

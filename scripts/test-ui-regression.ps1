@@ -23,10 +23,10 @@ try {
     }
 
     $uiDir = (Resolve-Path (Join-Path $root $OutDir)).Path
-    # Two suites, two processes: the element-list rules and the device-status dialog / tile formats.
-    # Separate processes because the overlay panel kept answering "not found" after the element list
-    # suite had already been through a few hundred windows.
-    $suites = @('ui-regression.ps1', 'device-dialog.ps1')
+    # Three suites, three processes: the element-list rules, the overview dynamics (fan card /
+    # diagnostics / frame clock), and the device-status dialog / tile formats. Separate processes
+    # because the overlay panel kept answering "not found" after a few hundred windows.
+    $suites = @('ui-regression.ps1', 'device-dialog.ps1', 'overview-dynamics.ps1')
     $codes = @()
     foreach ($name in $suites) {
         $suite = Join-Path $root ('tests\QuadVitals.Settings.Tests\' + $name)
@@ -38,7 +38,7 @@ try {
 
     # The baseline check wants one number for the whole run: sum the per-suite counts.
     $passed = 0
-    foreach ($part in @('settings-ui-elements', 'settings-ui-device')) {
+    foreach ($part in @('settings-ui-elements', 'settings-ui-device', 'settings-ui-overview-dynamics')) {
         $partFile = Join-Path $root ('build\tmp\assertion-count-' + $part + '.txt')
         if (Test-Path -LiteralPath $partFile) { $passed += [int]([IO.File]::ReadAllText($partFile).Trim()) }
     }

@@ -37,6 +37,7 @@ namespace QuadVitals.Settings
         private readonly MetricTile _memoryTile = new MetricTile("内存 · 占用", Theme.AccentGreen);
         private readonly MetricTile _gpuTile = new MetricTile("显卡 · 占用", Theme.AccentGreen);
         private readonly MetricTile _diskTile = new MetricTile("磁盘 · 占用", Theme.AccentGreen);
+        private readonly FanCard _fanCard = new FanCard();
 
         private readonly TextBlock _downValue = new TextBlock();
         private readonly TextBlock _upValue = new TextBlock();
@@ -48,6 +49,8 @@ namespace QuadVitals.Settings
 
         private readonly DispatcherTimer _timer = new DispatcherTimer();
         private readonly DispatcherTimer _ipTimer = new DispatcherTimer();
+        private Window _host;
+        private bool _renderSuspended;
         private readonly TextBlock _lanIpValue = new TextBlock();
         private readonly TextBlock _publicIpValue = new TextBlock();
         private FlatButton _ipCopy;
@@ -91,6 +94,7 @@ namespace QuadVitals.Settings
         public OverviewPage(SettingsWindow window)
         {
             _window = window;
+            _fanCard.OpenSettings = () => _window.ShowFanSettings();
             // 面积填充：两张图分开画，不会互相遮盖；基线贴底后，面积自然就是
             // “从 0 到峰值的轮廓”。
             _upSpark.ShowArea = true;
@@ -119,13 +123,71 @@ namespace QuadVitals.Settings
                 RefreshPublicIp(false);
                 StartHardwareInfoLoad();
                 _ipTimer.Start();
+                HookHostWindow();
             };
             Unloaded += (sender, e) =>
             {
                 _timer.Stop();
                 _ipTimer.Stop();
+                UnhookHostWindow();
                 SaveHistory(true);
             };
+        }
+
+        /// <summary>
+        /// 最小化后不再每秒刷一遍：概览每次刷新都会让重绘区域交回合成，而窗口不在屏幕上时
+        /// 这一次重绘的像素没人看得到。恢复时立即刷一次，不留一秒空白。
+        /// </summary>
+        private void HookHostWindow()
+        {
+            UnhookHostWindow();
+            _host = Window.GetWindow(this);
+            if (_host == null) return;
+            _host.StateChanged += OnHostStateChanged;
+            _host.Activated += OnHostActivated;
+            _host.Deactivated += OnHostDeactivated;
+        }
+
+        private void UnhookHostWindow()
+        {
+            if (_host == null) return;
+            _host.StateChanged -= OnHostStateChanged;
+            _host.Activated -= OnHostActivated;
+            _host.Deactivated -= OnHostDeactivated;
+            _host = null;
+        }
+
+        private void OnHostDeactivated(object sender, EventArgs e)
+        {
+            // Stop painting, keep sampling: the 1 Hz timer still reads the snapshot and pushes
+            // history points, so the curve has no gap when the user comes back.
+            _renderSuspended = true;
+            _ipTimer.Stop();
+        }
+
+        private void OnHostActivated(object sender, EventArgs e)
+        {
+            _renderSuspended = false;
+            if (!IsVisible) return;
+            if (!_timer.IsEnabled) _timer.Start();
+            if (!_ipTimer.IsEnabled) _ipTimer.Start();
+            Refresh();
+            RefreshPublicIp(false);
+        }
+
+        private void OnHostStateChanged(object sender, EventArgs e)
+        {
+            if (_host == null) return;
+            if (_host.WindowState == WindowState.Minimized)
+            {
+                _timer.Stop();
+                _ipTimer.Stop();
+                return;
+            }
+            if (!_timer.IsEnabled) _timer.Start();
+            // 失焦时只恢复采样，不在后台重新开始公网 IP 查询；`Activated` 会把它接回来。
+            if (!_ipTimer.IsEnabled && !_renderSuspended) _ipTimer.Start();
+            Refresh();
         }
 
         /// <summary>
@@ -133,6 +195,23 @@ namespace QuadVitals.Settings
         /// 设置弹窗里改完直接调这里，不重建页面 —— 重建会把正在开着的弹窗一起拆掉。
         /// 返回当前生效的样式，供断言直接用。
         /// </summary>
+        /// <summary>设置里的动效模式：常驻 or 只在悬停时动。</summary>
+        private bool AnimationsAlways
+        {
+            get
+            {
+                return string.Equals(_window.CurrentSettings.AnimationMode, QuadVitals.Core.Settings.AnimationAlways,
+                                      StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        /// <summary>风扇动效模式改了：就地生效，不重建页面（与指示器样式同一条路）。</summary>
+        public void ApplyAnimationMode()
+        {
+            _fanCard.SetAlwaysAnimate(AnimationsAlways);
+            Refresh();
+        }
+
         public MetricBarStyle ApplyIndicatorStyle()
         {
             MetricBarStyle style = string.Equals(_window.CurrentSettings.IndicatorStyle,
@@ -158,6 +237,8 @@ namespace QuadVitals.Settings
             // 全宽四格
             Card device = new Card("设备状态", "\uE7F4");
             device.HeaderRight.Content = BuildDeviceHeader();
+            AutomationProperties.SetAutomationId(device, "DeviceCard");
+            HoverReveal.Attach(device, _deviceSettingsButton);
             Grid strip = new Grid();
             MetricTile[] tiles = { _cpuTile, _gpuTile, _memoryTile, _diskTile };
             for (int i = 0; i < tiles.Length; i++)
@@ -169,14 +250,19 @@ namespace QuadVitals.Settings
             }
             device.Content.Children.Add(strip);
 
-            // 网络单独一张卡，放左下（宽度 1.15 份，右侧留空）
+            // 网络单独一张卡，放左下（宽度 1.15 份），右侧是风扇卡
             Grid lower = new Grid { Margin = new Thickness(0, Theme.CardGap, 0, 0) };
             lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.15, GridUnitType.Star) });
             lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Theme.CardGap) });
             lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            // 窄窗口时风扇卡换到第二行，不叠在网络卡上。
+            lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             Card network = new Card("当前网速", "\uE774");
             network.HeaderRight.Content = BuildIpHeader();
+            AutomationProperties.SetAutomationId(network, "NetworkCard");
+            HoverReveal.Attach(network, _settingsButton);
             // 上行、下行各占一行：左边只留实时数值，右边各自一张小图。
             // 卡片高度仍绑定设备卡，宽度仍占左下 1.15 份，其他布局不动。
             Grid speeds = new Grid { MinHeight = 124 };
@@ -209,22 +295,37 @@ namespace QuadVitals.Settings
             speeds.Children.Add(_downSpark);
 
             network.Content.Children.Add(speeds);
-            network.SetBinding(FrameworkElement.HeightProperty,
+            // 用 MinHeight 而不是 Height：绑定别人的实际高度等于禁止自己长高，
+            // 高 DPI 下内容更高时会被裁掉（125%/150% 一直没复看，就是因为这里没出错看起来也正常）。
+            network.SetBinding(FrameworkElement.MinHeightProperty,
                 new System.Windows.Data.Binding(nameof(FrameworkElement.ActualHeight)) { Source = device });
 
             Grid.SetColumn(network, 0);
             lower.Children.Add(network);
 
-            // 标题 + IP 一行需要固定宽度；窗口变窄时让网络卡占满整行，避免 IP/复制图标被裁。
+            // 风扇卡填右列：与网络卡同高（网络卡高 = 设备卡高）。
+            _fanCard.SetBinding(FrameworkElement.MinHeightProperty,
+                new System.Windows.Data.Binding(nameof(FrameworkElement.ActualHeight)) { Source = network });
+            Grid.SetColumn(_fanCard, 2);
+            lower.Children.Add(_fanCard);
+
+            // 标题 + IP 一行需要固定宽度；窗口变窄时让网络卡占满整行，风扇卡换到下一行，
+            // 避免两张卡叠在一起。
             lower.SizeChanged += (sender, e) =>
             {
-                int span = lower.ActualWidth < 920 ? 3 : 1;
+                bool narrow = lower.ActualWidth < 920;
+                int span = narrow ? 3 : 1;
                 if (Grid.GetColumnSpan(network) != span) Grid.SetColumnSpan(network, span);
+                int fanRow = narrow ? 1 : 0;
+                if (Grid.GetRow(_fanCard) != fanRow) Grid.SetRow(_fanCard, fanRow);
+                if (Grid.GetColumnSpan(_fanCard) != span) Grid.SetColumnSpan(_fanCard, span);
+                Thickness margin = narrow ? new Thickness(0, Theme.CardGap, 0, 0) : new Thickness(0);
+                if (_fanCard.Margin != margin) _fanCard.Margin = margin;
             };
 
             // ScrollViewer 会把唯一子元素拉满视口高度，包一层 StackPanel 让它按内容高度收。
             StackPanel root = new StackPanel();
-            root.Children.Add(new PageHeading("概览", "设备状态与实时网速"));
+            root.Children.Add(new PageHeading("概览", "设备状态、实时网速与风扇"));
             root.Children.Add(device);
             root.Children.Add(lower);
 
@@ -633,7 +734,7 @@ namespace QuadVitals.Settings
         {
             string name = HardwareInfo.GpuName;
             if (string.IsNullOrEmpty(name)) return "未检测到显卡";
-            return name + " · 驱动未提供占用（NVML 不可用）";
+            return name + " · 显卡占用读取失败";
         }
 
         private static string DiskNoteText(MetricsSnapshot snapshot, string metric)
@@ -662,6 +763,11 @@ namespace QuadVitals.Settings
         public void Refresh()
         {
             MetricsSnapshot snapshot = ReadSnapshot(out bool channelOpen);
+            if (_renderSuspended)
+            {
+                RecordHistory(snapshot);
+                return;
+            }
             UpdateLanIp(snapshot);
             bool alive = snapshot != null && snapshot.IsAlive(DateTime.UtcNow, MetricsSnapshot.AliveTimeout);
 
@@ -680,6 +786,7 @@ namespace QuadVitals.Settings
                     MetricTone.Normal, Theme.AccentOrangeBrush);
                 _downValue.Text = MetricFormat.Invalid;
                 _upValue.Text = MetricFormat.Invalid;
+                _fanCard.Update(snapshot, false);
                 return;
             }
 
@@ -694,6 +801,9 @@ namespace QuadVitals.Settings
             // 显卡走 NVML（需 NVIDIA 驱动），磁盘是系统盘容量；没有数据时写原因，不编数字。
             RenderGpuTile(snapshot);
             RenderDiskTile(snapshot);
+            _fanCard.PreferredChannel = _window.CurrentSettings.FanChannel;
+            _fanCard.SetAlwaysAnimate(AnimationsAlways);
+            _fanCard.Update(snapshot, true);
 
             bool netValid = snapshot.Has(MetricFlags.NetworkValid);
             _downValue.Text = netValid ? MetricFormat.Rate(snapshot.NetDownBytesPerSec) : MetricFormat.Invalid;
@@ -707,16 +817,7 @@ namespace QuadVitals.Settings
             // 每个刷新周期无条件落一个点：页面定时器与 Agent 定时器有毫秒级相位差，
             // 若“没检测到新帧就不入队”，时间轴会出现断崖和丢点。快照本身最多 1 秒旧，
             // 直接用它绘图，时间轴的密度才是稳定的。
-            _tick++;
-            if (_tick % HistogramEveryTicks == 0)
-            {
-                // 历史里存**原始采样值**：峰值标签与悬停提示都取自这个窗口，存平滑值会出现
-                // “峰值 2 MB/s 但当前 2.7 MB/s”这种自相矛盾的读数。平滑只在绘制时做一次
-                // （`Sparkline` 的二项平滑），曲线样式仍然只差画法。
-                History.Push(snapshot.TimestampUtc, snapshot.NetUpBytesPerSec, snapshot.NetDownBytesPerSec);
-                _historyDirty = true;
-                SaveHistory(false);
-            }
+            RecordHistory(snapshot);
 
             // 两张图各自按可见窗口缩放，互不影响。
             _upSpark.Smooth = smoothCurve;
@@ -732,6 +833,24 @@ namespace QuadVitals.Settings
             _downPeak.Text = "峰值 " + MetricFormat.Rate(Max(downValues));
             _upSpark.SetLabels(TakeLabels(stamps, upValues));
             _downSpark.SetLabels(TakeLabels(stamps, downValues));
+        }
+
+        /// <summary>
+        /// The data half of a refresh: one point per tick, independent of whether the window is
+        /// painting. Keeping this on the suspended path is what stops the network curve from
+        /// having a hole after the user alt-tabs away for a minute.
+        /// </summary>
+        private void RecordHistory(MetricsSnapshot snapshot)
+        {
+            if (snapshot == null || !snapshot.IsAlive(DateTime.UtcNow, MetricsSnapshot.AliveTimeout)) return;
+            _tick++;
+            if (_tick % HistogramEveryTicks != 0) return;
+            // 历史里存**原始采样值**：峰值标签与悬停提示都取自这个窗口，存平滑值会出现
+            // “峰值 2 MB/s 但当前 2.7 MB/s”这种自相矛盾的读数。平滑只在绘制时做一次
+            // （`Sparkline` 的二项平滑），曲线样式仍然只差画法。
+            History.Push(snapshot.TimestampUtc, snapshot.NetUpBytesPerSec, snapshot.NetDownBytesPerSec);
+            _historyDirty = true;
+            SaveHistory(false);
         }
 
         /// <summary>"38%" -> "38"; values are already clamped by MetricFormat.</summary>
@@ -830,6 +949,8 @@ namespace QuadVitals.Settings
         /// 运行中每 5 秒最多落盘一次（把强杀能丢的点压到 5 秒内），关窗时无条件落盘，
         /// 这样“关闭前拍快照”不依赖定时器刚好走到保存点。
         /// </summary>
+        private static bool _historySaving;
+
         private static void SaveHistory(bool force)
         {
             if (_sharedHistory == null) return;
@@ -841,9 +962,28 @@ namespace QuadVitals.Settings
                 if ((now - _historySavedUtc).TotalSeconds < HistorySaveSeconds) return;
             }
 
-            _sharedHistory.Save(NetHistory.DefaultPath);
-            _historySavedUtc = now;
-            _historyDirty = false;
+            if (force || !_historySaving)
+            {
+                // 落盘不能占用 UI 线程：这台机器上写 %APPDATA% 偶尔要 300–500 ms，正好是风扇
+                // “每转几圈顿一下”的间隔。序列化仍在调用线程（微秒级），只有写文件搬去后台。
+                NetHistory snapshot = _sharedHistory.Snapshot();
+                if (force)
+                {
+                    snapshot.Save(NetHistory.DefaultPath);
+                }
+                else
+                {
+                    _historySaving = true;
+                    Task.Run(() =>
+                    {
+                        try { snapshot.Save(NetHistory.DefaultPath); }
+                        catch (Exception) { }
+                        finally { _historySaving = false; }
+                    });
+                }
+                _historySavedUtc = now;
+                _historyDirty = false;
+            }
         }
 
         /// <summary>窗口关闭时由 SettingsWindow 调用，保证最后几秒的采样也进快照。</summary>
@@ -852,10 +992,15 @@ namespace QuadVitals.Settings
             SaveHistory(true);
         }
 
+        /// <summary>Exposed so the fan settings dialog can read the live channel list.</summary>
+        public FanCard FanCard { get { return _fanCard; } }
+
         public void Dispose()
         {
             _timer.Stop();
             _ipTimer.Stop();
+            UnhookHostWindow();
+            _fanCard.Dispose();
             if (_reader != null)
             {
                 _reader.Dispose();

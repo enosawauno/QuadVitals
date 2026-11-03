@@ -50,6 +50,17 @@ namespace QuadVitals.Core
             while (_points.Count > Capacity) _points.RemoveAt(0);
         }
 
+        /// <summary>
+        /// Frozen copy for a background save. Points are never mutated after Push, so sharing the
+        /// point objects is safe; the caller only needs the list to stop changing underneath it.
+        /// </summary>
+        public NetHistory Snapshot()
+        {
+            NetHistory copy = new NetHistory();
+            copy._points.AddRange(_points);
+            return copy;
+        }
+
         /// <summary>Copy of the up-rate values, oldest first (right-aligned by Sparkline).</summary>
         public double[] UpValues()
         {
@@ -160,7 +171,9 @@ namespace QuadVitals.Core
                     json = Encoding.UTF8.GetString(stream.ToArray());
                 }
 
-                string temp = path + ".tmp";
+                // Unique temp name: a background save and the on-close save can overlap, and both
+                // must be able to replace the file without fighting over one ".tmp".
+                string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 File.WriteAllText(temp, json, new UTF8Encoding(false));
                 if (File.Exists(path))
                 {

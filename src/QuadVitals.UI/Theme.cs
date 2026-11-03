@@ -37,6 +37,8 @@ namespace QuadVitals.UI
         public static readonly Color AccentBlue = Color.FromRgb(0x51, 0x9A, 0xFF);    // up triangle
         public static readonly Color AccentOrange = Color.FromRgb(0xF6, 0xA7, 0x48);  // warning only (#F6A748)
         public static readonly Color AccentRed = Color.FromRgb(0xD2, 0x47, 0x47);     // danger (#D24747)
+        public static readonly Color AccentRedDeep = Color.FromRgb(0xA8, 0x2F, 0x2F); // top of the fan danger ramp
+        public static readonly Color AccentCyan = Color.FromRgb(0x4C, 0xC9, 0xC9);    // pump running (no bands)
         public static readonly Color TrackGrey = Color.FromRgb(0x4E, 0x51, 0x59);     // gauge track
         public static readonly Color ButtonGrey = Color.FromRgb(0x47, 0x47, 0x47);    // reference button
         // 铺在品牌绿上的文字（主按钮、侧栏选中滑块）：白字在 #1DB954 上只有 ~2.4:1，用近黑。

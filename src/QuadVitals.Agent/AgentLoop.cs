@@ -24,6 +24,7 @@ namespace QuadVitals.Agent
         private readonly DiskIoSampler _diskIo = new DiskIoSampler();
         private readonly VolumeIoSampler _volumeIo = new VolumeIoSampler();
         private readonly Stopwatch _stage = new Stopwatch();
+        private readonly bool _elevated;
         private Settings _settings;
 
         public AgentLoop(Settings settings, TemperatureSource temperature)
@@ -33,9 +34,10 @@ namespace QuadVitals.Agent
 
         public AgentLoop(Settings settings, TemperatureSource temperature, GpuSource gpu,
                          int temperatureIntervalMs = TemperatureWorker.DefaultIntervalMs,
-                         Action<string> temperatureStall = null)
+                         Action<string> temperatureStall = null, bool elevated = false)
         {
             _settings = settings ?? Settings.CreateDefault();
+            _elevated = elevated;
             _network = new NetworkWorker(_settings.NetworkAdapter, SampleIntervalFor(_settings));
             _temperature = new TemperatureWorker(temperature, temperatureIntervalMs, temperatureStall);
             _gpu = gpu;
@@ -75,8 +77,9 @@ namespace QuadVitals.Agent
             MetricsSnapshot snapshot = new MetricsSnapshot
             {
                 TimestampUtc = nowUtc,
-                Flags = MetricFlags.AgentAlive
+                Flags = MetricFlags.AgentAlive | MetricFlags.ElevationKnown
             };
+            if (_elevated) snapshot.Flags |= MetricFlags.Elevated;
 
             TickTimings timings = new TickTimings();
             _stage.Restart();
@@ -136,6 +139,13 @@ namespace QuadVitals.Agent
             {
                 snapshot.CpuPowerWatts = (float)Math.Round(watts, 1);
                 snapshot.Flags |= MetricFlags.CpuPowerValid;
+            }
+
+            MetricsSnapshot.FanReading[] fans;
+            if (_temperature.TryGetFans(nowUtc, TimeSpan.FromSeconds(12), out fans))
+            {
+                snapshot.Fans = fans;
+                snapshot.Flags |= MetricFlags.FanValid;
             }
             timings.TemperatureMs = Lap();
 

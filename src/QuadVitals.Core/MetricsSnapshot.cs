@@ -31,7 +31,16 @@ namespace QuadVitals.Core
         /// <summary>GPU package power present (NVML, appended field at offset 364).</summary>
         GpuPowerValid = 1 << 10,
         /// <summary>GPU graphics clock present (NVML, appended field at offset 366).</summary>
-        GpuClockValid = 1 << 11
+        GpuClockValid = 1 << 11,
+        /// <summary>
+        /// Motherboard fan channels were sampled (v4 tail). Individual readings carry their own
+        /// validity byte, so a channel that is not connected simply does not appear.
+        /// </summary>
+        FanValid = 1 << 12,
+        /// <summary>The writing agent reported its elevation state (paired with <see cref="Elevated"/>).</summary>
+        ElevationKnown = 1 << 13,
+        /// <summary>The writing agent has an elevated token; temperature and fan need it.</summary>
+        Elevated = 1 << 14
     }
 
     /// <summary>
@@ -71,17 +80,21 @@ namespace QuadVitals.Core
     ///   268 8 x 12 B  volume slots: uint16 letter, uint16 flags, float read, float write
     ///   364 uint16  gpuPowerDeciwatts (appended; old readers map only the first 364 bytes)
     ///   366 uint16  gpuClockMhz      (appended)
-    ///   368         end (v3 layout + 4 appended bytes)
+    ///   368 uint16  fanCount        (v4; 0 = not sampled)
+    ///   370 uint16  reserved
+    ///   372 8 x 4 B fan slots: uint8 kind, uint8 channel, uint16 rpm
+    ///   404         end
     ///
-    /// v2 grew the payload from 256 to 264 bytes for the disk-I/O pair; v3 appends a per-volume
+    /// v2 grew the payload from 256 to 264 bytes for the disk-I/O pair; v3 appended a per-volume
     /// table (local fixed/removable volumes only) so a text element can pick one drive instead of
-    /// the whole-system total. Older agents are rejected by the version check, so agent and band
-    /// have to be deployed together (they already are: one installer copies both).
+    /// the whole-system total; v4 appends the motherboard fan channels. Readers accept version 3
+    /// and 4 so a new dashboard still reads an old agent (no fans, no GPU tail from a 364-byte
+    /// frame) while agent and band are upgraded in one installer run.
     /// </summary>
     public sealed class MetricsSnapshot
     {
-        /// <summary>Payload size written by this build (364 bytes of v3 layout + 4 bytes appended for GPU power/clock).</summary>
-        public const int SizeBytes = 368;
+        /// <summary>Payload size written by this build (v4: the v3 368-byte payload plus the fan tail).</summary>
+        public const int SizeBytes = 404;
 
         /// <summary>
         /// How long a snapshot may be shown as live data. Two seconds, not three: the agent publishes
@@ -95,9 +108,18 @@ namespace QuadVitals.Core
         /// keeps working and a new reader falls back to no GPU power/clock from an old agent.
         /// </summary>
         public const int LegacySizeBytes = 364;
+        /// <summary>v3 written size: has the GPU power/clock tail but no fan block.</summary>
+        public const int GpuTailSizeBytes = 368;
+        /// <summary>Fan block (v4): uint16 count at 368, 8 slots of 4 bytes from 372.</summary>
+        public const int FanCountOffset = 368;
+        public const int FanTableOffset = 372;
+        public const int FanSlotBytes = 4;
+        public const int MaxFans = 8;
         // Little endian in memory, so the four bytes read "PULS" in a hex dump.
         public const uint Magic = 0x534C5550;
-        public const ushort CurrentVersion = 3;
+        public const ushort CurrentVersion = 4;
+        /// <summary>Oldest frame this build still parses (v3 = no fans).</summary>
+        public const ushort MinimumSupportedVersion = 3;
         /// <summary>Offset of the seqlock counter (uint32). Shared with MetricsClient.cpp.</summary>
         public const int SequenceOffset = 28;
         /// <summary>Offsets of the CPU split (float). In the former reserved area; shared with MetricsClient.cpp.</summary>
@@ -229,6 +251,31 @@ namespace QuadVitals.Core
         public VolumeIo[] Volumes { get; set; }
 
         /// <summary>
+        /// One motherboard fan channel (v4). LHM 0.9.2 only exposes positional names ("Fan #2"),
+        /// so the channel number is the identity; `Rpm` 0 means the header reported a stopped or
+        /// unconnected fan, and the UI decides whether to show that row.
+        /// </summary>
+        public sealed class FanReading
+        {
+            /// <summary>Which header this channel is (see <see cref="FanKinds"/>); 0 = unknown.</summary>
+            public int Kind { get; set; }
+
+            public int Channel { get; set; }
+            public int Rpm { get; set; }
+
+            /// <summary>Implied by the agent publishing the slot at all; not stored separately.</summary>
+            public bool Valid { get; set; }
+
+            public FanReading Clone()
+            {
+                return new FanReading { Kind = Kind, Channel = Channel, Rpm = Rpm, Valid = Valid };
+            }
+        }
+
+        /// <summary>Fan channels the agent sampled this tick (v4). Empty when not sampled.</summary>
+        public FanReading[] Fans { get; set; }
+
+        /// <summary>
         /// Seqlock counter (offset 28). The writer bumps it to an odd value before copying and
         /// to an even value after, so a reader can detect a torn copy without locking.
         /// </summary>
@@ -242,6 +289,7 @@ namespace QuadVitals.Core
             CoreUserPercents = new byte[0];
             CoreSystemPercents = new byte[0];
             Volumes = new VolumeIo[0];
+            Fans = new FanReading[0];
         }
 
         public bool Has(MetricFlags flag)
@@ -338,6 +386,18 @@ namespace QuadVitals.Core
             // 旧读端只映射前 364 字节，所以看不到它们、也不受影响。
             WriteUInt16(buffer, GpuPowerOffset, (ushort)ClampU16(Math.Round((GpuPowerWatts > 0 ? GpuPowerWatts : 0) * 10)));
             WriteUInt16(buffer, GpuClockOffset, (ushort)ClampU16(Math.Round(GpuClockMhz > 0 ? GpuClockMhz : 0)));
+
+            int fans = Fans == null ? 0 : Fans.Length;
+            if (fans > MaxFans) fans = MaxFans;
+            WriteUInt16(buffer, FanCountOffset, (ushort)fans);
+            for (int i = 0; i < fans; i++)
+            {
+                FanReading fan = Fans[i];
+                int offset = FanTableOffset + i * FanSlotBytes;
+                buffer[offset] = (byte)(fan == null ? 0 : fan.Kind);
+                buffer[offset + 1] = (byte)(fan == null ? 0 : fan.Channel);
+                WriteUInt16(buffer, offset + 2, (ushort)(fan == null ? 0 : ClampU16(fan.Rpm)));
+            }
         }
 
         private static double ClampU16(double value)
@@ -368,7 +428,7 @@ namespace QuadVitals.Core
             if (ReadUInt32(buffer, 0) != Magic) { error = SnapshotError.BadMagic; return false; }
 
             ushort version = ReadUInt16(buffer, 4);
-            if (version != CurrentVersion) { error = SnapshotError.VersionMismatch; return false; }
+            if (version < MinimumSupportedVersion || version > CurrentVersion) { error = SnapshotError.VersionMismatch; return false; }
 
             long ticks = ReadInt64(buffer, 8);
             MetricsSnapshot parsed = new MetricsSnapshot
@@ -392,8 +452,8 @@ namespace QuadVitals.Core
                 DiskUsedGb = ReadUInt16(buffer, DiskCapacityOffset),
                 DiskTotalGb = ReadUInt16(buffer, DiskCapacityOffset + 2),
                 CpuPowerWatts = ReadUInt16(buffer, CpuPowerOffset) / 10f,
-                GpuPowerWatts = buffer.Length >= SizeBytes ? ReadUInt16(buffer, GpuPowerOffset) / 10f : 0f,
-                GpuClockMhz = buffer.Length >= SizeBytes ? ReadUInt16(buffer, GpuClockOffset) : 0f,
+                GpuPowerWatts = buffer.Length >= GpuTailSizeBytes ? ReadUInt16(buffer, GpuPowerOffset) / 10f : 0f,
+                GpuClockMhz = buffer.Length >= GpuTailSizeBytes ? ReadUInt16(buffer, GpuClockOffset) : 0f,
                 DiskIoReadBytesPerSec = ReadSingle(buffer, DiskIoReadOffset),
                 DiskIoWriteBytesPerSec = ReadSingle(buffer, DiskIoWriteOffset),
                 Sequence = ReadUInt32(buffer, SequenceOffset)
@@ -416,6 +476,28 @@ namespace QuadVitals.Core
                     };
                 }
                 parsed.Volumes = volumes;
+            }
+
+            if (buffer.Length >= SizeBytes)
+            {
+                int fanCount = ReadUInt16(buffer, FanCountOffset);
+                if (fanCount > MaxFans) fanCount = MaxFans;
+                if (fanCount > 0)
+                {
+                    FanReading[] fans = new FanReading[fanCount];
+                    for (int i = 0; i < fanCount; i++)
+                    {
+                        int offset = FanTableOffset + i * FanSlotBytes;
+                        fans[i] = new FanReading
+                        {
+                            Kind = buffer[offset],
+                            Channel = buffer[offset + 1],
+                            Rpm = ReadUInt16(buffer, offset + 2)
+                        };
+                        fans[i].Valid = fans[i].Rpm > 0;
+                    }
+                    parsed.Fans = fans;
+                }
             }
 
             int coreCount = ReadUInt16(buffer, CoreCountOffset);
@@ -554,13 +636,17 @@ namespace QuadVitals.Core
                 ? DiskPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" +
                   DiskUsedGb + "/" + DiskTotalGb + " GB)"
                 : "--";
+            string fanText = Has(MetricFlags.FanValid)
+                ? (Fans == null ? "0" : Fans.Length.ToString(CultureInfo.InvariantCulture))
+                : "--";
 
             return string.Format(CultureInfo.InvariantCulture,
-                "seq={0} cpu={1} ({8}) mem={2} temp={3} up={4} down={5} flags={6} adapter='{7}' gpu={9} gpuTemp={10} disk={11} diskIo={12}",
+                "seq={0} cpu={1} ({8}) mem={2} temp={3} up={4} down={5} flags={6} adapter='{7}' gpu={9} gpuTemp={10} disk={11} diskIo={12} fans={13}",
                 Sequence, cpu, memory, temp, up, down, Flags, AdapterName, split, gpu, gpuTemp, disk,
                 Has(MetricFlags.DiskIoValid)
                     ? (DiskIoReadBytesPerSec + DiskIoWriteBytesPerSec).ToString("F0", CultureInfo.InvariantCulture)
-                    : "--");
+                    : "--",
+                fanText);
         }
     }
 

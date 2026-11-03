@@ -42,6 +42,39 @@ namespace QuadVitals.Core
     }
 
     /// <summary>
+    /// Fan RPM bands. A motherboard fan header has no idea what is bolted to it, so the bands are
+    /// absolute and deliberately generous: a 120 mm case fan idles around 600-900 RPM and tops out
+    /// near 1500, while a 3000+ RPM header is a pump or a small high-speed fan. The card shows
+    /// those separately, so the colour still means "this channel is running hard".
+    /// </summary>
+    public static class FanZones
+    {
+        /// <summary>Full-scale RPM used by the bar and the colour bands.</summary>
+        public const int NominalMaxRpm = 2000;
+
+        /// <summary>70% of full scale: yellow from here.</summary>
+        public const int WarningRpm = 1400;
+
+        /// <summary>80% of full scale: red from here.</summary>
+        public const int DangerRpm = 1600;
+
+        public static MetricTone Tone(int rpm)
+        {
+            if (rpm >= DangerRpm) return MetricTone.Danger;
+            if (rpm >= WarningRpm) return MetricTone.Warning;
+            return MetricTone.Normal;
+        }
+
+        /// <summary>0..1 for the bar; a stopped or unknown channel reads 0.</summary>
+        public static double Fraction(int rpm)
+        {
+            if (rpm <= 0) return 0;
+            double value = (double)rpm / NominalMaxRpm;
+            return value > 1 ? 1 : value;
+        }
+    }
+
+    /// <summary>
     /// Temperature bands for the adaptive text colour. The numbers describe the hardware, not a
     /// per-machine calibration: the CPU follows the 100 C throttle point of Intel/AMD desktop
     /// parts (warn 80, danger 90), the GPU follows the ~83-88 C point where NVIDIA cards start

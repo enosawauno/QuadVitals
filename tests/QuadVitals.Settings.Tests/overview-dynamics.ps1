@@ -1,0 +1,511 @@
+﻿# Overview dynamics: fan card, diagnostics window, frame clock and edit-mode jiggle.
+#
+# Split out of ui-regression.ps1 when that file crossed the 1800-line ceiling. This suite owns its
+# own overview window and synthetic fan snapshot, so it does not depend on the element-list setup.
+
+param(
+    [string]$UiDir = ''
+)
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+. (Join-Path $PSScriptRoot 'ui-harness.ps1') -UiDir $UiDir
+
+$ovType = $asm.GetType('QuadVitals.Settings.OverviewPage')
+$pageType = $asm.GetType('QuadVitals.Settings.ElementsPage')
+$ovWindow = [Activator]::CreateInstance($windowType, @('overview'))
+$ovWindow.Width = 1280
+$ovWindow.Height = 853
+$ovRoot = $ovWindow.Content
+$ovRoot.Measure((New-Object System.Windows.Size(1280, 853)))
+$ovRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
+$ovRoot.UpdateLayout()
+$ovPage = $null
+$ovQueue = New-Object 'System.Collections.Queue'
+$ovQueue.Enqueue($ovRoot)
+while ($ovQueue.Count -gt 0 -and $null -eq $ovPage) {
+    $e = $ovQueue.Dequeue()
+    if ($e.GetType() -eq $ovType) { $ovPage = $e; break }
+    if ($e -is [System.Windows.Media.Visual]) {
+        $n = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($e)
+        for ($i = 0; $i -lt $n; $i++) { $ovQueue.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($e, $i)) }
+    }
+}
+if ($null -eq $ovPage) { throw 'OverviewPage not found' }
+
+"== fan card =="
+    $fanCard = $ovType.GetField('_fanCard', $flags).GetValue($ovPage)
+    Check 'the fan card sits on the overview' ($null -ne $fanCard) ''
+    if ($null -ne $fanCard) {
+        Check 'the fan card has a value readout' ($null -ne (Find-ById $ovRoot 'FanValue')) ''
+        Check 'the fan card has a caption and a bar' (($null -ne (Find-ById $ovRoot 'FanCaption')) -and ($null -ne (Find-ById $ovRoot 'FanBar'))) ''
+
+        # Feed the card a synthetic snapshot shaped exactly like the agent's: 1700 RPM is the
+        # danger band, and the readout must follow it instead of showing a hard-coded colour.
+        $fanType = $coreAsm.GetType('QuadVitals.Core.MetricsSnapshot+FanReading')
+        $snapType = $coreAsm.GetType('QuadVitals.Core.MetricsSnapshot')
+        $snap = [Activator]::CreateInstance($snapType)
+        $snap.TimestampUtc = [DateTime]::UtcNow
+        $snap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, FanValid')
+        $fan = [Activator]::CreateInstance($fanType)
+        $fan.Kind = 1
+        $fan.Channel = 2
+        $fan.Rpm = 1700
+        $fan.Valid = $true
+        $pump = [Activator]::CreateInstance($fanType)
+        $pump.Kind = 7
+        $pump.Channel = 7
+        $pump.Rpm = 3333
+        $pump.Valid = $true
+        $fans = [Array]::CreateInstance($fanType, 2)
+        $fans.SetValue($fan, 0)
+        $fans.SetValue($pump, 1)
+        $snap.Fans = $fans
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        $valueText = (Find-ById $ovRoot 'FanValue').Text
+        Check 'the fan value follows the snapshot' ($valueText -eq '1700') "value=$valueText"
+        $tone = $fanCard.GetType().GetProperty('Tone').GetValue($fanCard)
+        Check '1700 RPM maps to the danger band' ($tone.ToString() -eq 'Danger') "tone=$tone"
+        Pump 400
+        $accent1700 = $fanCard.GetType().GetProperty('AccentColour').GetValue($fanCard)
+        Check '1700 RPM stays in the red family' (($accent1700.R -gt ($accent1700.G + 60)) -and ($accent1700.R -gt ($accent1700.B + 60))) ("r=$($accent1700.R) g=$($accent1700.G) b=$($accent1700.B)")
+        $fan.Rpm = 1800
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        $accent1800 = $fanCard.GetType().GetProperty('AccentColour').GetValue($fanCard)
+        Check 'the danger colour keeps moving with RPM' ($accent1800.ToString() -ne $accent1700.ToString()) ("1700=$accent1700 1800=$accent1800")
+        $captionText = (Find-ById $ovRoot 'FanCaption').Text
+        Check 'the fan caption uses the board header name' ($captionText -eq 'CPU_FAN') "caption=$captionText"
+
+        # 临界点抖动不换档：1399 ↔ 1401 必须留在绿色档；真的要变快才进黄色。
+        $toneOf = { $fanCard.GetType().GetProperty('Tone').GetValue($fanCard).ToString() }
+        $fan.Rpm = 1300
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        Check '1300 RPM is green' ((& $toneOf) -eq 'Normal') ("tone=" + (& $toneOf))
+        $accent1300 = $fanCard.GetType().GetProperty('AccentColour').GetValue($fanCard)
+        $fan.Rpm = 1000
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        $accent1000 = $fanCard.GetType().GetProperty('AccentColour').GetValue($fanCard)
+        Check 'the normal colour keeps moving with RPM' ($accent1000.ToString() -ne $accent1300.ToString()) ("1000=$accent1000 1300=$accent1300")
+        $fan.Rpm = 1399
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        Check '1399 RPM stays green' ((& $toneOf) -eq 'Normal') ("tone=" + (& $toneOf))
+        $fan.Rpm = 1401
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        Check '1401 RPM does not flip to yellow' ((& $toneOf) -eq 'Normal') ("tone=" + (& $toneOf))
+        $fan.Rpm = 1460
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        Check '1460 RPM enters the warning band' ((& $toneOf) -eq 'Warning') ("tone=" + (& $toneOf))
+        $fan.Rpm = 1401
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        Check 'falling back to 1401 keeps the warning band' ((& $toneOf) -eq 'Warning') ("tone=" + (& $toneOf))
+        $fan.Rpm = 1339
+        $fanCard.GetType().GetMethod('Update').Invoke($fanCard, @($snap, $true)) | Out-Null
+        Check '1339 RPM returns to green' ((& $toneOf) -eq 'Normal') ("tone=" + (& $toneOf))
+
+        # 颜色是渐变的：值文本的刷子上挂着动画，而不是直接换了一把冻结刷子。
+        $valueBrush = (Find-ById $ovRoot 'FanValue').Foreground
+        Check 'the readout colour is animated' ([bool]$valueBrush.HasAnimatedProperties) ("animated=" + $valueBrush.HasAnimatedProperties)
+
+        # 齿轮：打开「风扇设置」，下拉里是自动 + 当前两路；选中 AIO_PUMP 并保存后写回 fanChannel。
+        $fanGear = Find-ById $ovRoot 'FanSettings'
+        Check 'the fan card has a settings gear' ($null -ne $fanGear) ''
+        $deviceGear = Find-ById $ovRoot 'DeviceSettings'
+        $networkGear = Find-ById $ovRoot 'IpSettings'
+        Check 'the device gear starts hidden' (($null -ne $deviceGear) -and ($deviceGear.Opacity -lt 0.01)) ("opacity=" + $(if ($null -eq $deviceGear) { 'none' } else { $deviceGear.Opacity }))
+        Check 'the network gear starts hidden' (($null -ne $networkGear) -and ($networkGear.Opacity -lt 0.01)) ("opacity=" + $(if ($null -eq $networkGear) { 'none' } else { $networkGear.Opacity }))
+        Check 'the fan gear starts hidden' (($null -ne $fanGear) -and ($fanGear.Opacity -lt 0.01)) ("opacity=" + $(if ($null -eq $fanGear) { 'none' } else { $fanGear.Opacity }))
+
+        # 鼠标进入卡片才淡入，移出即淡出；事件在测试里直接升起（不做真实光标移动）。
+        $fanSurface = Find-ById $ovRoot 'FanCard'
+        if ($null -ne $fanSurface -and $null -ne $fanGear) {
+            $enterArgs = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+            $enterArgs.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
+            $fanSurface.RaiseEvent($enterArgs)
+            Pump 250
+            Check 'hovering the card reveals its gear' ($fanGear.Opacity -gt 0.9) ("opacity=" + $fanGear.Opacity)
+            $leaveArgs = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+            $leaveArgs.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
+            $fanSurface.RaiseEvent($leaveArgs)
+            Pump 250
+            Check 'leaving the card hides it again' ($fanGear.Opacity -lt 0.1) ("opacity=" + $fanGear.Opacity)
+
+            # 每张卡只管自己的齿轮：悬停设备卡时，另外两张卡的齿轮不能跟着亮。
+            $deviceSurface = Find-ById $ovRoot 'DeviceCard'
+            if ($null -ne $deviceSurface) {
+                $deviceEnter = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+                $deviceEnter.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
+                $deviceSurface.RaiseEvent($deviceEnter)
+                Pump 250
+                Check 'hovering the device card reveals only its gear' (($deviceGear.Opacity -gt 0.9) -and ($fanGear.Opacity -lt 0.1) -and ($networkGear.Opacity -lt 0.1)) ("device=" + $deviceGear.Opacity + " fan=" + $fanGear.Opacity + " net=" + $networkGear.Opacity)
+                $deviceLeave = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+                $deviceLeave.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
+                $deviceSurface.RaiseEvent($deviceLeave)
+                Pump 250
+                Check 'leaving the device card hides its gear' ($deviceGear.Opacity -lt 0.1) ("opacity=" + $deviceGear.Opacity)
+            }
+        }
+        if ($null -ne $fanGear) {
+            $fanGear.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+            Pump 200
+            $fanDialog = Find-ById $ovRoot 'FanSettingsDialog'
+            Check 'the gear opens the fan settings dialog' ($null -ne $fanDialog) ''
+            $channelBox = Find-ById $ovRoot 'FanChannel'
+            Check 'the dialog offers auto plus every live channel' (($null -ne $channelBox) -and ($channelBox.Items.Count -eq 3)) ("items=" + $(if ($null -eq $channelBox) { 'none' } else { $channelBox.Items.Count }))
+            # 只验弹窗与选项；不点保存——那会写进开发者的真实 settings.json。
+            $cancelFan = Find-ById $ovRoot 'FanSettingsCancel'
+            Check 'the dialog has a cancel button' ($null -ne $cancelFan) ''
+            if ($null -ne $cancelFan) {
+                $cancelFan.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+                Pump 120
+                Check 'cancelling closes the dialog' (-not [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($ovWindow)) ''
+            }
+        }
+
+        # 保存会写 settings.json 并重建页面，旧引用作废：从树上重新找当前这张卡。
+        $freshCard = $null
+        foreach ($candidate in (Find-ByTypeName $ovRoot 'FanCard')) { $freshCard = $candidate; break }
+        Check 'the card is still on the page after saving' ($null -ne $freshCard) ''
+        if ($null -ne $freshCard) {
+            $freshCard.GetType().GetProperty('PreferredChannel').SetValue($freshCard, 7, $null)
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
+            $pumpCaption = (Find-ById $ovRoot 'FanCaption').Text
+            Check 'the card follows the configured channel' ($pumpCaption -eq 'AIO_PUMP') "caption=$pumpCaption"
+            $pumpTone = $freshCard.GetType().GetProperty('Tone').GetValue($freshCard)
+            Check 'a running pump is not a danger band' ($pumpTone.ToString() -eq 'Normal') "tone=$pumpTone"
+            $pumpAccent = $freshCard.GetType().GetProperty('AccentColour').GetValue($freshCard)
+            Check 'the running pump uses cyan' ($pumpAccent.ToString() -eq [QuadVitals.UI.Theme]::AccentCyan.ToString()) "colour=$pumpAccent"
+            Check 'the running pump shows its halo' ([bool]$freshCard.GetType().GetProperty('PumpGlowVisible').GetValue($freshCard, $null)) ''
+            $pumpGlow = $freshCard.GetType().GetField('_pumpGlow', $flags).GetValue($freshCard)
+            Check 'the pump halo can breathe' ($pumpGlow.RenderTransform -is [System.Windows.Media.ScaleTransform]) ''
+            Check 'the pump halo is translucent' (($pumpGlow.Opacity -gt 0.2) -and ($pumpGlow.Opacity -lt 0.55)) ("opacity=" + $pumpGlow.Opacity)
+
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($null, $false)) | Out-Null
+            Check 'offline shows a dash and a reason' (((Find-ById $ovRoot 'FanValue').Text -eq '--') -and ((Find-ById $ovRoot 'FanEmpty').Text.Length -gt 0)) ''
+
+            # Empty state is grey, not "green but empty": the ring, the blades and the dash all drop
+            # to the readable grey, while the reason line takes the warning colour and stays on one
+            # line at the same size as the device tiles' captions.
+            $emptyRing = $freshCard.GetType().GetField('_ringBrush', $flags).GetValue($freshCard)
+            $emptyBlade = $freshCard.GetType().GetField('_bladeBrush', $flags).GetValue($freshCard)
+            Check 'an empty fan card turns its ring grey' ($emptyRing.Color -eq [QuadVitals.UI.Theme]::TextSecondary) "ring=$($emptyRing.Color)"
+            Check 'an empty fan card turns its blades grey' ($emptyBlade.Color -eq [QuadVitals.UI.Theme]::TextSecondary) "blades=$($emptyBlade.Color)"
+            $emptyText = Find-ById $ovRoot 'FanEmpty'
+            Check 'the empty reason takes the warning colour' ($emptyText.Foreground -eq [QuadVitals.UI.Theme]::AccentOrangeBrush) "fg=$($emptyText.Foreground)"
+            Check 'the empty reason stays on one line' ($emptyText.TextWrapping -eq [System.Windows.TextWrapping]::NoWrap) ''
+            Check 'the empty reason uses the tile caption size' ([Math]::Abs($emptyText.FontSize - 11.5) -lt 0.01) "size=$($emptyText.FontSize)"
+
+            # Stopped: the channel reports 0 RPM. That is a fault, not "no reading" -- value 0 in the
+            # danger colour with the words, no spinning blades, no airflow.
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
+            $savedPumpRpm = $pump.Rpm
+            $pump.Rpm = 0
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
+            Check 'a stopped channel reads 0, not a dash' ((Find-ById $ovRoot 'FanValue').Text -eq '0') ("value=" + (Find-ById $ovRoot 'FanValue').Text)
+            Check 'a stopped channel says so' ((Find-ById $ovRoot 'FanEmpty').Text.Length -gt 0) ("text=" + (Find-ById $ovRoot 'FanEmpty').Text)
+            Check 'a stopped channel is a danger band' ($freshCard.GetType().GetProperty('Tone').GetValue($freshCard, $null).ToString() -eq 'Danger') ''
+            Check 'a stopped pump drops the cyan halo' (-not [bool]$freshCard.GetType().GetProperty('PumpGlowVisible').GetValue($freshCard, $null)) ''
+            $stoppedEmpty = Find-ById $ovRoot 'FanEmpty'
+            Check 'the stopped line is red' ($stoppedEmpty.Foreground -eq [QuadVitals.UI.Theme]::AccentRedBrush) ("fg=" + $stoppedEmpty.Foreground)
+            $pump.Rpm = $savedPumpRpm
+
+            # Configured but absent this frame: say it, never swap to another channel.
+            $freshCard.GetType().GetProperty('PreferredChannel').SetValue($freshCard, 5, $null)
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
+            Check 'a missing selected channel does not borrow another one' ((Find-ById $ovRoot 'FanValue').Text -eq '--') ("value=" + (Find-ById $ovRoot 'FanValue').Text)
+            Check 'the missing selected channel keeps its number' ((Find-ById $ovRoot 'FanCaption').Text -eq ([string]::Concat([char]0x901A, [char]0x9053, ' 5'))) ("caption=" + (Find-ById $ovRoot 'FanCaption').Text)
+            Check 'the card explains the missing selection' ((Find-ById $ovRoot 'FanEmpty').Text.Length -gt 0) ''
+
+            # 在线但 Agent 没提权：温度与风扇同源，卡片要说清“未提权”，而不是“未读取到主板风扇”。
+            $unelevated = [Activator]::CreateInstance($snapType)
+            $unelevated.TimestampUtc = [DateTime]::UtcNow
+            $unelevated.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, ElevationKnown')
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($unelevated, $true)) | Out-Null
+            $unelevatedText = (Find-ById $ovRoot 'FanEmpty').Text
+            Check 'the fan card explains an unelevated agent' ($unelevatedText -like '*未提权*') "text=$unelevatedText"
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
+            $freshCard.GetType().GetProperty('PreferredChannel').SetValue($freshCard, 7, $null)
+
+            # The dialog must keep a configured channel that is not in this frame's list; otherwise
+            # the dropdown shows "auto" and one save wipes the choice.
+            $dialogType = $asm.GetType('QuadVitals.Settings.FanSettingsDialog')
+            $dialog = [Activator]::CreateInstance($dialogType, @($ovWindow, $freshCard))
+            $settingsType = $coreAsm.GetType('QuadVitals.Core.Settings')
+            $probeSettings = [Activator]::CreateInstance($settingsType)
+            $probeSettings.FanChannel = 5
+            $options = $dialogType.GetMethod('BuildOptions', $flags).Invoke($dialog, @($probeSettings))
+            $keys = @($options | ForEach-Object { $_.Key })
+            Check 'the dialog offers auto first' ($keys[0] -eq -1) ("keys=" + ($keys -join ','))
+            Check 'the dialog keeps a configured channel that is not reporting' ($keys -contains 5) ("keys=" + ($keys -join ','))
+            Check 'the configured channel is marked as unread' (($options | Where-Object { $_.Key -eq 5 }).Value -like '*5*') ''
+            Check 'the live channels are still offered' ($keys -contains 2 -and $keys -contains 7) ("keys=" + ($keys -join ','))
+        }
+
+        # The gear must stay reachable from the keyboard: hidden by opacity, never by focusability.
+        if ($null -ne $fanGear) {
+            Check 'the hidden gear is still focusable' ($fanGear.Focusable) ''
+            $fanGear.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.UIElement]::GotFocusEvent)))
+            Pump 200
+            Check 'focusing the gear reveals it' ($fanGear.Opacity -gt 0.9) ("opacity=" + $fanGear.Opacity)
+        }
+
+        # Height must not be bound to another element's layout output (it forbids growing at high DPI).
+        $networkCard = Find-ById $ovRoot 'NetworkCard'
+        if ($null -ne $networkCard) {
+            Check 'the network card sets a minimum height, not a fixed one' ([double]::IsNaN($networkCard.Height) -and $networkCard.MinHeight -gt 0) ("height=" + $networkCard.Height + " min=" + $networkCard.MinHeight)
+        }
+        Check 'the fan card sets a minimum height, not a fixed one' ([double]::IsNaN($freshCard.Height) -and $freshCard.MinHeight -gt 0) ("height=" + $freshCard.Height + " min=" + $freshCard.MinHeight)
+
+        # 离线自动恢复的退避表：首次立即，之后 3 / 5 / 10 / 30 秒。
+        $recoveryType = $asm.GetType('QuadVitals.Settings.AgentAutoRecovery')
+        $staticFlags = [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static
+        $delays = $recoveryType.GetField('DelaysSeconds', $staticFlags).GetValue($null)
+        Check 'offline recovery backs off 0/3/5/10/30' (($delays -join ',') -eq '0,3,5,10,30') ("delays=" + ($delays -join ','))
+
+        "== diagnostics window =="
+        $diagType = $asm.GetType('QuadVitals.Settings.DiagnosticsWindow')
+        Check 'the tray diagnostics window exists' ($null -ne $diagType) ''
+        if ($null -ne $diagType) {
+            $diag = [Activator]::CreateInstance($diagType)
+            $diagRoot = $diag.Content
+            $diagTitle = Find-ById $diagRoot 'DiagnosticsTitle'
+            Check 'the diagnostics window has a title' (($null -ne $diagTitle) -and ($diagTitle.Text -eq '诊断信息')) "title=$(if($null -ne $diagTitle){$diagTitle.Text}else{'none'})"
+            $diagIntro = Find-ById $diagRoot 'DiagnosticsIntro'
+            Check 'the diagnostics window explains itself' (($null -ne $diagIntro) -and $diagIntro.Text.Contains('传感器进程')) ''
+            $diagStatus = Find-ById $diagRoot 'DiagnosticsStatus'
+            Check 'the diagnostics window shows the agent state' (($null -ne $diagStatus) -and ($diagStatus.Text.Length -gt 0)) ''
+            $diagMissing = Find-ById $diagRoot 'DiagnosticsMissing'
+            Check 'the diagnostics window shows the missing-metric line' ($null -ne $diagMissing) ''
+            $diagShared = Find-ById $diagRoot 'DiagnosticsSharedMemory'
+            Check 'the diagnostics window names the shared memory map' (($null -ne $diagShared) -and ($diagShared.Text -eq 'Local\QuadVitals.Metrics.v1')) ''
+            $diagClose = Find-ById $diagRoot 'DiagnosticsClose'
+            Check 'the diagnostics window has a close button' ($null -ne $diagClose) ''
+            Check 'the diagnostics card uses the app card colour' ($diagRoot.Background -eq [QuadVitals.UI.Theme]::SurfaceCardBrush) "bg=$($diagRoot.Background)"
+            $diag.Close()
+        }
+        $traySource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Agent\TrayHost.cs')
+        Check 'the tray diagnostics opens the dark window' ($traySource.Contains('OpenDashboard("--diagnostics")')) ''
+        Check 'the tray diagnostics no longer builds a MessageBox body' (-not $traySource.Contains('MessageBox.Show(text.ToString()')) ''
+        $programSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\Program.cs')
+        Check 'the settings app accepts --diagnostics' ($programSource.Contains('--diagnostics')) ''
+        $settingsSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\SettingsWindow.cs')
+        Check 'the title bar no longer maximizes on double click' (-not $settingsSource.Contains('e.ClickCount == 2')) ''
+
+        # Animation clock. The dashboard is meant to sit still: a fan that is not on screen must not
+        # keep a frame loop, and no loop may run faster than the shared cap (a 165 Hz panel used to
+        # get 165 callbacks a second for a fan turning once).
+        "== animation clock =="
+        $loopType = $uiAsm.GetType('QuadVitals.UI.FrameLoop')
+        Check 'the UI assembly owns the shared frame clock' ($null -ne $loopType) ''
+        # A window that was never shown makes every child invisible, so the loop (by design) refuses
+        # to run and this section would pass for the wrong reason. Off-screen but shown, like the
+        # about-page case above.
+        $animWindow = [Activator]::CreateInstance($windowType, @('overview'))
+        $animWindow.Width = 1280
+        $animWindow.Height = 853
+        $animWindow.WindowStartupLocation = [System.Windows.WindowStartupLocation]::Manual
+        $animWindow.ShowActivated = $false
+        $animWindow.ShowInTaskbar = $false
+        $animWindow.Left = -5000
+        $animWindow.Top = -5000
+        $animWindow.Show()
+        Pump 250
+        $animRoot = $animWindow.Content
+        $animRoot.UpdateLayout()
+        $animPage = $null
+        $animQueue = New-Object 'System.Collections.Queue'
+        $animQueue.Enqueue($animRoot)
+        while ($animQueue.Count -gt 0 -and $null -eq $animPage) {
+            $e = $animQueue.Dequeue()
+            if ($e.GetType() -eq $ovType) { $animPage = $e; break }
+            if ($e -is [System.Windows.Media.Visual]) {
+                $n = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($e)
+                for ($i = 0; $i -lt $n; $i++) { $animQueue.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($e, $i)) }
+            }
+        }
+        Check 'the animation window has an overview page' ($null -ne $animPage) ''
+        if ($null -ne $animPage) {
+            # This window refreshes once a second from the real agent, which on a machine without a
+            # fan header reports no fans and stops the loop on purpose. Drive it by hand instead.
+            $animPage.GetType().GetField('_timer', $flags).GetValue($animPage).Stop()
+            $animPage.GetType().GetField('_ipTimer', $flags).GetValue($animPage).Stop()
+            $animCard = $ovType.GetField('_fanCard', $flags).GetValue($animPage)
+            $animLoop = $animCard.GetType().GetField('_loop', $flags).GetValue($animCard)
+            $isAnimating = $animCard.GetType().GetProperty('IsAnimating')
+            # 动效现在只在指针停在卡上时才跑（常驻动画在分层窗口里太贵），
+            # 所以先投一次 MouseEnter 再断言“在动”。
+            $hoverOn = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+            $hoverOn.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
+            $animCard.RaiseEvent($hoverOn)
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            Pump 300
+            Check 'the fan card animates while the pointer is on it' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            $hoverOff = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+            $hoverOff.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
+            $animCard.RaiseEvent($hoverOff)
+            Pump 200
+            Check 'the fan card goes still when the pointer leaves it' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+
+            # 常驻档不依赖指针：设置里选「常驻动画」后，指针不在卡上也必须转。
+            $animCard.SetAlwaysAnimate($true)
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            Pump 300
+            Check 'always-on animates without hover' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            $before = [long]$animLoop.FramesDelivered
+            Pump 1000
+            $frames = [long]$animLoop.FramesDelivered - $before
+            Check 'always-on delivers frames without hover' ($frames -gt 0) "frames=$frames"
+            # 保存一次静默设置（同内容）不能把当前概览页 Dispose 掉，否则风扇会从这一秒起永久停转。
+            $animWindow.SaveSettingsQuietly($animWindow.CurrentSettings.Clone())
+            Pump 250
+            Check 'a quiet save keeps the visible overview alive' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            $animCard.SetAlwaysAnimate($false)
+            Pump 200
+            Check 'always-off stops without hover' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+
+            $animCard.RaiseEvent($hoverOn)
+            Pump 200''
+
+            $before = [long]$animLoop.FramesDelivered
+            Pump 1000
+            $frames = [long]$animLoop.FramesDelivered - $before
+            Check 'the loop is capped at 30 frames a second, not the monitor refresh' (($frames -ge 8) -and ($frames -le 45)) "frames=$frames"
+
+            $animWindow.WindowState = [System.Windows.WindowState]::Minimized
+            Pump 250
+            Check 'a minimized dashboard leaves the frame clock' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+            $before = [long]$animLoop.FramesDelivered
+            Pump 700
+            $frames = [long]$animLoop.FramesDelivered - $before
+            Check 'a minimized dashboard delivers no frames at all' ($frames -eq 0) "frames=$frames"
+
+            $animWindow.WindowState = [System.Windows.WindowState]::Normal
+            Pump 250
+            # Restoring restarts the page's own refresh timer (that is the fix we just made), so stop
+            # it again before driving the card by hand; otherwise a real snapshot can empty the card
+            # in the middle of the next two checks.
+            $animPage.GetType().GetField('_timer', $flags).GetValue($animPage).Stop()
+            # Restoring refreshes once from the real agent, which empties the card on this
+            # machine (no fan channels), so feed the synthetic snapshot again before asserting.
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            Pump 300
+            Check 'restoring the window resumes the loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+
+            # Focus pause: the window is still visible, but every frame loop must stop. The
+            # overview timer keeps reading snapshots and pushing history so the curve has no gap.
+            $activatedHandler = $loopType.GetField('_activatedHandler', $flags).GetValue($animLoop)
+            $deactivatedHandler = $loopType.GetField('_deactivatedHandler', $flags).GetValue($animLoop)
+            $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 200
+            Check 'focusing the animation window keeps the loop alive' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            $deactivatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 200
+            Check 'losing focus stops the fan loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+            $before = [long]$animLoop.FramesDelivered
+            Pump 700
+            $frames = [long]$animLoop.FramesDelivered - $before
+            Check 'a deactivated window delivers no frames' ($frames -eq 0) "frames=$frames"
+
+            $renderSuspended = $ovType.GetField('_renderSuspended', $flags)
+            $tickField = $ovType.GetField('_tick', $flags)
+            $pageTimer = $animPage.GetType().GetField('_timer', $flags).GetValue($animPage)
+            $pageTimer.Start()
+            $deactivatedPage = $ovType.GetMethod('OnHostDeactivated', $flags)
+            $activatedPage = $ovType.GetMethod('OnHostActivated', $flags)
+            $deactivatedPage.Invoke($animPage, @($animWindow, [EventArgs]::Empty)) | Out-Null
+            $tickBefore = [int]$tickField.GetValue($animPage)
+            Pump 1300
+            $tickAfter = [int]$tickField.GetValue($animPage)
+            Check 'the overview keeps sampling while deactivated' ($tickAfter -gt $tickBefore) "ticks=$tickBefore->$tickAfter"
+            Check 'the overview marks itself as not painting' ([bool]$renderSuspended.GetValue($animPage)) ''
+            Check 'the overview timer keeps running while deactivated' ($pageTimer.IsEnabled) ''
+            $activatedPage.Invoke($animPage, @($animWindow, [EventArgs]::Empty)) | Out-Null
+            Pump 200
+            Check 'reactivating the overview resumes painting' (-not [bool]$renderSuspended.GetValue($animPage)) ''
+            # Stop the 1 Hz page timer for the rest of the loop checks: this off-screen window is
+            # never really activated (ShowActivated=false), so a real refresh would re-suspend the
+            # frame loop via Start()'s IsActive re-read. A real focused window keeps IsActive true.
+            $pageTimer.Stop()
+            # The real agent may have no fan channels on this machine, so feed the synthetic frame
+            # again before asserting the loop is back. The synthetic activation has to come after
+            # Update(): Start() re-reads Window.IsActive, and this off-screen window was never
+            # really activated (ShowActivated=false).
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 200
+            Check 'regaining focus resumes the loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+
+            # An empty card used to keep spinning a still fan and rebuilding fourteen invisible
+            # trails twenty times a second; the loop has to stop with the data.
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($null, $false)) | Out-Null
+            Pump 150
+            Check 'a card with no reading stops the loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+            $animCard.RaiseEvent($hoverOn)
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 250
+            Check 'the next reading starts it again' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+
+            # The 1 Hz overview refresh is the last thing that still wakes a window nobody can see:
+            # every refresh ends in a repaint, and a repaint of a layered window is CPU work.
+            $animTimer = $animPage.GetType().GetField('_timer', $flags).GetValue($animPage)
+            $animTimer.Start()
+            $animWindow.WindowState = [System.Windows.WindowState]::Minimized
+            Pump 300
+            Check 'the overview refresh pauses while minimized' (-not $animTimer.IsEnabled) ''
+            $animWindow.WindowState = [System.Windows.WindowState]::Normal
+            Pump 300
+            Check 'restoring resumes the overview refresh' ($animTimer.IsEnabled) ''
+        }
+        $animWindow.Close()
+
+        # Edit-mode jiggle. It used to be two RepeatBehavior.Forever animations per tile: fifteen
+        # tiles meant fifteen transforms changing every vertical blank, forever, which repaints the
+        # whole window while the page is open. Same motion, now driven by the shared clock.
+        $editWindow = [Activator]::CreateInstance($windowType, @('elements'))
+        $editWindow.Width = 1280
+        $editWindow.Height = 853
+        $editWindow.WindowStartupLocation = [System.Windows.WindowStartupLocation]::Manual
+        $editWindow.ShowActivated = $false
+        $editWindow.ShowInTaskbar = $false
+        $editWindow.Left = -5000
+        $editWindow.Top = -5000
+        $editWindow.Show()
+        Pump 250
+        $editRoot = $editWindow.Content
+        $editRoot.UpdateLayout()
+        $editPage = $null
+        $editQueue = New-Object 'System.Collections.Queue'
+        $editQueue.Enqueue($editRoot)
+        while ($editQueue.Count -gt 0 -and $null -eq $editPage) {
+            $e = $editQueue.Dequeue()
+            if ($e.GetType() -eq $pageType) { $editPage = $e; break }
+            if ($e -is [System.Windows.Media.Visual]) {
+                $n = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($e)
+                for ($i = 0; $i -lt $n; $i++) { $editQueue.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($e, $i)) }
+            }
+        }
+        Check 'the edit window has the elements page' ($null -ne $editPage) ''
+        if ($null -ne $editPage) {
+            $isJiggling = $editPage.GetType().GetProperty('IsJiggling')
+            Check 'the page starts without a jiggle loop' (-not [bool]$isJiggling.GetValue($editPage, $null)) ''
+            $pageType.GetMethod('SetEditMode', $flags).Invoke($editPage, @($true)) | Out-Null
+            Pump 300
+            Check 'edit mode jiggles on the shared clock' ([bool]$isJiggling.GetValue($editPage, $null)) ''
+            $editLoop = $editPage.GetType().GetField('_jiggleLoop', $flags).GetValue($editPage)
+            $before = [long]$editLoop.FramesDelivered
+            Pump 1000
+            $frames = [long]$editLoop.FramesDelivered - $before
+            Check 'the jiggle is capped like every other loop' (($frames -ge 8) -and ($frames -le 45)) "frames=$frames"
+            $editWindow.WindowState = [System.Windows.WindowState]::Minimized
+            Pump 250
+            Check 'a minimized window stops the jiggle too' (-not [bool]$isJiggling.GetValue($editPage, $null)) ''
+            $editWindow.WindowState = [System.Windows.WindowState]::Normal
+            Pump 250
+            $pageType.GetMethod('SetEditMode', $flags).Invoke($editPage, @($false)) | Out-Null
+            Pump 200
+            Check 'leaving edit mode stops the jiggle' (-not [bool]$isJiggling.GetValue($editPage, $null)) ''
+        }
+        $editWindow.Close()
+    }
+$ovWindow.Close()
+
+Complete-Run 'settings-ui-overview-dynamics'

@@ -611,6 +611,10 @@ namespace QuadVitals.Settings
                 _filling = false;
             }
 
+            // 草稿恢复出文字之后必须重算占位提示：原来只在 TextChanged 里算，
+            // 而恢复时是直接赋 Text（还压着 _filling），占位提示就留在了输入文字上面。
+            UpdatePlaceholder();
+
             if (warnings.Count > 0) ShowStatus(string.Join(" ", warnings.ToArray()), false);
         }
 
@@ -809,7 +813,9 @@ namespace QuadVitals.Settings
                 _attachments.Add(attachment);
                 UpdateAttachmentList();
                 ScheduleDraft();
-                ShowStatus("已粘贴截图：" + attachment.OriginalName, false);
+                // 附件列表里已经写着“已添加 1 个附件：截图-….png”，再弹一行提示只是把同一件事
+                // 说了两遍，而且会盖住页脚。成功不报，顺手把残留的旧错误清掉。
+                ShowStatus(string.Empty, false);
             }
             catch (Exception ex)
             {

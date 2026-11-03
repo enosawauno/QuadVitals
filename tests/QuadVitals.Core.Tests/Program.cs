@@ -32,6 +32,7 @@ namespace QuadVitals.Core.Tests
             Suite("MetricsSnapshot 适配器名", SnapshotAdapterName);
             Suite("MetricsSnapshot CPU 用户/内核拆分", SnapshotCpuSplit);
             Suite("MetricsSnapshot 显卡/磁盘块", SnapshotGpuDisk);
+            Suite("MetricsSnapshot 风扇通道", SnapshotFans);
             Suite("MetricsSnapshot 逐盘表", SnapshotVolumes);
             Suite("MetricFormat 速率", FormatRate);
             Suite("MetricFormat 百分比/温度/字节", FormatOthers);
@@ -40,9 +41,16 @@ namespace QuadVitals.Core.Tests
             Suite("MetricCatalog", Catalog);
             Suite("MetricTone 阈值", ToneThresholds);
             Suite("MetricTone 温度分档", TemperatureZoneThresholds);
+            Suite("FanZones 风扇分档", FanZoneThresholds);
+            Suite("FanLabels 风扇命名", FanLabelBehaviour);
+            Suite("FanDiagnosis 风扇空态归因", FanDiagnosisBehaviour);
+            Suite("FanToneLatch 复位", FanToneLatchReset);
+            Suite("animationMode 动效模式", AnimationModeBehaviour);
+            Suite("FanToneLatch 档位防抖", FanToneLatchBehaviour);
             Suite("Settings 柱状几何写死", BarGeometryIsFixed);
             Suite("列数跟随 CPU 核心/线程", ColumnsFollowCpu);
             Suite("Settings 默认值", DefaultSettings);
+            Suite("Settings 风扇通道", FanChannelSetting);
             Suite("Settings Normalize 容错", NormalizeRecovers);
             Suite("磁盘元素盘符", DiskDriveSetting);
             Suite("Settings JSON 往返", SettingsJsonRoundTrip);
@@ -62,6 +70,7 @@ namespace QuadVitals.Core.Tests
             Suite("ProductVersion 版本号", VersionBehaviour);
             Suite("MetricSanity 数据合理性", MetricSanityBehaviour);
             Suite("MetricWatchdog 指标兜底", MetricWatchdogBehaviour);
+            Suite("AgentDiagnostics 诊断框", AgentDiagnosticsBehaviour);
             Suite("AgentControl 控制事件", AgentControlBehaviour);
             Suite("Settings 四格指标选择", DeviceMetricChoicesBehaviour);
             Suite("IoWave 走马循环", IoWaveBehaviour);
@@ -99,7 +108,7 @@ namespace QuadVitals.Core.Tests
             };
 
             byte[] bytes = original.ToBytes();
-            Equal(MetricsSnapshot.SizeBytes, bytes.Length, "快照固定 368 字节（v3 布局 + 4 字节追加）");
+            Equal(MetricsSnapshot.SizeBytes, bytes.Length, "快照固定 404 字节（v4 布局）");
             Equal(0x50u, MetricsSnapshot.ReadUInt32(bytes, 0) & 0xFF, "magic 首字节 'P'");
             Equal(MetricsSnapshot.CurrentVersion, MetricsSnapshot.VersionOf(bytes), "version=3");
 
@@ -233,7 +242,7 @@ namespace QuadVitals.Core.Tests
                 CpuPowerWatts = 253.4f
             };
             byte[] powerBytes = power.ToBytes();
-            Equal(MetricsSnapshot.SizeBytes, powerBytes.Length, "带功耗的快照仍是 368 字节");
+            Equal(MetricsSnapshot.SizeBytes, powerBytes.Length, "带功耗的快照仍是 404 字节");
             MetricsSnapshot powerBack;
             SnapshotError powerError;
             True(MetricsSnapshot.TryParse(powerBytes, out powerBack, out powerError), "带功耗的快照可解析");
@@ -306,8 +315,8 @@ namespace QuadVitals.Core.Tests
             };
 
             byte[] bytes = source.ToBytes();
-            Equal(MetricsSnapshot.SizeBytes, bytes.Length, "加显卡/磁盘/磁盘 IO/逐盘表/GPU 功耗后仍固定 368 字节");
-            Equal((ushort)3, MetricsSnapshot.VersionOf(bytes), "version 升到 3");
+            Equal(MetricsSnapshot.SizeBytes, bytes.Length, "加显卡/磁盘/磁盘 IO/逐盘表/GPU 功耗后仍是 404 字节");
+            Equal((ushort)4, MetricsSnapshot.VersionOf(bytes), "version 升到 4");
             Equal(236, MetricsSnapshot.GpuLoadPercentOffset, "显卡占用偏移 236");
             Equal(248, MetricsSnapshot.DiskPercentOffset, "磁盘占用偏移 248");
 
@@ -354,6 +363,65 @@ namespace QuadVitals.Core.Tests
             True(MetricCatalog.TryReadValue(source, MetricId.GpuTemperature, out value), "GPU 温度目录可读");
             True(MetricCatalog.TryReadValue(source, MetricId.Disk, out value), "磁盘目录可读");
             True(Math.Abs(value - 71.4) < 0.01, "磁盘目录数值");
+        }
+
+        private static void SnapshotFans()
+        {
+            MetricsSnapshot source = new MetricsSnapshot
+            {
+                TimestampUtc = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc),
+                Flags = MetricFlags.AgentAlive | MetricFlags.FanValid,
+                Fans = new[]
+                {
+                    new MetricsSnapshot.FanReading { Kind = FanKinds.CpuFan, Channel = 2, Rpm = 1028, Valid = true },
+                    new MetricsSnapshot.FanReading { Kind = FanKinds.AioPump, Channel = 7, Rpm = 3358, Valid = true }
+                }
+            };
+
+            byte[] bytes = source.ToBytes();
+            Equal(404, MetricsSnapshot.SizeBytes, "v4 快照 404 字节");
+            Equal(368, MetricsSnapshot.GpuTailSizeBytes, "v3 尾长 368");
+            Equal(368, MetricsSnapshot.FanCountOffset, "风扇数量偏移 368");
+            Equal(372, MetricsSnapshot.FanTableOffset, "风扇表起始 372");
+            Equal(4, MetricsSnapshot.FanSlotBytes, "每路 4 字节");
+            Equal((ushort)2, MetricsSnapshot.ReadUInt16(bytes, 368), "写入两路风扇");
+
+            MetricsSnapshot parsed;
+            SnapshotError error;
+            True(MetricsSnapshot.TryParse(bytes, out parsed, out error), "带风扇的快照可解析");
+            Equal(2, parsed.Fans.Length, "两路风扇往返");
+            Equal(2, parsed.Fans[0].Channel, "通道号往返");
+            Equal(FanKinds.CpuFan, parsed.Fans[0].Kind, "头部种类往返");
+            Equal(FanKinds.AioPump, parsed.Fans[1].Kind, "水泵种类往返");
+            Equal(1028, parsed.Fans[0].Rpm, "转速往返");
+            Equal(3358, parsed.Fans[1].Rpm, "第二路转速往返");
+            True(parsed.Has(MetricFlags.FanValid), "风扇有效位往返");
+
+            // A v3 agent writes 368 bytes with version 3: no fans, but the GPU tail still reads.
+            byte[] v3 = new byte[MetricsSnapshot.GpuTailSizeBytes];
+            Array.Copy(bytes, v3, v3.Length);
+            MetricsSnapshot.WriteUInt16(v3, 4, 3);
+            MetricsSnapshot.WriteUInt16(v3, 6, (ushort)MetricFlags.AgentAlive);
+            MetricsSnapshot.WriteUInt16(v3, 364, 1234);
+            True(MetricsSnapshot.TryParse(v3, out parsed, out error), "v3 帧仍可解析");
+            Equal(0, parsed.Fans.Length, "v3 帧没有风扇");
+            True(!parsed.Has(MetricFlags.FanValid), "v3 帧风扇无效");
+            Equal(123.4f, parsed.GpuPowerWatts, "v3 帧尾部 GPU 功耗仍读得到");
+
+            List<MetricsSnapshot.FanReading> many = new List<MetricsSnapshot.FanReading>();
+            for (int i = 0; i < 12; i++)
+            {
+                many.Add(new MetricsSnapshot.FanReading { Kind = FanKinds.Unknown, Channel = i, Rpm = 1000 + i, Valid = true });
+            }
+            MetricsSnapshot overflow = new MetricsSnapshot { Fans = many.ToArray() };
+            True(MetricsSnapshot.TryParse(overflow.ToBytes(), out parsed, out error), "超量风扇可解析");
+            Equal(MetricsSnapshot.MaxFans, parsed.Fans.Length, "超过 8 路只保留前 8 路");
+
+            byte[] v2 = new byte[MetricsSnapshot.GpuTailSizeBytes];
+            Array.Copy(bytes, v2, v2.Length);
+            MetricsSnapshot.WriteUInt16(v2, 4, 2);
+            True(!MetricsSnapshot.TryParse(v2, out parsed, out error), "v2 帧被拒绝");
+            Equal(SnapshotError.VersionMismatch, error, "v2 错误码");
         }
 
         private static void FormatRate()

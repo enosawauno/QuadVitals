@@ -52,7 +52,8 @@ namespace QuadVitals.Settings
                     }
                     else
                     {
-                        _cpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "温度读不到（传感器未提权或驱动未加载）");
+                        _cpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0,
+                            AgentDiagnostics.TemperatureUnavailableLine(snapshot));
                     }
                     break;
 
@@ -67,7 +68,7 @@ namespace QuadVitals.Settings
                     }
                     else
                     {
-                        _cpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "频率读不到");
+                        _cpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "频率数据读取失败");
                     }
                     break;
 
@@ -81,7 +82,7 @@ namespace QuadVitals.Settings
                     }
                     else
                     {
-                        _cpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "功耗读不到（需要传感器提权后由 LHM 提供）");
+                        _cpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "功耗数据读取失败");
                     }
                     break;
 
@@ -141,7 +142,7 @@ namespace QuadVitals.Settings
                     }
                     else
                     {
-                        _gpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "显卡温度读不到");
+                        _gpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "显卡温度读取失败");
                     }
                     break;
 
@@ -155,7 +156,7 @@ namespace QuadVitals.Settings
                     }
                     else
                     {
-                        _gpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "显卡功耗读不到（需要 NVML）");
+                        _gpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "显卡功耗读取失败");
                     }
                     break;
 
@@ -170,7 +171,7 @@ namespace QuadVitals.Settings
                     }
                     else
                     {
-                        _gpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "显卡频率读不到（需要 NVML）");
+                        _gpuTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "显卡频率读取失败");
                     }
                     break;
 
@@ -188,7 +189,7 @@ namespace QuadVitals.Settings
 
             if (!snapshot.Has(MetricFlags.DiskValid))
             {
-                _diskTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "系统盘容量读不到");
+                _diskTile.SetValue(MetricFormat.Invalid, string.Empty, 0, "系统盘容量读取失败");
                 return;
             }
 
@@ -226,6 +227,9 @@ namespace QuadVitals.Settings
                     }
                     _ioWasActive = active;
                     bool waving = active || nowUtc < _ioWaveHoldUntil;
+                    // 磁盘 I/O 的走马是读数本身的一部分（一眼看出“在读写”），保持常驻实时循环。
+                    // 风扇那团动效属于装饰，改成在风扇设置里选「常驻动画 / 悬停播放」。
+                    _diskTile.IoWaveOnHover = false;
                     _diskTile.SetIoWave(waving ? IoWave.WaveOpacity(peakMb) : 0,
                         waving ? IoWave.RollCyclesPerSecond(averageMb) : 0);
                     // 大数字放合计吞吐，说明行拆开读写；单位单独传（两种字号）。

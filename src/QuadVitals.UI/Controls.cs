@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using QuadVitals.Core;
 
@@ -187,6 +187,9 @@ namespace QuadVitals.UI
     public class MetricBar : FrameworkElement
     {
         /// <summary>填充值上涨/回落速度（比重/秒），等价于 60 fps 下每帧 +1.2 / -2.4 个百分点。</summary>
+        /// <summary>小于这个幅度（占满量程的比例）直接落位：常见的一两格抖动不值得开帧循环。</summary>
+        private const double SnapBelow = 0.03;
+
         private const double FillRisePerSecond = 1.2 * 60 / 100.0;
         private const double FillFallPerSecond = 2.4 * 60 / 100.0;
 
@@ -204,10 +207,14 @@ namespace QuadVitals.UI
         {
             _onColor = on;
             _offColor = off;
-            _on = Freeze(new SolidColorBrush(on));
+            // The fill brush stays mutable so a band change can cross-fade its colour instead of
+            // swapping a frozen brush and blinking.
+            _on = new SolidColorBrush(on);
             _off = Freeze(new SolidColorBrush(off));
             Height = 22;
             SnapsToDevicePixels = true;
+            MouseEnter += OnMouseEnter;
+            MouseLeave += OnMouseLeave;
         }
 
         /// <summary>胶囊条（连成一体）或 16 个小分段。</summary>
@@ -231,9 +238,7 @@ namespace QuadVitals.UI
         private double _speedTarget;
         private double _displayValue;
         private bool _displayInitialised;
-        private long _lastTicks;
-        private bool _hooked;
-        private EventHandler _renderHandler;
+        private FrameLoop _loop;
 
         /// <summary>
         /// 打开/更新走马循环。waveOpacity 是阈值附近的淡入度（0 = 纯静态色阶），
@@ -249,14 +254,42 @@ namespace QuadVitals.UI
             if (_waveTarget > 0.001 || _speedTarget > 0.001) Hook();
         }
 
+        /// <summary>
+        /// 走马（磁盘 I/O 的滚动色阶）是否只在鼠标停在这一格时才跑。
+        /// 分层窗口里任何一帧动画都会整窗重推，常驻的走马等于常驻几成 GPU；
+        /// 数值与格子在静止时照样是正确的，丢掉的只是“在滚”这个装饰。
+        /// </summary>
+        public bool WaveOnHover { get; set; }
+
+        /// <summary>True while the frame loop is actually running; read by the UI suite.</summary>
+        public bool IsRunningForTests
+        {
+            get { return _loop != null && _loop.IsRunning; }
+        }
+
+        private bool _pointerInside;
+
         private void Hook()
         {
-            if (_hooked) return;
-            _hooked = true;
-            _lastTicks = Stopwatch.GetTimestamp();
-            _renderHandler = (sender, e) => Tick();
-            CompositionTarget.Rendering += _renderHandler;
+            // 用自己记的指针状态而不是 IsMouseOver：后者要真实命中测试，
+            // 合成事件（测试、键盘路径）下永远为 false。
+            if (WaveOnHover && !_pointerInside) return;
+            if (_loop == null) _loop = new FrameLoop(this, Tick);
+            _loop.Start();
+            Unloaded -= OnUnloaded;
             Unloaded += OnUnloaded;
+        }
+
+        private void OnMouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            _pointerInside = true;
+            if (WaveOnHover) Hook();
+        }
+
+        private void OnMouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            _pointerInside = false;
+            if (WaveOnHover) Unhook();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -266,21 +299,14 @@ namespace QuadVitals.UI
 
         private void Unhook()
         {
-            if (!_hooked) return;
-            _hooked = false;
-            if (_renderHandler != null) CompositionTarget.Rendering -= _renderHandler;
-            _renderHandler = null;
+            if (_loop != null) _loop.Stop();
             Unloaded -= OnUnloaded;
             InvalidateVisual();
         }
 
-        private void Tick()
+        private void Tick(double dt)
         {
-            long now = Stopwatch.GetTimestamp();
-            double dt = (now - _lastTicks) / (double)Stopwatch.Frequency;
-            _lastTicks = now;
             if (dt <= 0) return;
-            if (dt > 0.1) dt = 0.1;
 
             // 显示用填充值缓动（与走马同一帧循环推进）。
             double displayTarget = _waveTarget > 0.001 ? 1.0 : _value;
@@ -312,7 +338,36 @@ namespace QuadVitals.UI
         {
             if (_onColor == color) return;
             _onColor = color;
-            _on = Freeze(new SolidColorBrush(color));
+            SolidColorBrush brush = _on as SolidColorBrush;
+            if (brush != null && !brush.IsFrozen) brush.Color = color;
+            else _on = Freeze(new SolidColorBrush(color));
+            InvalidateVisual();
+        }
+
+        /// <summary>Band change: ease the fill colour over <paramref name="milliseconds"/>.</summary>
+        public void SetToneSmooth(Color color, int milliseconds)
+        {
+            if (_onColor == color) return;
+            _onColor = color;
+            SolidColorBrush brush = _on as SolidColorBrush;
+            if (brush == null)
+            {
+                _on = Freeze(new SolidColorBrush(color));
+            }
+            else
+            {
+                if (brush.IsFrozen)
+                {
+                    brush = new SolidColorBrush(brush.Color);
+                    _on = brush;
+                }
+                brush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(color,
+                    TimeSpan.FromMilliseconds(milliseconds))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.HoldEnd
+                });
+            }
             InvalidateVisual();
         }
 
@@ -324,6 +379,10 @@ namespace QuadVitals.UI
             if (!_displayInitialised) { _displayValue = value; _displayInitialised = true; }
             if (Math.Abs(_value - value) < 0.001) return;
             _value = value;
+            // 大幅变化才演：数值每秒都在动，若每次都从当前值缓动过去，这个逐帧循环几乎
+            // 永不静止——而分层窗口每帧都要整窗重推（实测 GPU 8–10%、CPU 20–30%）。
+            // 1–2 个百分点的日常抖动直接落位，肉眼看不出，代价却差一个数量级。
+            if (Math.Abs(_displayValue - _value) < SnapBelow) _displayValue = _value;
             // 格子一格一格长，而不是瞬间全亮（每帧 +1.2 / -2.4 个百分点，
             // 60 fps 下约 72 %/s 上涨、144 %/s 回落；这里按秒换算，不依赖帧率）。
             if (Math.Abs(_displayValue - _value) > 0.001 || _waveTarget > 0.001) Hook();
@@ -494,7 +553,9 @@ namespace QuadVitals.UI
 
             _caption.FontSize = 11.5;
             _caption.Foreground = Theme.TextSecondaryBrush;
-            _caption.TextWrapping = TextWrapping.Wrap;
+            // 一行：说明文字折成两行时整排格子的对齐就被拉歪了（CPU 格出现过），
+            // 所以宁精简文案也不允许换行。
+            _caption.TextWrapping = TextWrapping.NoWrap;
             _caption.Margin = new Thickness(0, 10, 0, 0);
             Children.Add(_caption);
         }
@@ -512,6 +573,13 @@ namespace QuadVitals.UI
             _bar.SetIoWave(waveOpacity, cyclesPerSecond);
         }
 
+        /// <summary>走马只在鼠标停在这一格时才跑（见 MetricBar.WaveOnHover）。</summary>
+        public bool IoWaveOnHover
+        {
+            get { return _bar.WaveOnHover; }
+            set { _bar.WaveOnHover = value; }
+        }
+
         /// <summary>胶囊条还是 16 段小分段；从 settings 的 indicatorStyle 来，切换后立即重画。</summary>
         public MetricBarStyle BarStyle
         {
@@ -526,6 +594,9 @@ namespace QuadVitals.UI
             _unit.Text = unit ?? string.Empty;
             _bar.SetValue(fraction);
             _caption.Text = caption ?? string.Empty;
+            // “没有数据”和“数据是 0”必须一眼分开：说明行用警告色，有数据时才是次级灰。
+            bool noData = string.IsNullOrEmpty(value) || value == MetricFormat.Invalid;
+            _caption.Foreground = noData ? Theme.AccentOrangeBrush : Theme.TextSecondaryBrush;
 
             Color barColor = _accent;
             Brush textBrush = Theme.TextPrimaryBrush;

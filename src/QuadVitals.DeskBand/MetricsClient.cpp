@@ -6,6 +6,10 @@ namespace pb
     {
         const wchar_t* kMapName = L"Local\\QuadVitals.Metrics.v1";
         const int kSnapshotBytes = 364;   // v3: per-volume disk-I/O table after the v2 floats
+        // 这个读端只映射前 364 字节。接受版本 3（368 B）与 4（404 B）是因为两者都在 364 之后追加；
+        // 如果 v5 动了 364 字节以内的布局，必须先在这里改读端，而不是只把上限调大。
+        const unsigned short kMinSupportedVersion = 3;
+        const unsigned short kMaxSupportedVersion = 4;
         const unsigned int kMagic = 0x534C5550; // 'PULS' little endian
 
         unsigned int ReadUInt32(const unsigned char* b, int offset)
@@ -137,9 +141,10 @@ namespace pb
 
             Snapshot parsed;
             parsed.version = ReadUInt16(buffer, 4);
-            // v3 appended the per-volume table; an older agent publishing into the same name
-            // would leave the tail unreadable, so anything but v3 is treated as "no data".
-            if (parsed.version != 3) return false;
+            // v4 appended the fan channels after byte 368 and this reader maps only the first 364
+            // bytes, so both versions are readable here: nothing the band draws lives past 364.
+            // Anything newer is rejected outright until the layout is reviewed (see the constants).
+            if (parsed.version < kMinSupportedVersion || parsed.version > kMaxSupportedVersion) return false;
             parsed.flags = ReadUInt16(buffer, 6);
             parsed.timestampUtcTicks = ReadInt64(buffer, 8);
             parsed.cpuPercent = ReadSingle(buffer, 16);

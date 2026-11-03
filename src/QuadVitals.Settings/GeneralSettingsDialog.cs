@@ -27,6 +27,7 @@ namespace QuadVitals.Settings
 
         public FrameworkElement Build()
         {
+            // 面板里的改动要先点「保存」才生效，与网速卡/风扇卡/设备卡一致。
             AppSettings settings = _window.CurrentSettings.Clone();
 
             Border panel = new Border
@@ -62,24 +63,13 @@ namespace QuadVitals.Settings
 
             CheckBox autostart = new DarkCheckBox
             {
-                Content = "登录时自动启动传感器（计划任务，最高权限）",
+                Content = "登录时自动启动传感器",
                 IsChecked = settings.StartAgentWithWindows
             };
             AutomationProperties.SetAutomationId(autostart, "GeneralAutostart");
-            // Subscribe after the initial value: assigning IsChecked above must not write a file.
-            autostart.Checked += (sender, e) => SaveStartWithWindows(true);
-            autostart.Unchecked += (sender, e) => SaveStartWithWindows(false);
+            // 只是草稿：勾选框本身不写盘。
             body.Children.Add(autostart);
 
-            body.Children.Add(new TextBlock
-            {
-                Text = "仅保存偏好；计划任务需执行 scripts\\install-agent-task.ps1 创建（需一次管理员授权）。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                // Aligned under the checkbox caption (18 px square + 9 px gap + 1 px), not the square.
-                Margin = new Thickness(28, 6, 0, 0)
-            });
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
 
@@ -88,10 +78,16 @@ namespace QuadVitals.Settings
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
-            FlatButton close = new FlatButton("关闭");
-            AutomationProperties.SetAutomationId(close, "GeneralClose");
-            close.Click += (sender, e) => _window.CloseOverlay();
-            buttons.Children.Add(close);
+            FlatButton cancel = new FlatButton("取消");
+            AutomationProperties.SetAutomationId(cancel, "GeneralClose");
+            cancel.Margin = new Thickness(0, 0, 8, 0);
+            cancel.Click += (sender, e) => _window.CloseOverlay();
+            buttons.Children.Add(cancel);
+
+            FlatButton save = new FlatButton("保存", true);
+            AutomationProperties.SetAutomationId(save, "GeneralSave");
+            save.Click += (sender, e) => SavePanel(autostart);
+            buttons.Children.Add(save);
             Grid.SetRow(buttons, 2);
             grid.Children.Add(buttons);
 
@@ -103,11 +99,14 @@ namespace QuadVitals.Settings
         /// Writes just this field onto the latest settings (adapter / refresh rate / elements may
         /// have changed elsewhere since the panel was built) and saves silently.
         /// </summary>
-        private void SaveStartWithWindows(bool value)
+        /// <summary>把面板里的草稿写回最新设置（别处可能已经改过网卡/刷新等字段）。</summary>
+        private void SavePanel(CheckBox autostart)
         {
             AppSettings latest = _window.CurrentSettings.Clone();
-            if (latest.StartAgentWithWindows == value) return;
-            latest.StartAgentWithWindows = value;
+            bool wanted = autostart.IsChecked == true;
+            _window.CloseOverlay();
+            if (latest.StartAgentWithWindows == wanted) return;
+            latest.StartAgentWithWindows = wanted;
             latest.Normalize();
             _window.SaveSettingsQuietly(latest);
         }

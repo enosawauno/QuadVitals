@@ -13,7 +13,8 @@ namespace QuadVitals.Settings
     internal static class AgentAutoRecovery
     {
         /// <summary>Seconds to wait before each attempt: immediate, then 3 / 10 / 30 / 60.</summary>
-        public static readonly int[] DelaysSeconds = new int[] { 0, 3, 10, 30, 60 };
+        // 0 = 离线确认后立即拉起；之后按 3 / 5 / 10 / 30 秒退避，共五次。
+        public static readonly int[] DelaysSeconds = new int[] { 0, 3, 5, 10, 30 };
 
         public static int MaxAttempts
         {

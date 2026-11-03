@@ -137,9 +137,17 @@ namespace QuadVitals.Core
                     }
                     catch (ArgumentException)
                     {
-                        // An older agent still publishes the 364-byte payload; map what it has and let
-                        // the parser report the appended fields as absent instead of failing the read.
-                        view = file.CreateViewAccessor(0, MetricsSnapshot.LegacySizeBytes, MemoryMappedFileAccess.Read);
+                        // Older agents publish a shorter payload. Try the v3 length first so the
+                        // GPU tail is still readable, then the 364-byte v2 frame. The parser
+                        // reports whatever is past the mapped bytes as absent.
+                        try
+                        {
+                            view = file.CreateViewAccessor(0, MetricsSnapshot.GpuTailSizeBytes, MemoryMappedFileAccess.Read);
+                        }
+                        catch (ArgumentException)
+                        {
+                            view = file.CreateViewAccessor(0, MetricsSnapshot.LegacySizeBytes, MemoryMappedFileAccess.Read);
+                        }
                     }
                     return new Reader(file, view);
                 }

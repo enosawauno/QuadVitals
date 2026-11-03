@@ -166,10 +166,20 @@ namespace QuadVitals.Settings
             return "这个元素不能删除。";
         }
         /// <summary>
-        /// 编辑态是否持续抖动（iOS 卸载态）。开着会干扰选中与悬停；
-        /// 改回 true 恢复 ±2.2° / 128 ms + ±1.2 px / 172 ms 的循环动画。
+        /// 编辑态是否持续抖动（iOS 卸载态）。
+        /// 抖动由页面自己的逐帧循环算（30 Hz），不用两个 `RepeatBehavior.Forever` 的
+        /// `DoubleAnimation`：那个由 WPF 动画时钟驱动，会按屏幕刷新率一直重绘，
+        /// 15 个方块就是 15 份每帧都在变的变换，编辑模式开着的时候窗口一直在重画。
         /// </summary>
         private static readonly bool EditJiggleEnabled = true;
+
+        /// <summary>旋转一个来回 256 ms（±2.2°），漂移一个来回 344 ms（±1.2 px）。</summary>
+        private const double JiggleRotatePeriodSeconds = 0.256;
+        private const double JiggleDriftPeriodSeconds = 0.344;
+        private const double JiggleRotateDegrees = 2.2;
+        private const double JiggleDriftPixels = 1.2;
+        private FrameLoop _jiggleLoop;
+        private double _jiggleSeconds;
 
         /// <summary>元素列表里每个元素块的边长（圆角正方形；列表卡 202 高放得下“标题 + 方块行 + 按钮行”）。</summary>
         private const double TileSize = 64;
@@ -542,26 +552,50 @@ namespace QuadVitals.Settings
 
             // 编辑态不持续抖动：变换组仍然要建（缩放/补位动画都挂在它上面），只是不起旋转/漂移动画。
             if (!EditJiggleEnabled) return;
+            // 值由 <see cref="TickJiggle"/> 每帧算；这里只把变换就位，不再挂无限循环动画。
+        }
 
-            TimeSpan begin = TimeSpan.FromMilliseconds((index % 7) * 41);
-            SineEase ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+        private void StartJiggleLoop()
+        {
+            if (!EditJiggleEnabled) return;
+            if (_jiggleLoop == null) _jiggleLoop = new FrameLoop(this, TickJiggle);
+            _jiggleLoop.Start();
+        }
 
-            tile.BeginAnimation(RotateTransform.AngleProperty, null);
-            rotate.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(-2.2, 2.2,
-                TimeSpan.FromMilliseconds(128))
+        private void StopJiggleLoop()
+        {
+            if (_jiggleLoop != null) _jiggleLoop.Stop();
+        }
+
+        /// <summary>
+        /// 抖动：旋转按正弦（相位错开，整排不会一起呼吸），漂移是线性来回。
+        /// 两者都从“负到底”开始，与之前那次 ±2.2° 自动反向动画的起始帧一致，
+        /// 所以进编辑模式的第一帧看起来没变。
+        /// </summary>
+        private void TickJiggle(double dt)
+        {
+            _jiggleSeconds += dt;
+            for (int i = 0; i < _tiles.Count; i++)
             {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                BeginTime = begin,
-                EasingFunction = ease
-            });
-            drift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-1.2, 1.2,
-                TimeSpan.FromMilliseconds(172))
-            {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                BeginTime = begin
-            });
+                Border tile = _tiles[i];
+                if (tile == null) continue;
+                RotateTransform rotate;
+                TranslateTransform drift;
+                if (!_rotateOf.TryGetValue(tile, out rotate) || rotate == null) continue;
+                if (!_driftOf.TryGetValue(tile, out drift) || drift == null) continue;
+                double phase = (i % 7) * 0.041;
+                rotate.Angle = -JiggleRotateDegrees *
+                    Math.Cos(2 * Math.PI * (_jiggleSeconds + phase) / JiggleRotatePeriodSeconds);
+                double u = ((_jiggleSeconds + phase) / (JiggleDriftPeriodSeconds / 2)) % 2.0;
+                if (u < 0) u += 2.0;
+                drift.X = -JiggleDriftPixels + 2 * JiggleDriftPixels * (u < 1.0 ? u : 2.0 - u);
+            }
+        }
+
+        /// <summary>Exposed for the UI suite: edit-mode motion runs on the shared frame clock.</summary>
+        public bool IsJiggling
+        {
+            get { return _jiggleLoop != null && _jiggleLoop.IsRunning; }
         }
 
         /// <summary>
@@ -820,6 +854,8 @@ namespace QuadVitals.Settings
                 if (_tiles[i] == null) continue;
                 ApplyEditVisual(_tiles[i], i, on);
             }
+
+            if (on) StartJiggleLoop(); else StopJiggleLoop();
         }
 
         /// <summary>

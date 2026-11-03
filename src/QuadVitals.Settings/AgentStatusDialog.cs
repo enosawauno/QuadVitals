@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -257,8 +258,14 @@ namespace QuadVitals.Settings
 
         private static string AutoRecoveryLine()
         {
-            return string.Format("离线后自动重试 {0} 次（间隔 3 / 10 / 30 / 60 秒）",
-                AgentAutoRecovery.MaxAttempts);
+            // 从退避表本身取间隔，不再手写一份：改表时面板不会继续显示旧数字。
+            List<string> intervals = new List<string>();
+            for (int i = 1; i < AgentAutoRecovery.DelaysSeconds.Length; i++)
+            {
+                intervals.Add(AgentAutoRecovery.DelaysSeconds[i].ToString());
+            }
+            return string.Format("离线后自动重试 {0} 次（间隔 {1} 秒）",
+                AgentAutoRecovery.MaxAttempts, string.Join(" / ", intervals.ToArray()));
         }
 
         /// <summary>秒数只在最近一分钟内直说；再旧就换成分钟/小时，否则一串 7000 秒没人读得出来。</summary>

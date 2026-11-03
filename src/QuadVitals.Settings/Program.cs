@@ -34,6 +34,7 @@ namespace QuadVitals.Settings
 
                 string startPage = "overview";
                 bool openAgentStatus = false;
+                bool openDiagnostics = false;
                 if (args != null)
                 {
                     foreach (string arg in args)
@@ -59,6 +60,12 @@ namespace QuadVitals.Settings
                             // The general settings are a title-bar dialog; same reason as --about.
                             startPage = "general";
                         }
+                        else if (string.Equals(arg, "--diagnostics", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Tray "diagnostics": a small dark window, not the dashboard and not a
+                            // system MessageBox.
+                            openDiagnostics = true;
+                        }
                         else if (arg != null && arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))
                         {
                             // --page=overview|elements|about（feedback 与 general 开面板，不是页）
@@ -66,6 +73,12 @@ namespace QuadVitals.Settings
                         }
                     }
                 }
+                if (openDiagnostics)
+                {
+                    app.Run(new DiagnosticsWindow());
+                    return;
+                }
+
                 // design：每次启动补传上次没发出去的反馈（成功即删本地包，失败保留）。
                 // 放到后台线程，不拖慢窗口显示。
                 Task.Run(() =>

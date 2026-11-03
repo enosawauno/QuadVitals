@@ -307,6 +307,12 @@ namespace QuadVitals.Core
         public const string IndicatorCapsule = "capsule";
         public const string IndicatorSegments = "segments";
 
+        /// <summary>动效只在指针停在元素上时跑（默认）：静止时不重绘。</summary>
+        public const string AnimationHover = "hover";
+
+        /// <summary>动效常驻：观感最好，代价是仪表盘一直在重绘（实测 GPU 8–10%、CPU 20–30%）。</summary>
+        public const string AnimationAlways = "always";
+
         // One palette for the settings UI, the band defaults and the tests: the old XMeters
         // greens (#00CC6A/#FF0000) used to leak back in through hand-written defaults.
         public const string DefaultGreen = "#FF1DB954";
@@ -376,6 +382,13 @@ namespace QuadVitals.Core
         public string IndicatorStyle { get; set; }
 
         /// <summary>
+        /// 动效模式：<c>hover</c>（默认，指针停在元素上才动）或 <c>always</c>（常驻动画）。
+        /// 常驻动画在分层窗口里是整窗逐帧重推，代价明确写在设置弹窗的确认提示里。
+        /// </summary>
+        [DataMember(Name = "animationMode")]
+        public string AnimationMode { get; set; }
+
+        /// <summary>
         /// 概览四格各自显示哪个指标（设置弹窗里的四个下拉）。不在目录里的值回退到占用，
         /// 因为“占用”永远是有的那个指标。
         /// </summary>
@@ -385,6 +398,13 @@ namespace QuadVitals.Core
         [DataMember(Name = "startAgentWithWindows")]
         public bool StartAgentWithWindows { get; set; }
 
+        /// <summary>
+        /// 概览「风扇」卡显示哪一路。-1 = 自动（第一路有读数的通道）；否则是 SuperIO 的通道号。
+        /// 通道号是唯一的稳定身份：LHM 只给位置名，标签由板型表决定（见 <see cref="FanLabels"/>）。
+        /// </summary>
+        [DataMember(Name = "fanChannel")]
+        public int FanChannel { get; set; }
+
         public static Settings CreateDefault()
         {
             Settings settings = new Settings
@@ -392,6 +412,7 @@ namespace QuadVitals.Core
                 Version = CurrentVersion,
                 RefreshMs = DefaultRefreshMs,
                 AutoAddPreset = false,
+                FanChannel = -1,
                 Band = new BandSettings
                 {
                     Height = 40,
@@ -407,6 +428,7 @@ namespace QuadVitals.Core
                 NetworkAdapter = "auto",
                 CurveStyle = CurveSmooth,
                 IndicatorStyle = IndicatorSegments,
+                AnimationMode = AnimationHover,
                 DeviceMetrics = new DeviceMetricChoices(),
                 StartAgentWithWindows = false
             };
@@ -505,6 +527,13 @@ namespace QuadVitals.Core
                 || string.Equals(value, CurvePolyline, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Unknown / empty values fall back to hover-only motion.</summary>
+        public static bool IsKnownAnimationMode(string value)
+        {
+            return string.Equals(value, AnimationHover, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, AnimationAlways, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Unknown / empty values fall back to the segmented indicator.</summary>
         public static bool IsKnownIndicatorStyle(string value)
         {
@@ -575,6 +604,12 @@ namespace QuadVitals.Core
                 CurveStyle = CurveSmooth;
             }
 
+            if (!IsKnownAnimationMode(AnimationMode))
+            {
+                if (!string.IsNullOrEmpty(AnimationMode)) warnings.Add("animationMode 非法，已恢复为悬停才动");
+                AnimationMode = AnimationHover;
+            }
+
             if (!IsKnownIndicatorStyle(IndicatorStyle))
             {
                 if (!string.IsNullOrEmpty(IndicatorStyle)) warnings.Add("indicatorStyle 非法，已恢复默认分段指示器");
@@ -583,6 +618,12 @@ namespace QuadVitals.Core
 
             if (DeviceMetrics == null) DeviceMetrics = new DeviceMetricChoices();
             DeviceMetrics.Normalize();
+
+            if (FanChannel == 0 || FanChannel < -1 || FanChannel > 32)
+            {
+                if (FanChannel != 0) warnings.Add("fanChannel 非法，已恢复自动");
+                FanChannel = -1;
+            }
 
             if (Items == null || Items.Count == 0)
             {

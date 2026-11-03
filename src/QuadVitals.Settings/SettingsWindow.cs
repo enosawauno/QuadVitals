@@ -24,7 +24,7 @@ namespace QuadVitals.Settings
     /// Dashboard shell: borderless dark window, left navigation, per-page content.
     /// Pages are plain controls, no XAML involved.
     /// </summary>
-    internal sealed class SettingsWindow : Window
+    internal sealed partial class SettingsWindow : Window
     {
         private readonly ContentControl _host = new ContentControl();
         private readonly List<SidebarItem> _navItems = new List<SidebarItem>();
@@ -66,6 +66,8 @@ namespace QuadVitals.Settings
         private readonly MetricWatchdog _metricWatch = new MetricWatchdog();
         private AppSettings _settings;
         private string _currentPage = "overview";
+        // 保存后仍留在屏幕上、因此不能立刻 Dispose 的页面；下一次导航/关窗时释放。
+        private FrameworkElement _keptPage;
 
         public SettingsWindow(string startPage = "overview")
         {
@@ -129,7 +131,11 @@ namespace QuadVitals.Settings
             if (startGeneral) Loaded += (sender, e) => ShowGeneralSettings();
 
             // 关闭前把网速曲线落盘：下次打开接着上一张图的右端继续跑。
-            Closed += (sender, e) => OverviewPage.FlushHistory();
+            Closed += (sender, e) =>
+            {
+                OverviewPage.FlushHistory();
+                DisposeKeptPage();
+            };
 
             PreviewKeyDown += (sender, e) =>
             {
@@ -349,11 +355,41 @@ namespace QuadVitals.Settings
             ShowOverlay(new NetworkSettingsDialog(this).Build());
         }
 
+        /// <summary>风扇卡右上角齿轮：选择卡片显示哪一路风扇。</summary>
+        public void ShowFanSettings()
+        {
+            if (IsOverlayOpen) return;
+            FanCard card = _overviewPage == null ? null : _overviewPage.FanCard;
+            ShowOverlay(new FanSettingsDialog(this, card).Build());
+        }
+
         /// <summary>Title-bar gear: the general settings live in a panel, not in a sidebar page.</summary>
         public void ShowGeneralSettings()
         {
             if (IsOverlayOpen) return;
             ShowOverlay(new GeneralSettingsDialog(this).Build());
+        }
+
+        /// <summary>需要确认的操作（例如切换成常驻动画）：居中提示 + 确认/取消。</summary>
+        public void ShowConfirm(string title, string body, string confirmText, Action onConfirm,
+                                bool danger = false, Action onCancel = null)
+        {
+            ShowOverlay(new ConfirmDialog(this).Build(title, body, confirmText, onConfirm, danger, onCancel));
+        }
+
+        /// <summary>确认框，正文由调用方排好（结构化：结论 + 数据 + 问句）。</summary>
+        public void ShowConfirmContent(string title, FrameworkElement body, string confirmText, Action onConfirm,
+                                       bool danger = false, Action onCancel = null,
+                                       FrameworkElement titleExtra = null)
+        {
+            ShowOverlay(new ConfirmDialog(this).BuildWithContent(title, body, confirmText, onConfirm, danger,
+                                                                 onCancel, titleExtra));
+        }
+
+        /// <summary>动效模式改了：就地通知概览页，不重建页面。</summary>
+        public void ApplyAnimationMode()
+        {
+            if (_overviewPage != null) _overviewPage.ApplyAnimationMode();
         }
 
         /// <summary>
@@ -688,8 +724,8 @@ namespace QuadVitals.Settings
 
             bar.MouseLeftButtonDown += (sender, e) =>
             {
-                if (e.ClickCount == 2) { WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; }
-                else if (e.ButtonState == MouseButtonState.Pressed) { DragMove(); }
+                // 双击不最大化：这个窗口的布局是按 1280×853 排的，拉满屏只会把卡片拉伸得很难看。
+                if (e.ButtonState == MouseButtonState.Pressed) { DragMove(); }
             };
 
             return bar;
@@ -968,6 +1004,8 @@ namespace QuadVitals.Settings
                 if (refreshable != null) refreshable.Refresh();
             }
 
+            // 缓存被清空后当前页可能被“保留”在屏幕上；换页时它才真正离开视觉树，这里补 Dispose。
+            if (_keptPage != null && ReferenceEquals(_host.Content, _keptPage)) DisposeKeptPage();
             _host.Content = page;
         }
 
@@ -976,8 +1014,43 @@ namespace QuadVitals.Settings
         public void ReloadSettings()
         {
             LoadSettings();
+            DisposeCachedPages();
             _cache.Clear();
             ShowPage(_currentPage);
+        }
+
+        /// <summary>
+        /// 页面被从缓存里丢掉时要先 Dispose：旧页面离开视觉树只停止渲染
+        /// （<c>Unloaded</c>），它的 <c>DispatcherTimer</c> 仍被 Dispatcher 持有，
+        /// 于是每次保存都多一个每秒读共享内存、更新一棵看不见的树的定时器。
+        /// </summary>
+        private void DisposeCachedPages(bool keepCurrent = false)
+        {
+            FrameworkElement current = _host.Content as FrameworkElement;
+            bool overviewDisposed = false;
+            foreach (FrameworkElement page in _cache.Values)
+            {
+                if (keepCurrent && ReferenceEquals(page, current))
+                {
+                    // 当前页还在屏幕上：现在 Dispose 会把它的帧循环/定时器一起杀掉，
+                    // 下一次导航或关窗时再释放（否则保存一次动效设置，风扇就永远不转了）。
+                    _keptPage = page;
+                    continue;
+                }
+                if (ReferenceEquals(page, _overviewPage)) overviewDisposed = true;
+                IDisposable disposable = page as IDisposable;
+                if (disposable != null) disposable.Dispose();
+            }
+            if (overviewDisposed) _overviewPage = null;
+        }
+
+        private void DisposeKeptPage()
+        {
+            if (_keptPage == null) return;
+            if (ReferenceEquals(_keptPage, _overviewPage)) _overviewPage = null;
+            IDisposable disposable = _keptPage as IDisposable;
+            if (disposable != null) disposable.Dispose();
+            _keptPage = null;
         }
 
         /// <summary>Saves and tells the user what will and will not take effect immediately.</summary>
@@ -1037,7 +1110,9 @@ namespace QuadVitals.Settings
             int before = BandLayout.TotalWidth(_settings);
             edited.Save(AppSettings.DefaultPath);
             _settings = edited;
+            DisposeCachedPages();
             _cache.Clear();
+            ShowPage(_currentPage);
             if (BandLayout.TotalWidth(edited) != before) RestartExplorer();
         }
 
@@ -1046,6 +1121,9 @@ namespace QuadVitals.Settings
             if (edited == null) return;
             edited.Save(AppSettings.DefaultPath);
             _settings = edited;
+            // 当前页保持存活：动效设置、颜色、调色板都会走这条路，Dispose 掉风扇卡等于让
+            // “常驻动画”刚保存就永久停转。其他缓存页照旧释放，导航回来时重建。
+            DisposeCachedPages(true);
             _cache.Clear();
         }
 
@@ -1054,6 +1132,7 @@ namespace QuadVitals.Settings
             int widthAfter = BandLayout.TotalWidth(edited);
             edited.Save(AppSettings.DefaultPath);
             _settings = edited;
+            DisposeCachedPages();
             _cache.Clear();
 
             if (widthAfter != widthBefore)
@@ -1079,240 +1158,6 @@ namespace QuadVitals.Settings
             ShowOverlay(new NoticeDialog(this).Build("提示", text));
         }
 
-        /// <summary>当前通道状态：每次都重新读快照，面板与芯片用同一个口子，不会两边说法不一致。</summary>
-        public AgentStateInfo ReadAgentState()
-        {
-            if (_statusReader == null && (DateTime.UtcNow - _statusReaderAttemptUtc).TotalSeconds > 2)
-            {
-                _statusReaderAttemptUtc = DateTime.UtcNow;
-                _statusReader = MetricsChannel.Reader.TryOpen();
-            }
-
-            AgentStateInfo info = new AgentStateInfo();
-            info.ChannelOpen = _statusReader != null;
-            MetricsSnapshot snapshot = _statusReader == null ? null : _statusReader.TryRead();
-            if (snapshot == null) return info;
-
-            info.HasSnapshot = true;
-            info.AgeSeconds = snapshot.Age(DateTime.UtcNow).TotalSeconds;
-            info.LastUpdateLocal = snapshot.TimestampUtc.ToLocalTime();
-            info.Alive = snapshot.IsAlive(DateTime.UtcNow, MetricsSnapshot.AliveTimeout);
-            // 看门狗看的是“能信任的”标志：标记有效但数值越界，也算这一项没有数据。
-            info.Flags = MetricSanity.EffectiveFlags(snapshot);
-            return info;
-        }
-
-        /// <summary>标题栏芯片点开的面板。</summary>
-        public void ShowAgentStatus()
-        {
-            ShowOverlay(new AgentStatusDialog(this).Build(ReadAgentState()));
-            _agentPanelShown = true;
-        }
-
-        /// <summary>
-        /// 「启动 Agent」：拉起进程，等它写出第一帧再刷新面板。计划任务不可用时（开发版）
-        /// 这里直接启动 exe，温度会显示 --，但其余指标正常。
-        /// </summary>
-        public void StartAgentFromDialog()
-        {
-            string error = AgentLauncher.Start();
-            if (error != null)
-            {
-                ShowNotice(error, true);
-                return;
-            }
-
-            ScheduleAgentPanelRefresh();
-        }
-
-        public void SetAgentStatus(bool alive, double ageSeconds)
-        {
-            // 芯片只说健康度：秒数会每帧跳，放在面板里。
-            _agentStatus.Text = alive ? "传感器 · 正常" : "传感器 · 离线";
-            _agentStatus.Foreground = alive ? Theme.AccentGreenBrush : Theme.AccentRedBrush;
-        }
-
-        /// <summary>
-        /// 每帧调一次：离线就按退避表自动拉起 Agent（0/3/10/30/60 秒，共 5 次）。
-        /// 次数用完就不再动手，交给面板里的手动按钮。
-        /// </summary>
-        private void TrackAgentHealth(AgentStateInfo state)
-        {
-            // 旧进程已经退出、新进程还没写出第一帧：这段“离线”是重启的一部分，
-            // 自动恢复如果这时插一脚，会和按钮拉起的实例抢同一个计划任务。
-            if (_agentRestartInProgress)
-            {
-                _deadTicks = 0;
-                return;
-            }
-
-            if (state.Alive)
-            {
-                _deadTicks = 0;
-                _autoStartAttempts = 0;
-                _nextAutoStartUtc = DateTime.MinValue;
-                TrackMetricHealth(state);
-                return;
-            }
-
-            _metricWatch.AgentOffline();
-            _deadTicks++;
-            if (!AgentAutoRecovery.ShouldAttempt(false, _deadTicks, _autoStartAttempts,
-                    DateTime.UtcNow, _nextAutoStartUtc)) return;
-
-            _autoStartAttempts++;
-            _nextAutoStartUtc = DateTime.UtcNow.AddSeconds(AgentAutoRecovery.DelayAfterAttempt(_autoStartAttempts));
-
-            if (AgentLauncher.Start() == null) ScheduleAgentPanelRefresh();
-        }
-
-        /// <summary>
-        /// 面板上的「重启传感器」：先让正在运行的 Agent 自己退出，再用登录计划任务拉起一个新进程。
-        /// 温度与显卡的读取会话都在进程启动时建立，驱动被重置或 NVML 掉线后只有重开进程能重新读到；
-        /// 只让 Agent 再发布一帧（原来的「刷新」）改不了这件事。
-        /// </summary>
-        public void RestartAgentFromDialog()
-        {
-            RestartAgentFromDialog(null);
-        }
-
-        /// <param name="reason">
-        /// Non-null when the data watchdog asked for this restart: the attempt stays silent and
-        /// leaves a line in <c>agent-auto.log</c> instead of a dialog over whatever is full-screen.
-        /// </param>
-        private void RestartAgentFromDialog(string reason)
-        {
-            if (_agentRestartInProgress) return;
-            if (reason == null) _metricWatch.Reset();
-            _agentRestartInProgress = true;
-            _deadTicks = 0;
-
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                string error = RestartAgent();
-                TryOnDispatcher(() =>
-                {
-                    _agentRestartInProgress = false;
-                    if (reason != null) LogAgentRecovery(reason, error);
-                    if (error != null)
-                    {
-                        // 自动尝试不在全屏游戏上弹窗；原因留在 agent-auto.log。
-                        if (reason == null) ShowNotice(error, true);
-                        return;
-                    }
-                    ScheduleAgentPanelRefresh(250);
-                });
-            });
-        }
-
-        /// <summary>
-        /// Agent 活着但某一项指标停了：持续缺失才换进程重新建立采样会话，单帧抖动不动手。
-        /// 只对这台机器本来该有数据的指标生效（CPU/内存/系统盘、曾经有效过的、NVIDIA 显卡）。
-        /// </summary>
-        private void TrackMetricHealth(AgentStateInfo state)
-        {
-            MetricFlags missing;
-            if (!_metricWatch.Observe(state.Flags, true, HardwareInfo.HasNvidiaGpu,
-                    DateTime.UtcNow, out missing)) return;
-            RestartAgentFromDialog(MetricWatchdog.Describe(missing));
-        }
-
-        /// <summary>Breadcrumb for watchdog-triggered restarts; capped like the agent's temperature log.</summary>
-        private static void LogAgentRecovery(string reason, string error)
-        {
-            try
-            {
-                string dir = System.IO.Path.GetDirectoryName(AppSettings.DefaultPath);
-                if (string.IsNullOrEmpty(dir)) return;
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                string path = System.IO.Path.Combine(dir, "agent-auto.log");
-                FileInfo info = new FileInfo(path);
-                if (info.Exists && info.Length > 64 * 1024) File.Delete(path);
-                File.AppendAllText(path,
-                    DateTime.Now.ToString("s") + "  检测到 " + reason + " 数据不可用，自动重启：" +
-                    (error == null ? "完成" : "失败 - " + error) + Environment.NewLine);
-            }
-            catch (Exception)
-            {
-                // 诊断日志失败不能影响重启本身
-            }
-        }
-
-        /// <summary>Blocking half of the restart; runs on a worker thread, never on the UI thread.</summary>
-        private static string RestartAgent()
-        {
-            AgentLauncher.RequestExit();
-            if (!AgentLauncher.WaitForExit(6000))
-            {
-                return "传感器没有退出：可能被安全软件拦住。请稍后重试，或手动结束 QuadVitals.Agent.exe";
-            }
-
-            // Only frames published after the old process is gone count as proof the new one
-            // started. A frame the old process wrote between the click and its exit would
-            // otherwise look like success and let auto-recovery race the restart.
-            DateTime exitedUtc = DateTime.UtcNow;
-            string error = AgentLauncher.Start();
-            if (error != null) return error;
-
-            if (!AgentLauncher.WaitForStart(5000))
-            {
-                return "传感器已请求启动，但进程没有出现。请检查登录计划任务是否被禁用";
-            }
-            if (!WaitForFrameAfter(exitedUtc, 12000))
-            {
-                return "传感器已重新启动，但还没有写出新数据。如果温度仍是 --，请检查登录计划任务是否在运行";
-            }
-            return null;
-        }
-
-        /// <summary>True once a frame newer than <paramref name="afterUtc"/> is alive on the channel.</summary>
-        private static bool WaitForFrameAfter(DateTime afterUtc, int timeoutMs)
-        {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
-            {
-                using (MetricsChannel.Reader reader = MetricsChannel.Reader.TryOpen())
-                {
-                    if (reader != null)
-                    {
-                        MetricsSnapshot snapshot = reader.TryRead();
-                        if (snapshot != null && snapshot.TimestampUtc > afterUtc &&
-                            snapshot.IsAlive(DateTime.UtcNow, MetricsSnapshot.AliveTimeout))
-                        {
-                            return true;
-                        }
-                    }
-                }
-                System.Threading.Thread.Sleep(200);
-            }
-            return false;
-        }
-
-        /// <summary>Marshals back to the window thread; a window that closed mid-restart has nowhere to go.</summary>
-        private void TryOnDispatcher(Action action)
-        {
-            if (action == null) return;
-            try
-            {
-                if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
-                Dispatcher.BeginInvoke(action);
-            }
-            catch (Exception)
-            {
-                // Shutting down: the restart itself already finished, only the panel is gone.
-            }
-        }
-
-        private void ScheduleAgentPanelRefresh(int delayMs = 900)
-        {
-            DispatcherTimer wait = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delayMs) };
-            wait.Tick += (sender, e) =>
-            {
-                wait.Stop();
-                if (IsOverlayOpen && _agentPanelShown) ShowAgentStatus();
-            };
-            wait.Start();
-        }
     }
 
     internal interface IRefreshable
