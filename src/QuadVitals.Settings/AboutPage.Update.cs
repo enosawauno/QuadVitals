@@ -69,13 +69,25 @@ namespace QuadVitals.Settings
             };
             actions.Children.Add(_cancelButton);
 
-            Grid head = new Grid();
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            head.Children.Add(current);
-            Grid.SetColumn(actions, 1);
-            head.Children.Add(actions);
-            card.Content.Children.Add(head);
+            TextBlock note = new TextBlock
+            {
+                Text = "更新包从 GitHub Releases 获取；下载完成后按发布清单校验 SHA-256，通过才会启动安装程序。",
+                FontSize = 11.5,
+                Foreground = Theme.TextTertiaryBrush,
+                TextWrapping = TextWrapping.Wrap,
+                // 值列缩进：说明接在版本号下面，而不是回到标签列，整卡才是一条竖线。
+                Margin = new Thickness(96, 2, 0, 0)
+            };
+
+            actions.HorizontalAlignment = HorizontalAlignment.Left;
+            actions.Margin = new Thickness(0, 12, 0, 0);
+
+            card.Content.Children.Add(current);
+            FrameworkElement changelogEarly = ValueLinkRow("日志明细", "GitHub", OpenChangelog);
+            AutomationProperties.SetAutomationId(changelogEarly, "AboutUpdateChangelog");
+            card.Content.Children.Add(changelogEarly);
+            card.Content.Children.Add(note);
+            card.Content.Children.Add(actions);
 
             _progressTrack = new Grid
             {
@@ -112,21 +124,6 @@ namespace QuadVitals.Settings
             AutomationProperties.SetAutomationId(_updateStatus, "AboutUpdateStatus");
             card.Content.Children.Add(_updateStatus);
 
-            card.Content.Children.Add(new TextBlock
-            {
-                Text = "更新包从 GitHub Releases 获取；下载完成后按发布清单校验 SHA-256，通过才会启动安装程序。",
-                FontSize = 11.5,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 10, 0, 0)
-            });
-
-            // 明细与卡里其它行同一条竖向基准：标签在 96 px 列，值紧跟其后。原来用右对齐的
-            // LinkRow，整张卡就变成"只有最后一行贴到右边"，看着像两张表拼在一起。
-            FrameworkElement changelog = ValueLinkRow("日志明细", "GitHub", OpenChangelog);
-            AutomationProperties.SetAutomationId(changelog, "AboutUpdateChangelog");
-            changelog.Margin = new Thickness(0, 8, 0, 0);
-            card.Content.Children.Add(changelog);
             return card;
         }
 

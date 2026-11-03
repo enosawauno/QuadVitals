@@ -649,6 +649,16 @@ if ($null -ne $aboutPage) {
             }
         }
         Check 'the update card shows only the current version row' ($rowCount -eq 1) "rows=$rowCount"
+        # The card follows the page's pattern: data rows first, then the action at the bottom-left,
+        # on the same left edge as the labels.
+        $versionRow = Find-ById $updateCard 'AboutUpdateCurrent'
+        $actionButton = Find-ById $updateCard 'AboutUpdateCheck'
+        if (($null -ne $versionRow) -and ($null -ne $actionButton)) {
+            $rowOrigin = $versionRow.TransformToAncestor($updateCard).Transform((New-Object System.Windows.Point(0, 0)))
+            $buttonOrigin = $actionButton.TransformToAncestor($updateCard).Transform((New-Object System.Windows.Point(0, 0)))
+            Check 'the update action sits at the card bottom-left' ([math]::Abs($buttonOrigin.X - $rowOrigin.X) -le 2) ("button=" + [math]::Round($buttonOrigin.X) + " row=" + [math]::Round($rowOrigin.X))
+            Check 'the update action sits below the version row' ($buttonOrigin.Y -gt ($rowOrigin.Y + 20)) ("button=" + [math]::Round($buttonOrigin.Y) + " row=" + [math]::Round($rowOrigin.Y))
+        } else { Check 'the update action is inside the card' $false '' }
     }
     Check 'the status line starts hidden' ($statusText.Visibility -eq [System.Windows.Visibility]::Collapsed) "visibility=$($statusText.Visibility)"
     $ink = [System.Windows.Media.Color]::FromRgb(0x8F, 0x8F, 0x8F)
