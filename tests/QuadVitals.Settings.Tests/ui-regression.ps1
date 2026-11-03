@@ -529,6 +529,11 @@ Pump 200
 Check 'the gear opens a panel over the window' ([bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
 $generalPanel = Find-ById $generalRoot 'GeneralSettingsPanel'
 Check 'the panel is the general settings panel' ($null -ne $generalPanel) ''
+if ($null -ne $generalPanel) {
+    # Same board as the network / device gear dialogs: more settings are coming here, so the panel
+    # is sized once instead of growing a row at a time.
+    Check 'the panel matches the other gear dialogs' (([math]::Abs($generalPanel.ActualWidth - 640) -le 0.5) -and ([math]::Abs($generalPanel.ActualHeight - 427) -le 0.5)) ("size=" + [math]::Round($generalPanel.ActualWidth) + "x" + [math]::Round($generalPanel.ActualHeight))
+}
 $autoStart = Find-ById $generalRoot 'GeneralAutostart'
 Check 'the panel carries the autostart switch' ($null -ne $autoStart) ''
 if ($null -ne $autoStart) {

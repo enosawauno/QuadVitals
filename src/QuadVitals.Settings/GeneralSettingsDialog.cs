@@ -15,7 +15,8 @@ namespace QuadVitals.Settings
     /// </summary>
     internal sealed class GeneralSettingsDialog
     {
-        public const double DialogWidth = 480;
+        public const double DialogWidth = 640;
+        public const double DialogHeight = 427;
 
         private readonly SettingsWindow _window;
 
@@ -31,6 +32,9 @@ namespace QuadVitals.Settings
             Border panel = new Border
             {
                 Width = DialogWidth,
+                // 与网速卡、设备状态卡的齿轮弹窗同一块板（640×427，3:2）：后面还要往这里加设置项，
+                // 高度一开始就留够，不再一项一项把面板拉长。
+                Height = DialogHeight,
                 Background = Theme.SurfaceCardBrush,
                 CornerRadius = new CornerRadius(Theme.CardRadius),
                 Padding = new Thickness(24),
@@ -38,11 +42,10 @@ namespace QuadVitals.Settings
             };
             AutomationProperties.SetAutomationId(panel, "GeneralSettingsPanel");
 
-            // Three rows: title / content / buttons. Auto width means the hint can wrap; the panel
-            // keeps a fixed width so it does not jump when the checkbox is toggled.
+            // 标题贴顶、按钮贴底，中间整块留白给后续的开关/下拉。
             Grid grid = new Grid();
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             TextBlock title = new TextBlock
@@ -83,8 +86,7 @@ namespace QuadVitals.Settings
             StackPanel buttons = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 20, 0, 0)
+                HorizontalAlignment = HorizontalAlignment.Right
             };
             FlatButton close = new FlatButton("关闭");
             AutomationProperties.SetAutomationId(close, "GeneralClose");
