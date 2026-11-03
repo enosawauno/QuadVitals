@@ -362,8 +362,8 @@ namespace QuadVitals.Settings
         {
             Border panel = new Border
             {
-                Width = 880,
-                Height = 640,
+                Width = FeedbackPanelWidth,
+                Height = FeedbackPanelHeight,
                 Background = Theme.SurfaceCardBrush,
                 CornerRadius = new CornerRadius(Theme.CardRadius),
                 Padding = new Thickness(24),
@@ -398,6 +398,10 @@ namespace QuadVitals.Settings
             panel.Child = grid;
             return panel;
         }
+
+        /// <summary>Panel size: big enough for the form plus the diagnostics row, small enough to feel like a dialog.</summary>
+        private const double FeedbackPanelWidth = 800;
+        private const double FeedbackPanelHeight = 580;
 
         /// <summary>Small ✕ for panel headers: a third the weight of the caption button, same colour rules.</summary>
         private static Button PanelCloseButton(string automationId)
