@@ -112,6 +112,22 @@ function New-Case([int]$count, [switch]$EditMode) {
     return $ctx
 }
 
+"== element spacing lives in the list card =="
+$spacingCase = New-Case 3
+Layout $spacingCase
+$spacingBox = Find-ById $spacingCase.Page 'ElementsSpacingBox'
+Check 'the elements page carries the spacing box' ($null -ne $spacingBox) ''
+if ($null -ne $spacingBox) {
+    $spacingValue = 0
+    $numeric = [int]::TryParse($spacingBox.Text, [ref]$spacingValue)
+    Check 'the spacing box holds the current 0-40 px value' ($numeric -and $spacingValue -ge 0 -and $spacingValue -le 20) "text=$($spacingBox.Text)"
+    $secondRow = Field $spacingCase '_rowBottom'
+    $rowY = $secondRow.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).Y
+    $boxY = $spacingBox.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).Y
+    Check 'the spacing box sits under the second row' ($boxY -gt $rowY) ("box=" + [math]::Round($boxY) + " row=" + [math]::Round($rowY))
+}
+$spacingCase.Window.Close()
+
 "== click =="
 $c = New-Case 3 -EditMode
 $tiles = Tiles $c
@@ -461,7 +477,7 @@ $zone0 = Find-ById $c.Page 'ElementTempZone0'
 Check 'temperature rows explain nothing they cannot change' ($null -eq $zone0) ('zone0=' + [bool]($null -ne $zone0))
 
 
-# --- general page: element spacing control ------------------------------------------------------
+# --- general page: the band card is gone, spacing lives with the element list -------------------
 $generalWindow = [Activator]::CreateInstance($windowType, @('network'))
 $generalWindow.Width = 1280
 $generalWindow.Height = 853
@@ -469,13 +485,7 @@ $generalRoot = $generalWindow.Content
 $generalRoot.Measure((New-Object System.Windows.Size(1280, 853)))
 $generalRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
 $generalRoot.UpdateLayout()
-$spacingBox = Find-ById $generalRoot 'GeneralSpacingBox'
-Check 'the general page has an element spacing box' ($null -ne $spacingBox) ''
-if ($null -ne $spacingBox) {
-    $spacingValue = 0
-    $numeric = [int]::TryParse($spacingBox.Text, [ref]$spacingValue)
-    Check 'the spacing box holds the current 0-40 px value' ($numeric -and $spacingValue -ge 0 -and $spacingValue -le 40) "text=$($spacingBox.Text)"
-}
+Check 'the general page no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
 
 "== disk I/O editor: rows =="
 $c = New-Case 1

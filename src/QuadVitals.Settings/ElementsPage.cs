@@ -29,6 +29,8 @@ namespace QuadVitals.Settings
         private readonly StackPanel _rows = new StackPanel { Orientation = Orientation.Vertical };
         private readonly StackPanel _rowTop = new StackPanel { Orientation = Orientation.Horizontal };
         private readonly StackPanel _rowBottom = new StackPanel { Orientation = Orientation.Horizontal };
+        // 元素间距：条级参数，和元素列表同一张卡。草稿在 Load() 里才建，所以先留空、Load 时再填。
+        private TextBox _spacingBox;
         private readonly StackPanel _editor = new StackPanel();
         private AppSettings _draft;
         private int _selectedIndex = -1;
@@ -124,6 +126,7 @@ namespace QuadVitals.Settings
             _selectedIndex = _draft.Items.Count > 0 ? 0 : -1;
             RefreshList();
             BuildEditor();
+            if (_spacingBox != null) _spacingBox.Text = _draft.Band.HorizontalSpacing.ToString();
         }
 
         /// <summary>
@@ -173,7 +176,8 @@ namespace QuadVitals.Settings
         private const double TileGap = 8;
 
         /// <summary>与概览页「设备状态」卡实测尺寸（988×202）对齐：元素列表卡与它同高同宽。</summary>
-        private const double ListCardHeight = 202;
+        // 202 = 两排 64 px 方块 + 行距；下面再加一条「元素间距」字段，卡片跟着长高。
+        private const double ListCardHeight = 262;
 
         private FrameworkElement BuildLayout()
         {
@@ -245,6 +249,7 @@ namespace QuadVitals.Settings
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             // 标题行：左边「元素列表」，右边编辑模式开关。
             Grid header = new Grid();
@@ -296,6 +301,12 @@ namespace QuadVitals.Settings
             Grid.SetRow(_dragLayer, 1);
             grid.Children.Add(_dragLayer);
 
+            // 第二排方块之后是条级参数：间距由元素宽度 + 间距累加决定整条宽度，所以它跟着元素
+            // 列表在一起，而不是单独占一张卡。改动进草稿，点保存时和元素一起生效。
+            FrameworkElement spacing = BuildSpacingRow();
+            Grid.SetRow(spacing, 2);
+            grid.Children.Add(spacing);
+
             // 新增走虚线方块，删除/排序走编辑模式。
 
             // 空白处**不**触发编辑模式：卡片不挂鼠标事件。
@@ -329,6 +340,64 @@ namespace QuadVitals.Settings
             footer.Children.Add(save);
 
             return footer;
+        }
+
+        /// <summary>
+        /// 「元素间距」：0–40 px，越界夹紧；输入进草稿，保存时与元素一起落盘。改它会改变整条宽度，
+        /// 保存后的重建由 SettingsWindow.SaveSettings 里那条“宽度变了就重启 Explorer”处理。
+        /// </summary>
+        private FrameworkElement BuildSpacingRow()
+        {
+            Grid row = new Grid { Margin = new Thickness(0, 12, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            row.Children.Add(new TextBlock
+            {
+                Text = "元素间距",
+                FontSize = 12,
+                Foreground = Theme.TextTertiaryBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            TextBox box = new DarkTextBox
+            {
+                Width = 72,
+                TextAlignment = TextAlignment.Left
+            };
+            _spacingBox = box;
+            AutomationProperties.SetAutomationId(box, "ElementsSpacingBox");
+            AutomationProperties.SetName(box, "元素间距");
+            Grid.SetColumn(box, 1);
+            row.Children.Add(box);
+
+            TextBlock unit = new TextBlock
+            {
+                Text = "px　0–40；改动后任务栏条会重建一次",
+                FontSize = 11.5,
+                Foreground = Theme.TextTertiaryBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0)
+            };
+            Grid.SetColumn(unit, 2);
+            row.Children.Add(unit);
+
+            Action commit = () =>
+            {
+                int parsed;
+                if (!int.TryParse(box.Text, out parsed)) parsed = _draft.Band.HorizontalSpacing;
+                if (parsed < 0) parsed = 0;
+                if (parsed > 40) parsed = 40;
+                box.Text = parsed.ToString();
+                _draft.Band.HorizontalSpacing = parsed;
+            };
+            box.LostFocus += (sender, e) => commit();
+            box.KeyDown += (sender, e) =>
+            {
+                if (e.Key == System.Windows.Input.Key.Enter) commit();
+            };
+            return row;
         }
 
         // ---- list ---------------------------------------------------------------------
