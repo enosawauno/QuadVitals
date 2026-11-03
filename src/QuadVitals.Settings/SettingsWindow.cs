@@ -378,7 +378,8 @@ namespace QuadVitals.Settings
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            Grid head = new Grid();
+            // 标题与输入框之间留一档呼吸：紧贴着看像标题属于输入框的一部分。
+            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 14) };
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             _feedbackHeading = new TextBlock
