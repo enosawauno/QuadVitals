@@ -43,7 +43,8 @@ namespace QuadVitals.Settings
         private readonly TextBlock _status = new TextBlock();
         private readonly FlatButton _submit = new FlatButton("提交反馈", true);
         private readonly FlatButton _addFiles = new FlatButton("添加文件");
-        private readonly FlatButton _previewButton = new FlatButton("查看将包含的信息");
+        // 入口从按钮改成小字链接：它是个"看一眼"的次要动作，占一格按钮会把下面那行挤满。
+        private readonly Button _previewButton = new Button();
         private readonly StackPanel _previewPanel = new StackPanel();
         private readonly DarkTextBox _previewBox = new DarkTextBox();
         // 反馈页只有一张卡片：_formBody 装表单，_resultBody 装提交结果，两者互斥显示。
@@ -128,6 +129,18 @@ namespace QuadVitals.Settings
             AutomationProperties.SetAutomationId(_addFiles, "FeedbackAddFiles");
             AutomationProperties.SetAutomationId(_includeLogs, "FeedbackIncludeLogs");
             AutomationProperties.SetAutomationId(_previewButton, "FeedbackPreview");
+            _previewButton.Content = "查看将包含的信息";
+            _previewButton.FontSize = 11.5;
+            _previewButton.Foreground = Theme.AccentGreenBrush;
+            _previewButton.Background = Brushes.Transparent;
+            _previewButton.BorderThickness = new Thickness(0);
+            _previewButton.Padding = new Thickness(0);
+            _previewButton.Cursor = Cursors.Hand;
+            _previewButton.FocusVisualStyle = null;
+            _previewButton.VerticalAlignment = VerticalAlignment.Center;
+            _previewButton.Template = LinkTemplate();
+            _previewButton.MouseEnter += (sender, e) => _previewButton.Foreground = Theme.TextPrimaryBrush;
+            _previewButton.MouseLeave += (sender, e) => _previewButton.Foreground = Theme.AccentGreenBrush;
 
             _statusTimer.Tick += (sender, e) => OnStatusTimeout();
 
@@ -159,6 +172,17 @@ namespace QuadVitals.Settings
                     UpdateAgentPill();
                 }),
                 DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Bare template for text links: no background, no border, no hover chrome.</summary>
+        private static ControlTemplate LinkTemplate()
+        {
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+            template.VisualTree = presenter;
+            return template;
         }
 
         private static string DataDirectory
@@ -374,7 +398,18 @@ namespace QuadVitals.Settings
             StackPanel left = new StackPanel();
             _includeLogs.Content = "附带诊断日志（传感器 / 程序日志与当前状态）";
             _includeLogs.IsChecked = true;
-            left.Children.Add(_includeLogs);
+
+            // 复选框那行末尾接一个绿色小字入口，和 FileOops 的「查看日志详情」同一个位置。
+            StackPanel switchRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            switchRow.Children.Add(_includeLogs);
+            _previewButton.Margin = new Thickness(10, 0, 0, 0);
+            _previewButton.Click += (sender, e) => TogglePreview();
+            switchRow.Children.Add(_previewButton);
+            left.Children.Add(switchRow);
 
             left.Children.Add(new TextBlock
             {
@@ -388,23 +423,6 @@ namespace QuadVitals.Settings
             });
             Grid.SetColumn(left, 0);
             row.Children.Add(left);
-
-            StackPanel buttons = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(12, 0, 0, 0)
-            };
-            _previewButton.HorizontalAlignment = HorizontalAlignment.Left;
-            _previewButton.Margin = new Thickness(0, 0, 8, 0);
-            _previewButton.Click += (sender, e) => TogglePreview();
-            buttons.Children.Add(_previewButton);
-
-            _addFiles.Click += (sender, e) => PickFiles();
-            buttons.Children.Add(_addFiles);
-
-            Grid.SetColumn(buttons, 1);
-            row.Children.Add(buttons);
             return row;
         }
 
@@ -418,17 +436,23 @@ namespace QuadVitals.Settings
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+            // 左侧两个次要动作（添加文件 / 清空）走一组，右侧只留主操作提交；中间的空白给状态文案。
+            StackPanel leftActions = new StackPanel { Orientation = Orientation.Horizontal };
+            _addFiles.Margin = new Thickness(0, 0, 8, 0);
+            _addFiles.Click += (sender, e) => PickFiles();
+            leftActions.Children.Add(_addFiles);
+
             FlatButton clear = new FlatButton("清空");
-            clear.Margin = new Thickness(0, 0, 14, 0);
             clear.Click += (sender, e) => ClearForm();
-            Grid.SetColumn(clear, 0);
-            footer.Children.Add(clear);
+            leftActions.Children.Add(clear);
+            Grid.SetColumn(leftActions, 0);
+            footer.Children.Add(leftActions);
 
             _status.FontSize = 12;
             _status.Foreground = Theme.TextTertiaryBrush;
             _status.TextWrapping = TextWrapping.Wrap;
             _status.VerticalAlignment = VerticalAlignment.Center;
-            _status.Margin = new Thickness(0, 0, 14, 0);
+            _status.Margin = new Thickness(12, 0, 12, 0);
             Grid.SetColumn(_status, 1);
             footer.Children.Add(_status);
 
