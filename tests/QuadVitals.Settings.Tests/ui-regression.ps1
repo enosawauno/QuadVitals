@@ -865,12 +865,12 @@ if ($null -ne $feedbackPage) {
     $previewBox = $feedbackPageType.GetField('_previewBox', $flags).GetValue($feedbackPage)
     Check 'the preview box retints the scrollbar corner' ($previewBox.Resources.Contains([System.Windows.SystemColors]::ControlBrushKey)) ''
     $resultBody = $feedbackPageType.GetField('_resultBody', $flags).GetValue($feedbackPage)
-    $feedbackCard = $feedbackPageType.GetField('_card', $flags).GetValue($feedbackPage)
+    $feedbackCard = $feedbackPageType.GetField('_cardTitle', $flags).GetValue($feedbackPage)
     $resultBody.Visibility = [System.Windows.Visibility]::Visible
-    $feedbackCard.Title = 'sent'
+    $feedbackCard.Text = 'sent'
     $feedbackPageType.GetMethod('ResetResultOnLeave', $flags).Invoke($feedbackPage, $null) | Out-Null
     $collapsed = ($resultBody.Visibility -eq [System.Windows.Visibility]::Collapsed)
-    $restored = ($feedbackCard.Title -eq (U @(0x53CD, 0x9988, 0x5185, 0x5BB9)))
+    $restored = ($feedbackCard.Text -eq (U @(0x53CD, 0x9988, 0x5185, 0x5BB9)))
     Check 'leaving the feedback page collapses the result card' ($collapsed -and $restored) "collapsed=$collapsed restored=$restored"
 
     # The hint is an overlay above the input. It has to start on the same character cell as
@@ -885,6 +885,9 @@ if ($null -ne $feedbackPage) {
     $textWrap = $textBox.ActualWidth - $textOrigin.X - ($textBox.BorderThickness.Right + $textBox.Padding.Right * 2)
     Check 'the hint wraps at the typed text width' ([math]::Abs($hintWrap - $textWrap) -le 1) "hint=$([math]::Round($hintWrap,1)) text=$([math]::Round($textWrap,1))"
 }
+
+$panelHeading = $windowType.GetField('_feedbackHeading', $flags).GetValue($feedbackWindow)
+Check 'the panel title says feedback once' ($null -ne $panelHeading -and $panelHeading.Text -eq (U @(0x53CD, 0x9988))) ("text=" + $(if ($null -ne $panelHeading) { $panelHeading.Text } else { '(null)' }))
 
 $feedbackClose = Find-ById $feedbackRoot 'FeedbackClose'
 Check 'the panel has a close button' ($null -ne $feedbackClose) ''

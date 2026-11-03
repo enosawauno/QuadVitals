@@ -47,8 +47,31 @@ namespace QuadVitals.Settings
         private readonly StackPanel _previewPanel = new StackPanel();
         private readonly DarkTextBox _previewBox = new DarkTextBox();
         // 反馈页只有一张卡片：_formBody 装表单，_resultBody 装提交结果，两者互斥显示。
-        private Card _card;
-        private StackPanel _formBody;
+        private TextBlock _cardTitle;
+
+        /// <summary>
+        /// Raised when the card's own title changes ("反馈内容" -> "反馈已保存"). In the panel there is no
+        /// card header to print it in, so the host puts it in the panel's title row instead.
+        /// </summary>
+        public event Action<string> HeadingChanged;
+
+        public string Heading
+        {
+            get
+            {
+                if (_cardTitle == null) return "反馈";
+                return (_compact && _cardTitle.Text == "反馈内容") ? "反馈" : _cardTitle.Text;
+            }
+        }
+
+        private void SetHeading(string text)
+        {
+            if (_cardTitle != null) _cardTitle.Text = text;
+            Action<string> handler = HeadingChanged;
+            // 面板的标题行已经在说"反馈"，再印一遍"反馈内容"就是同义反复；结果态才换成新文案。
+            if (handler != null) handler((_compact && text == "反馈内容") ? "反馈" : text);
+        }
+        private Grid _formBody;
         private readonly TextBlock _placeholder = new TextBlock();
         private StackPanel _resultBody;
         private readonly TextBlock _successId = new TextBlock();
@@ -157,32 +180,32 @@ namespace QuadVitals.Settings
 
         private FrameworkElement BuildLayout()
         {
-            double side = _compact ? 0 : Theme.PagePadding;
-            ScrollViewer scroll = new ScrollViewer
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Padding = new Thickness(side, 0, side, side)
-            };
-            _scroll = scroll;
-
-            StackPanel root = new StackPanel();
-
-            if (!_compact)
-            {
-                root.Children.Add(new PageHeading("反馈", "描述问题；可附带截图与诊断日志"));
-            }
-            root.Children.Add(BuildContentCard());
-
-            // 提交/清空固定在页面右下角（不随内容滚动），对齐标注的位置。
-            scroll.Padding = new Thickness(side, 0, side, 0);
-            scroll.Content = root;
-
             Grid page = new Grid();
             page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Grid.SetRow(scroll, 0);
-            page.Children.Add(scroll);
+
+            FrameworkElement card = BuildContentCard();
+            if (_compact)
+            {
+                // 面板里没有页面边距，卡片直接铺满可用高度：输入框才有向下拉伸的余地。
+                Grid.SetRow(card, 0);
+                page.Children.Add(card);
+            }
+            else
+            {
+                StackPanel root = new StackPanel();
+                root.Children.Add(new PageHeading("反馈", "描述问题；可附带截图与诊断日志"));
+                root.Children.Add(card);
+                ScrollViewer outer = new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    Padding = new Thickness(Theme.PagePadding, 0, Theme.PagePadding, 0),
+                    Content = root
+                };
+                Grid.SetRow(outer, 0);
+                page.Children.Add(outer);
+            }
 
             FrameworkElement footer = BuildFooter();
             footer.Margin = _compact
@@ -195,8 +218,7 @@ namespace QuadVitals.Settings
 
         private FrameworkElement BuildContentCard()
         {
-            _card = new Card("反馈内容");
-            _formBody = new StackPanel();
+            _formBody = new Grid();
 
             // 类型行已按反馈删除；保留隐藏的 ComboBox 让草稿/提交仍沿用默认“问题反馈”。
             foreach (FeedbackKind item in _kinds)
@@ -216,7 +238,18 @@ namespace QuadVitals.Settings
             _text.VerticalContentAlignment = VerticalAlignment.Top;
             _text.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             _text.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            _text.Height = 150;
+            if (_compact)
+            {
+                // The panel has a fixed height, so the box takes the space the old page gave to
+                // nothing: it stretches, and only its floor keeps a usable typing area.
+                _text.Height = double.NaN;   // DarkTextBox ships a 30 px fixed height; the row drives it here
+                _text.MinHeight = 120;
+                _text.VerticalAlignment = VerticalAlignment.Stretch;
+            }
+            else
+            {
+                _text.Height = 150;
+            }
             _text.Padding = new Thickness(10, 8, 10, 8);
             _text.FontSize = 13;
 
@@ -239,18 +272,45 @@ namespace QuadVitals.Settings
             Grid textArea = new Grid();
             textArea.Children.Add(_text);
             textArea.Children.Add(_placeholder);
-            _formBody.Children.Add(textArea);
 
             _attachmentHint.FontSize = 11.5;
             _attachmentHint.Foreground = Theme.TextTertiaryBrush;
             _attachmentHint.Margin = new Thickness(0, 8, 0, 0);
-            _formBody.Children.Add(_attachmentHint);
 
             _attachmentRows.Margin = new Thickness(0, 2, 0, 0);
-            _formBody.Children.Add(_attachmentRows);
 
-            // 左下角：诊断日志开关 + 它的说明。
-            _formBody.Children.Add(BuildCardFooter());
+            // 输入框吃满剩余高度，附件与预览按内容排在它下面；内容多过一屏时这一段自己滚。
+            Grid flow = new Grid();
+            flow.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(textArea, 0);
+            flow.Children.Add(textArea);
+            Grid.SetRow(_attachmentHint, 1);
+            flow.Children.Add(_attachmentHint);
+            Grid.SetRow(_attachmentRows, 2);
+            flow.Children.Add(_attachmentRows);
+
+            _scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalContentAlignment = VerticalAlignment.Stretch,
+                Content = flow
+            };
+
+            // 诊断日志与两个动作原来贴在输入框下面，现在压到卡片底部：它们是"提交前顺手确认"的
+            // 东西，不是写正文的一部分，放在按钮行上方更顺。
+            Grid form = new Grid();
+            form.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(_scroll, 0);
+            form.Children.Add(_scroll);
+            FrameworkElement band = BuildCardFooter();
+            Grid.SetRow(band, 1);
+            form.Children.Add(band);
+            _formBody = form;
 
             _previewBox.IsReadOnly = true;
             _previewBox.AcceptsReturn = true;
@@ -265,16 +325,40 @@ namespace QuadVitals.Settings
 
             _previewPanel.Visibility = Visibility.Collapsed;
             _previewPanel.Margin = new Thickness(0, 12, 0, 0);
-            _formBody.Children.Add(_previewPanel);
+            Grid.SetRow(_previewPanel, 3);
+            flow.Children.Add(_previewPanel);
 
             _resultBody = BuildResultBody();
             _resultBody.Visibility = Visibility.Collapsed;
 
-            _card.Content.Children.Add(_formBody);
-            _card.Content.Children.Add(_resultBody);
+            _cardTitle = new TextBlock
+            {
+                Text = "反馈内容",
+                FontSize = 15,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Theme.TextPrimaryBrush,
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+
+            Grid host = new Grid();
+            host.Children.Add(_formBody);
+            host.Children.Add(_resultBody);
+
+            Grid card = new Grid();
+            card.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            card.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            if (!_compact)
+            {
+                // In the panel the frame already carries the title; a second "反馈内容" right under it
+                // only repeats the word.
+                card.Children.Add(_cardTitle);
+            }
+            Grid.SetRow(host, 1);
+            card.Children.Add(host);
+
             UpdateAttachmentList();
             UpdatePlaceholder();
-            return _card;
+            return card;
         }
 
         /// <summary>
@@ -418,8 +502,8 @@ namespace QuadVitals.Settings
 
         private void RestoreForm()
         {
-            if (_card == null || _resultBody == null) return;
-            _card.Title = "反馈内容";
+            if (_cardTitle == null || _resultBody == null) return;
+            SetHeading("反馈内容");
             _resultBody.Visibility = Visibility.Collapsed;
             _formBody.Visibility = Visibility.Visible;
         }
@@ -957,8 +1041,8 @@ namespace QuadVitals.Settings
             _successUpload.Foreground = Theme.TextSecondaryBrush;
             _retry.Visibility = Visibility.Collapsed;
 
-            // 同一张卡片原地变成结果：表单收起，结果顶上来。
-            _card.Title = "反馈已保存";
+            // 同一块区域原地变成结果：表单收起，结果顶上来。
+            SetHeading("反馈已保存");
             _formBody.Visibility = Visibility.Collapsed;
             _resultBody.Visibility = Visibility.Visible;
             FadeIn(_resultBody);
@@ -971,7 +1055,7 @@ namespace QuadVitals.Settings
 
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                if (_card != null) _card.BringIntoView();
+                if (_resultBody != null) _resultBody.BringIntoView();
             }), DispatcherPriority.Background);
         }
 

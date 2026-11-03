@@ -46,6 +46,7 @@ namespace QuadVitals.Settings
         private Button _agentPill;
         // 反馈从侧边条搬到了标题栏气泡：表单实例活到窗口关，重开面板能接着草稿与结果卡。
         private FeedbackPage _feedbackPage;
+        private TextBlock _feedbackHeading;
         private MetricsChannel.Reader _statusReader;
         private DateTime _statusReaderAttemptUtc = DateTime.MinValue;
         // 自动恢复状态：连续两秒读到离线才开始动手，避免和刚启动的 Agent 抢。
@@ -341,7 +342,15 @@ namespace QuadVitals.Settings
         public void ShowFeedback()
         {
             if (IsOverlayOpen) return;
-            if (_feedbackPage == null) _feedbackPage = new FeedbackPage(this, true);
+            if (_feedbackPage == null)
+            {
+                _feedbackPage = new FeedbackPage(this, true);
+                // The card title is the panel's title now ("反馈内容" / "反馈已保存").
+                _feedbackPage.HeadingChanged += text =>
+                {
+                    if (_feedbackHeading != null) _feedbackHeading.Text = text;
+                };
+            }
             ShowOverlay(BuildFeedbackPanel());
         }
 
@@ -368,14 +377,15 @@ namespace QuadVitals.Settings
             Grid head = new Grid();
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            head.Children.Add(new TextBlock
+            _feedbackHeading = new TextBlock
             {
-                Text = "反馈",
+                Text = _feedbackPage.Heading,
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = Theme.TextPrimaryBrush,
                 VerticalAlignment = VerticalAlignment.Center
-            });
+            };
+            head.Children.Add(_feedbackHeading);
 
             Button close = PanelCloseButton("FeedbackClose");
             close.Click += (sender, e) => CloseOverlay();
