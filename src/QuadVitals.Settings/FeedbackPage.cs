@@ -396,7 +396,7 @@ namespace QuadVitals.Settings
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             StackPanel left = new StackPanel();
-            _includeLogs.Content = "附带诊断日志（传感器 / 程序日志与当前状态）";
+            _includeLogs.Content = "附带诊断日志";
             _includeLogs.IsChecked = true;
 
             // 复选框那行末尾接一个绿色小字入口，和 FileOops 的「查看日志详情」同一个位置。
@@ -413,7 +413,7 @@ namespace QuadVitals.Settings
 
             left.Children.Add(new TextBlock
             {
-                Text = "只有勾选后才会读取日志；提交前可以先查看内容，用户目录会被替换成 %USERPROFILE%。",
+                Text = "传感器、程序日志与当前状态；仅勾选后读取，提交前可查看内容，用户目录已脱敏。",
                 FontSize = 11,
                 Foreground = Theme.TextTertiaryBrush,
                 TextWrapping = TextWrapping.Wrap,
