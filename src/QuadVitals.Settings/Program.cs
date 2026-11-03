@@ -56,7 +56,7 @@ namespace QuadVitals.Settings
                         }
                         else if (arg != null && arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))
                         {
-                            // --page=overview|elements|network|feedback|about
+                            // --page=overview|elements|network|about（feedback 不再是页，传它开面板）
                             startPage = arg.Substring("--page=".Length);
                         }
                     }

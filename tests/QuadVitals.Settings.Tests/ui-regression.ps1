@@ -822,14 +822,32 @@ if ($null -ne $sparkType) {
 }
 $aboutWindow.Close()
 
-"== feedback page: leaving resets the result card =="
-$feedbackWindow = [Activator]::CreateInstance($windowType, @('feedback'))
+"== feedback panel: title-bar entry, leaving resets the result card =="
+$feedbackWindow = [Activator]::CreateInstance($windowType, @('overview'))
 $feedbackWindow.Width = 1280
 $feedbackWindow.Height = 853
 $feedbackRoot = $feedbackWindow.Content
 $feedbackRoot.Measure((New-Object System.Windows.Size(1280, 853)))
 $feedbackRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
 $feedbackRoot.UpdateLayout()
+
+# The entry is an icon between the sensor chip and the minimise button, not a sidebar row.
+function Screen-X($element) {
+    return $element.TransformToAncestor($feedbackRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+}
+$feedbackBubble = Find-ById $feedbackRoot 'FeedbackPill'
+$agentChip = Find-ById $feedbackRoot 'AgentPill'
+$captionMin = Find-ById $feedbackRoot 'CaptionMinimize'
+Check 'the title bar carries a feedback bubble' ($null -ne $feedbackBubble) ''
+if (($null -ne $feedbackBubble) -and ($null -ne $agentChip) -and ($null -ne $captionMin)) {
+    Check 'the bubble sits between the sensor chip and minimise' ((Screen-X $feedbackBubble) -gt (Screen-X $agentChip) -and (Screen-X $feedbackBubble) -lt (Screen-X $captionMin)) ("x=" + [math]::Round((Screen-X $feedbackBubble)) + " chip=" + [math]::Round((Screen-X $agentChip)) + " min=" + [math]::Round((Screen-X $captionMin)))
+}
+$overlay = $windowType.GetField('_overlay', $flags).GetValue($feedbackWindow)
+Check 'the panel starts closed' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
+$windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
+Pump 60
+$feedbackRoot.UpdateLayout()
+Check 'the bubble opens the feedback panel' ($overlay.Visibility -eq [System.Windows.Visibility]::Visible) ''
 $feedbackPageType = $asm.GetType('QuadVitals.Settings.FeedbackPage')
 $feedbackPage = $null
 $pageQueue = New-Object 'System.Collections.Queue'
@@ -868,6 +886,14 @@ if ($null -ne $feedbackPage) {
     Check 'the hint wraps at the typed text width' ([math]::Abs($hintWrap - $textWrap) -le 1) "hint=$([math]::Round($hintWrap,1)) text=$([math]::Round($textWrap,1))"
 }
 
+$feedbackClose = Find-ById $feedbackRoot 'FeedbackClose'
+Check 'the panel has a close button' ($null -ne $feedbackClose) ''
+if ($null -ne $feedbackClose) {
+    $feedbackClose.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+    Check 'closing the panel puts the overlay away' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
+}
+$feedbackWindow.Close()
+
 "== sidebar: sliding selection pill =="
 $navWindow = [Activator]::CreateInstance($windowType, @('overview'))
 $navWindow.Width = 1280
@@ -881,11 +907,11 @@ Check 'the sidebar has a selection pill' ($null -ne $navGlider) ''
 if ($null -ne $navGlider) {
     $navShift = $navGlider.RenderTransform
     Check 'the pill starts on the first item without sliding' ([math]::Abs($navShift.Y) -le 0.5) "y=$($navShift.Y)"
-    # Switch to feedback (index 3, landing at 144). The position is sampled after the switch to
+    # Switch to elements (index 1, landing at 48). The position is sampled after the switch to
     # prove the pill travels; sampling a mid-flight value instead is not stable here because the
     # render clock can be starved by background work (WMI, the agent), which lands the animation
     # straight on its final value.
-    $windowType.GetMethod('ShowPage').Invoke($navWindow, @('feedback')) | Out-Null
+    $windowType.GetMethod('ShowPage').Invoke($navWindow, @('elements')) | Out-Null
     Pump 120
     $mid = $navShift.Y
     Check 'the pill animates instead of snapping to the target' $navShift.HasAnimatedProperties "y=$mid"
@@ -896,13 +922,14 @@ if ($null -ne $navGlider) {
     $afterSwitch = $navShift.Y
     Check 'a second switch keeps the current position' ($afterSwitch -ge ($mid - 1.0)) "before=$mid after=$afterSwitch"
     Pump 400
-    Check 'the pill slides to the selected item' ([math]::Abs($navShift.Y - 192) -le 1) "y=$($navShift.Y)"
+    Check 'the pill slides to the selected item' ([math]::Abs($navShift.Y - 144) -le 1) "y=$($navShift.Y)"
 }
 $navItems = $windowType.GetField('_navItems', $flags).GetValue($navWindow)
 $navOrder = ($navItems | ForEach-Object { [string]$_.Tag }) -join ','
-Check 'the tools entry is gone from the sidebar' ($navOrder -eq 'overview,elements,network,feedback,about') "order=$navOrder"
+Check 'the sidebar holds four screens, feedback is not one of them' ($navOrder -eq 'overview,elements,network,about') "order=$navOrder"
 $pageFactories = $windowType.GetField('_pages', $flags).GetValue($navWindow)
 Check 'the tools page is no longer registered' (-not $pageFactories.ContainsKey('tools')) ''
+Check 'the feedback page is no longer registered' (-not $pageFactories.ContainsKey('feedback')) ''
 $navWindow.Close()
 
 "== page headings =="
@@ -925,7 +952,6 @@ $expectedTitles = @{}
 $expectedTitles['overview'] = U @(0x6982, 0x89C8)
 $expectedTitles['elements'] = U @(0x663E, 0x793A, 0x9879)
 $expectedTitles['network'] = U @(0x901A, 0x7528, 0x8BBE, 0x7F6E)
-$expectedTitles['feedback'] = U @(0x53CD, 0x9988)
 $expectedTitles['about'] = U @(0x5173, 0x4E8E)
 foreach ($key in $expectedTitles.Keys) {
     $pair = Page-Title $key

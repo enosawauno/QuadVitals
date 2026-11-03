@@ -44,6 +44,8 @@ namespace QuadVitals.Settings
         private OverviewPage _overviewPage;
         private readonly TextBlock _agentStatus = new TextBlock();
         private Button _agentPill;
+        // 反馈从侧边条搬到了标题栏气泡：表单实例活到窗口关，重开面板能接着草稿与结果卡。
+        private FeedbackPage _feedbackPage;
         private MetricsChannel.Reader _statusReader;
         private DateTime _statusReaderAttemptUtc = DateTime.MinValue;
         // 自动恢复状态：连续两秒读到离线才开始动手，避免和刚启动的 Agent 抢。
@@ -114,7 +116,10 @@ namespace QuadVitals.Settings
 
 
             Content = BuildRoot();
+            // "feedback" is no longer a page: the flag still works, it just opens the title-bar panel.
+            bool startFeedback = string.Equals(startPage, "feedback", StringComparison.OrdinalIgnoreCase);
             ShowPage(_pages.ContainsKey(startPage) ? startPage : "overview");
+            if (startFeedback) Loaded += (sender, e) => ShowFeedback();
 
             // 关闭前把网速曲线落盘：下次打开接着上一张图的右端继续跑。
             Closed += (sender, e) => OverviewPage.FlushHistory();
@@ -193,7 +198,6 @@ namespace QuadVitals.Settings
             _pages["overview"] = () => { _overviewPage = new OverviewPage(this); return _overviewPage; };
             _pages["elements"] = () => new ElementsPage(this);
             _pages["network"] = () => new NetworkPage(this);
-            _pages["feedback"] = () => new FeedbackPage(this);
             _pages["about"] = () => new AboutPage(this);
         }
 
@@ -330,6 +334,171 @@ namespace QuadVitals.Settings
             ShowOverlay(new NetworkSettingsDialog(this).Build());
         }
 
+        /// <summary>
+        /// Title-bar bubble: opens the feedback form as a panel over the window. The form keeps its own
+        /// draft, attachment and preview logic; the panel only supplies the frame and a close button.
+        /// </summary>
+        public void ShowFeedback()
+        {
+            if (IsOverlayOpen) return;
+            if (_feedbackPage == null) _feedbackPage = new FeedbackPage(this, true);
+            ShowOverlay(BuildFeedbackPanel());
+        }
+
+        /// <summary>
+        /// Frame for the feedback panel: title row with a close button, then the form. 880×640 keeps the
+        /// attachment rows and the syntax preview usable without turning the panel into a second window.
+        /// </summary>
+        private FrameworkElement BuildFeedbackPanel()
+        {
+            Border panel = new Border
+            {
+                Width = 880,
+                Height = 640,
+                Background = Theme.SurfaceCardBrush,
+                CornerRadius = new CornerRadius(Theme.CardRadius),
+                Padding = new Thickness(24),
+                SnapsToDevicePixels = true
+            };
+
+            Grid grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            Grid head = new Grid();
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            head.Children.Add(new TextBlock
+            {
+                Text = "反馈",
+                FontSize = 16,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Theme.TextPrimaryBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            Button close = PanelCloseButton("FeedbackClose");
+            close.Click += (sender, e) => CloseOverlay();
+            Grid.SetColumn(close, 1);
+            head.Children.Add(close);
+
+            grid.Children.Add(head);
+            Grid.SetRow(_feedbackPage, 1);
+            grid.Children.Add(_feedbackPage);
+            panel.Child = grid;
+            return panel;
+        }
+
+        /// <summary>Small ✕ for panel headers: a third the weight of the caption button, same colour rules.</summary>
+        private static Button PanelCloseButton(string automationId)
+        {
+            Button close = new Button
+            {
+                Width = 26,
+                Height = 26,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                Focusable = false,
+                FocusVisualStyle = null,
+                Foreground = Theme.TextSecondaryBrush,
+                Template = BuildCaptionTemplate(),
+                ToolTip = "关闭"
+            };
+            System.Windows.Automation.AutomationProperties.SetAutomationId(close, automationId);
+            System.Windows.Automation.AutomationProperties.SetName(close, "关闭");
+            close.Content = SmallCloseGlyph(close);
+            close.MouseEnter += (sender, e) => close.Foreground = Theme.TextPrimaryBrush;
+            close.MouseLeave += (sender, e) => close.Foreground = Theme.TextSecondaryBrush;
+            return close;
+        }
+
+        /// <summary>Title-bar icon button: same box and hover as the caption buttons, custom glyph.</summary>
+        private static Button IconButton(string automationId, string name, string tip,
+                                         Func<Button, FrameworkElement> glyph, Action action)
+        {
+            Button button = new Button
+            {
+                Width = 36,
+                Height = 33,
+                Foreground = Theme.TextSecondaryBrush,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                Focusable = false,
+                FocusVisualStyle = null,
+                Template = BuildCaptionTemplate(),
+                ToolTip = tip
+            };
+            System.Windows.Automation.AutomationProperties.SetAutomationId(button, automationId);
+            System.Windows.Automation.AutomationProperties.SetName(button, name);
+            button.Content = glyph(button);
+            button.MouseEnter += (sender, e) => button.Foreground = Theme.TextPrimaryBrush;
+            button.MouseLeave += (sender, e) => button.Foreground = Theme.TextSecondaryBrush;
+            button.Click += (sender, e) => action();
+            Interactions.AttachSpring(button, 1.12, 0.94);
+            return button;
+        }
+
+        /// <summary>
+        /// Chat bubble with three dots, taken from the owner's reference art and scaled to the caption
+        /// row: filled silhouette so it stays legible at 16 px, dots cut out with even-odd so they do not
+        /// disappear into the body. Fill follows the button foreground like the ✕ does, which keeps it in
+        /// the same grey -> white hover language as the other title-bar controls.
+        /// </summary>
+        private static FrameworkElement BuildFeedbackGlyph(Button owner)
+        {
+            Canvas canvas = new Canvas { Width = 17, Height = 17 };
+            System.Windows.Media.PathGeometry shape = System.Windows.Media.PathGeometry.CreateFromGeometry(
+                Geometry.Parse(
+                "M401.493333 725.333333H213.333333a85.333333 85.333333 0 0 1-85.333333-85.333333V213.333333" +
+                "a85.333333 85.333333 0 0 1 85.333333-85.333333h640a85.333333 85.333333 0 0 1 85.333334 85.333333" +
+                "v426.666667a85.333333 85.333333 0 0 1-85.333334 85.333333h-187.818666l-96.853334 140.885334" +
+                "a42.666667 42.666667 0 0 1-70.314666 0L401.493333 725.333333z" +
+                "M320 490.581333a42.666667 42.666667 0 1 0 0-85.333333 42.666667 42.666667 0 0 0 0 85.333333z" +
+                "m213.333333 0a42.666667 42.666667 0 1 0 0-85.333333 42.666667 42.666667 0 0 0 0 85.333333z" +
+                "m213.333334 0a42.666667 42.666667 0 1 0 0-85.333333 42.666667 42.666667 0 0 0 0 85.333333z"));
+            shape.FillRule = FillRule.EvenOdd;
+            System.Windows.Shapes.Path bubble = new System.Windows.Shapes.Path
+            {
+                Width = 16,
+                Height = 16,
+                Stretch = Stretch.Uniform,
+                Data = shape
+            };
+            bubble.SetBinding(Shape.FillProperty,
+                new System.Windows.Data.Binding("Foreground") { Source = owner });
+            Canvas.SetLeft(bubble, 0.5);
+            Canvas.SetTop(bubble, 0.5);
+            canvas.Children.Add(bubble);
+            return canvas;
+        }
+
+        private static FrameworkElement SmallCloseGlyph(Button owner)
+        {
+            Canvas canvas = new Canvas { Width = 12, Height = 12 };
+            canvas.Children.Add(SmallLine(owner, 2, 2, 10, 10));
+            canvas.Children.Add(SmallLine(owner, 10, 2, 2, 10));
+            return canvas;
+        }
+
+        private static Line SmallLine(Button owner, double x1, double y1, double x2, double y2)
+        {
+            Line line = new Line
+            {
+                X1 = x1,
+                Y1 = y1,
+                X2 = x2,
+                Y2 = y2,
+                StrokeThickness = 1.6,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            line.SetBinding(Shape.StrokeProperty,
+                new System.Windows.Data.Binding("Foreground") { Source = owner });
+            return line;
+        }
+
         /// <summary>设备状态卡右上角齿轮的入口。第一个设置项是指示器样式。</summary>
         public void ShowDeviceSettings()
         {
@@ -391,6 +560,12 @@ namespace QuadVitals.Settings
             _agentPill.MouseLeave += (sender, e) => _agentPill.Background = idleChip;
             _agentPill.Click += (sender, e) => ShowAgentStatus();
             right.Children.Add(_agentPill);
+
+            // Feedback lives in the title bar, not in the sidebar: it is opened on demand and closed
+            // again, while the sidebar holds the screens that stay on screen.
+            Button feedback = IconButton("FeedbackPill", "发送反馈", "发送反馈", BuildFeedbackGlyph, ShowFeedback);
+            feedback.Margin = new Thickness(0, 0, 8, 0);
+            right.Children.Add(feedback);
 
             right.Children.Add(CaptionButton(false, () => WindowState = WindowState.Minimized));
             right.Children.Add(CaptionButton(true, Close));
@@ -580,7 +755,6 @@ namespace QuadVitals.Settings
             AddNav(stack, "overview", "概览");
             AddNav(stack, "elements", "显示项");
             AddNav(stack, "network", "通用设置");
-            AddNav(stack, "feedback", "反馈");
             AddNav(stack, "about", "关于");
 
             host.Children.Add(stack);

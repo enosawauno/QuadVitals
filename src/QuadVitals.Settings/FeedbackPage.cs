@@ -70,10 +70,18 @@ namespace QuadVitals.Settings
         private readonly IFeedbackTransport _transport = new HttpFeedbackTransport();
         private readonly FlatButton _retry = new FlatButton("重新上传");
         private readonly TextBlock _successUpload = new TextBlock();
+        private readonly bool _compact;
 
-        public FeedbackPage(SettingsWindow window)
+        public FeedbackPage(SettingsWindow window) : this(window, false) { }
+
+        /// <param name="compact">
+        /// True when the form is hosted in the title-bar panel instead of a page: the panel supplies the
+        /// frame and the title, so the page heading and the page margins would only waste room.
+        /// </param>
+        public FeedbackPage(SettingsWindow window, bool compact)
         {
             _window = window;
+            _compact = compact;
 
             Content = BuildLayout();
             LoadDraft();
@@ -149,21 +157,25 @@ namespace QuadVitals.Settings
 
         private FrameworkElement BuildLayout()
         {
+            double side = _compact ? 0 : Theme.PagePadding;
             ScrollViewer scroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Padding = new Thickness(Theme.PagePadding, 0, Theme.PagePadding, Theme.PagePadding)
+                Padding = new Thickness(side, 0, side, side)
             };
             _scroll = scroll;
 
             StackPanel root = new StackPanel();
 
-            root.Children.Add(new PageHeading("反馈", "描述问题；可附带截图与诊断日志"));
+            if (!_compact)
+            {
+                root.Children.Add(new PageHeading("反馈", "描述问题；可附带截图与诊断日志"));
+            }
             root.Children.Add(BuildContentCard());
 
             // 提交/清空固定在页面右下角（不随内容滚动），对齐标注的位置。
-            scroll.Padding = new Thickness(Theme.PagePadding, 0, Theme.PagePadding, 0);
+            scroll.Padding = new Thickness(side, 0, side, 0);
             scroll.Content = root;
 
             Grid page = new Grid();
@@ -173,8 +185,9 @@ namespace QuadVitals.Settings
             page.Children.Add(scroll);
 
             FrameworkElement footer = BuildFooter();
-            footer.Margin = new Thickness(Theme.PagePadding, Theme.CardGap,
-                Theme.PagePadding, Theme.PagePadding);
+            footer.Margin = _compact
+                ? new Thickness(0, Theme.CardGap, 0, 0)
+                : new Thickness(Theme.PagePadding, Theme.CardGap, Theme.PagePadding, Theme.PagePadding);
             Grid.SetRow(footer, 1);
             page.Children.Add(footer);
             return page;
