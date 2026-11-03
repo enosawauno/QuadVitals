@@ -349,7 +349,8 @@ namespace QuadVitals.Settings
         private FrameworkElement BuildSpacingRow()
         {
             Grid row = new Grid { Margin = new Thickness(0, 12, 0, 0) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+            // 72 = 方块 64 + 行距 8：输入框正好落在方块网格的第二列，和虚线「＋」同一条左边缘。
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TileSize + TileGap) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
@@ -364,7 +365,8 @@ namespace QuadVitals.Settings
             TextBox box = new DarkTextBox
             {
                 Width = 72,
-                TextAlignment = TextAlignment.Left
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
             };
             _spacingBox = box;
             AutomationProperties.SetAutomationId(box, "ElementsSpacingBox");
@@ -375,7 +377,8 @@ namespace QuadVitals.Settings
             TextBlock unit = new TextBlock
             {
                 Text = "px　0–40；改动后任务栏条会重建一次",
-                FontSize = 11.5,
+                // 与标签同字号、同一条垂直中线：混着 11.5 和 12 会让两行文字看起来没对齐。
+                FontSize = 12,
                 Foreground = Theme.TextTertiaryBrush,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(8, 0, 0, 0)

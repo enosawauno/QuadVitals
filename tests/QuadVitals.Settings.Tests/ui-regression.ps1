@@ -128,6 +128,15 @@ if ($null -ne $spacingBox) {
     # The card hugs its content: a fixed height left a dead band between the tiles and the field.
     $gap = $boxY - ($rowY + $secondRow.ActualHeight)
     Check 'the spacing box follows the row without a dead band' ($gap -lt 26) ("gap=" + [math]::Round($gap))
+    Check 'the spacing value is centred in its box' ($spacingBox.TextAlignment -eq [System.Windows.TextAlignment]::Center) ("align=" + $spacingBox.TextAlignment)
+    # The field sits on the second tile column (64 px tile + 8 px gap), which is where the
+    # dashed add tile lands once the second row holds one element.
+    $firstTile = Find-ById $spacingCase.Page 'ElementTile'
+    if ($null -ne $firstTile) {
+        $tileX = $firstTile.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).X
+        $boxX = $spacingBox.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).X
+        Check 'the spacing box sits on the second tile column' ([math]::Abs(($boxX - $tileX) - 72) -le 2) ("box=" + [math]::Round($boxX) + " tile=" + [math]::Round($tileX))
+    } else { Check 'a tile exists for the column check' $false '' }
 }
 $spacingCase.Window.Close()
 
