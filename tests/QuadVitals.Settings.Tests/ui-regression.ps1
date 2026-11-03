@@ -905,6 +905,46 @@ if (($null -ne $clearButton) -and ($null -ne $attachButton) -and ($null -ne $sub
     Check 'the actions run clear / attach / submit' (($cx -lt $ax) -and ($ax -lt $sx)) ("x=" + [math]::Round($cx) + "/" + [math]::Round($ax) + "/" + [math]::Round($sx))
 } else { Check 'the three actions are present' $false '' }
 
+# Submitted state: the form actions step aside for a single close, and the panel fits its content
+# instead of framing a mostly empty 580 px card.
+# FeedbackResult lives in QuadVitals.Core.dll. Resolve it by assembly-qualified name so the object
+# stays a plain CLR instance - New-Object would wrap it in a PSObject and Invoke refuses that.
+$resultType = $coreAsm.GetType('QuadVitals.Core.FeedbackResult')
+$result = $resultType.GetConstructor([Type[]]@()).Invoke([object[]]@())
+$result.Id = '20261103-test'
+$result.PackagePath = 'C:\temp\pkg.zip'
+$result.AttachmentCount = 0
+$feedbackPageType.GetMethod('ShowSuccess', $flags).Invoke($feedbackPage, @($result)) | Out-Null
+Pump 60
+$feedbackRoot.UpdateLayout()
+$logBlock = $feedbackPageType.GetField('_logBlock', $flags).GetValue($feedbackPage)
+$clearBtn = $feedbackPageType.GetField('_clear', $flags).GetValue($feedbackPage)
+$closeResult = $feedbackPageType.GetField('_closeResult', $flags).GetValue($feedbackPage)
+$addBtn = $feedbackPageType.GetField('_addFiles', $flags).GetValue($feedbackPage)
+$submitBtn = $feedbackPageType.GetField('_submit', $flags).GetValue($feedbackPage)
+$overlayHost = $windowType.GetField('_overlayContent', $flags).GetValue($feedbackWindow)
+$panelBorder = $overlayHost.Content
+Check 'submitted: form actions give way to one close' (($clearBtn.Visibility -ne [System.Windows.Visibility]::Visible) -and ($addBtn.Visibility -ne [System.Windows.Visibility]::Visible) -and ($submitBtn.Visibility -ne [System.Windows.Visibility]::Visible) -and ($closeResult.Visibility -eq [System.Windows.Visibility]::Visible)) ''
+Check 'submitted: the diagnostics block hides with the form' ($logBlock.Visibility -ne [System.Windows.Visibility]::Visible) ''
+Check 'submitted: the panel fits its content' ([double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)
+Check 'submitted: the card narrows to the result width' ([math]::Abs($panelBorder.Width - 520) -lt 1) ("width=" + $panelBorder.Width)
+$visibleButtons = 0
+$scan = New-Object 'System.Collections.Queue'
+$scan.Enqueue($feedbackPageType.GetField('_resultBody', $flags).GetValue($feedbackPage))
+while ($scan.Count -gt 0) {
+    $node = $scan.Dequeue()
+    if (($node -is [System.Windows.Controls.Button]) -and ($node.Visibility -eq [System.Windows.Visibility]::Visible)) { $visibleButtons++ }
+    if ($node -is [System.Windows.Media.Visual]) {
+        $kids = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($node)
+        for ($i = 0; $i -lt $kids; $i++) { $scan.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($node, $i)) }
+    }
+}
+Check 'submitted: no buttons inside the result block' ($visibleButtons -eq 0) ("buttons=" + $visibleButtons)
+Check 'submitted: the panel is shorter than the form' (($panelBorder.ActualHeight -gt 150) -and ($panelBorder.ActualHeight -lt 400)) ("actual=" + [math]::Round($panelBorder.ActualHeight))
+$feedbackPageType.GetMethod('RestoreForm', $flags).Invoke($feedbackPage, $null) | Out-Null
+Pump 60
+Check 'back to the form restores its height' (-not [double]::IsNaN($panelBorder.Height)) ("height=" + $panelBorder.Height)
+
 $feedbackClose = Find-ById $feedbackRoot 'FeedbackClose'
 Check 'the panel has a close button' ($null -ne $feedbackClose) ''
 if ($null -ne $feedbackClose) {

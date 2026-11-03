@@ -350,6 +350,14 @@ namespace QuadVitals.Settings
                 _feedbackPage.HeadingChanged += text =>
                 {
                     if (_feedbackHeading != null) _feedbackHeading.Text = text;
+                    // The result is a short block; keeping the form's 580 px around it left most of
+                    // the panel empty. Let it fit its content until the form comes back.
+                    if (_feedbackPanel != null)
+                    {
+                        bool result = _feedbackPage.ShowingResult;
+                        _feedbackPanel.Width = result ? FeedbackResultWidth : FeedbackPanelWidth;
+                        _feedbackPanel.Height = result ? double.NaN : FeedbackPanelHeight;
+                    }
                 };
                 // Built once and reused: a UserControl can only have one logical parent, so rebuilding
                 // the frame around the same form is what WPF rejects when the panel is opened twice.
@@ -407,6 +415,8 @@ namespace QuadVitals.Settings
         /// <summary>Panel size: big enough for the form plus the diagnostics row, small enough to feel like a dialog.</summary>
         private const double FeedbackPanelWidth = 800;
         private const double FeedbackPanelHeight = 580;
+        /// <summary>The submitted state is a short centred block, like the installer's finish page.</summary>
+        private const double FeedbackResultWidth = 520;
 
         /// <summary>Small ✕ for panel headers: a third the weight of the caption button, same colour rules.</summary>
         private static Button PanelCloseButton(string automationId)

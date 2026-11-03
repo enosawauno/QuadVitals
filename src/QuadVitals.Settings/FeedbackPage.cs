@@ -76,6 +76,12 @@ namespace QuadVitals.Settings
         private Grid _formBody;
         // 诊断日志开关与说明：跟着表单一起显示/隐藏（结果态不需要它）。
         private FrameworkElement _logBlock;
+        // 表单态的三个动作与结果态的「关闭」互斥：提交成功后没有可清空、可附件的表单。
+        private FlatButton _clear;
+        private FlatButton _closeResult;
+
+        /// <summary>True while the panel shows the submitted result instead of the form.</summary>
+        public bool ShowingResult { get; private set; }
         private readonly TextBlock _placeholder = new TextBlock();
         private StackPanel _resultBody;
         private readonly TextBlock _successId = new TextBlock();
@@ -458,11 +464,11 @@ namespace QuadVitals.Settings
                 VerticalAlignment = VerticalAlignment.Bottom
             };
 
-            FlatButton clear = new FlatButton("清空");
-            clear.Margin = new Thickness(0, 0, 8, 0);
-            AutomationProperties.SetAutomationId(clear, "FeedbackClear");
-            clear.Click += (sender, e) => ClearForm();
-            actions.Children.Add(clear);
+            _clear = new FlatButton("清空");
+            _clear.Margin = new Thickness(0, 0, 8, 0);
+            AutomationProperties.SetAutomationId(_clear, "FeedbackClear");
+            _clear.Click += (sender, e) => ClearForm();
+            actions.Children.Add(_clear);
 
             _addFiles.Margin = new Thickness(0, 0, 14, 0);
             _addFiles.Click += (sender, e) => PickFiles();
@@ -470,6 +476,13 @@ namespace QuadVitals.Settings
 
             _submit.Click += OnSubmit;
             actions.Children.Add(_submit);
+
+            // Result state: one way out, in the same slot the primary button would occupy.
+            _closeResult = new FlatButton("关闭");
+            AutomationProperties.SetAutomationId(_closeResult, "FeedbackCloseResult");
+            _closeResult.Visibility = Visibility.Collapsed;
+            _closeResult.Click += (sender, e) => _window.CloseOverlay();
+            actions.Children.Add(_closeResult);
 
             Grid.SetColumn(actions, 1);
             row.Children.Add(actions);
@@ -481,48 +494,86 @@ namespace QuadVitals.Settings
 
         private StackPanel BuildResultBody()
         {
-            StackPanel content = new StackPanel();
+            // 成功页照安装器的完成页：绿色圆盘打勾 → 一句结论 → 下面两三行小字。
+            // 不放按钮：关闭走面板右下角那个，再来一条就是关掉重开（草稿在提交时已清）。
+            StackPanel content = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
 
-            _successId.FontSize = 12;
+            content.Children.Add(SuccessMark());
+
+            content.Children.Add(new TextBlock
+            {
+                Text = "反馈已发送成功",
+                FontSize = 18,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Theme.TextPrimaryBrush,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 16, 0, 0)
+            });
+
+            _successId.FontSize = 12.5;
             _successId.Foreground = Theme.TextSecondaryBrush;
+            _successId.HorizontalAlignment = HorizontalAlignment.Center;
+            _successId.Margin = new Thickness(0, 14, 0, 0);
             content.Children.Add(_successId);
 
             _successPath.FontSize = 11;
             _successPath.Foreground = Theme.TextTertiaryBrush;
+            _successPath.TextAlignment = TextAlignment.Center;
             _successPath.TextWrapping = TextWrapping.Wrap;
-            _successPath.Margin = new Thickness(0, 4, 0, 0);
+            _successPath.HorizontalAlignment = HorizontalAlignment.Center;
+            _successPath.Margin = new Thickness(0, 6, 0, 0);
             content.Children.Add(_successPath);
 
             _successUpload.FontSize = 11.5;
             _successUpload.TextWrapping = TextWrapping.Wrap;
-            _successUpload.Margin = new Thickness(0, 8, 0, 0);
+            _successUpload.TextAlignment = TextAlignment.Center;
+            _successUpload.HorizontalAlignment = HorizontalAlignment.Center;
+            _successUpload.Margin = new Thickness(0, 6, 0, 0);
             content.Children.Add(_successUpload);
 
-            StackPanel buttons = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-            FlatButton copy = new FlatButton("复制编号");
-            copy.Margin = new Thickness(0, 0, 8, 0);
-            copy.Click += (sender, e) => CopyId();
-            buttons.Children.Add(copy);
-
-            _retry.Margin = new Thickness(0, 0, 8, 0);
+            // 上传失败时才会出现：本地包还在，可以再试一次。
+            _retry.Margin = new Thickness(0, 16, 0, 0);
+            _retry.HorizontalAlignment = HorizontalAlignment.Center;
             _retry.Visibility = Visibility.Collapsed;
             _retry.Click += async (sender, e) => await RunUploadAsync();
-            buttons.Children.Add(_retry);
+            content.Children.Add(_retry);
 
-            FlatButton again = new FlatButton("再写一条");
-            again.Click += (sender, e) =>
-            {
-                ClearForm();
-                _text.Focus();
-            };
-            buttons.Children.Add(again);
-
-            content.Children.Add(buttons);
             return content;
+        }
+
+        /// <summary>Green disc with a white tick, same shape as the installer's finish page.</summary>
+        private static UIElement SuccessMark()
+        {
+            Canvas canvas = new Canvas
+            {
+                Width = 52,
+                Height = 52,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+
+            System.Windows.Shapes.Ellipse disc = new System.Windows.Shapes.Ellipse
+            {
+                Width = 52,
+                Height = 52,
+                Fill = Theme.AccentGreenBrush
+            };
+            canvas.Children.Add(disc);
+
+            System.Windows.Shapes.Path tick = new System.Windows.Shapes.Path
+            {
+                Data = Geometry.Parse("M 14,27 L 22,35 L 38,18"),
+                Stroke = Brushes.White,
+                StrokeThickness = 4.2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round
+            };
+            canvas.Children.Add(tick);
+            return canvas;
         }
 
         private static void FadeIn(UIElement element)
@@ -548,10 +599,15 @@ namespace QuadVitals.Settings
         private void RestoreForm()
         {
             if (_cardTitle == null || _resultBody == null) return;
+            ShowingResult = false;
             SetHeading("反馈内容");
             _resultBody.Visibility = Visibility.Collapsed;
             _formBody.Visibility = Visibility.Visible;
             if (_logBlock != null) _logBlock.Visibility = Visibility.Visible;
+            if (_clear != null) _clear.Visibility = Visibility.Visible;
+            _addFiles.Visibility = Visibility.Visible;
+            _submit.Visibility = Visibility.Visible;
+            if (_closeResult != null) _closeResult.Visibility = Visibility.Collapsed;
         }
 
         /// <summary>The placeholder is only visible while the box is empty.</summary>
@@ -1087,10 +1143,16 @@ namespace QuadVitals.Settings
             _successUpload.Foreground = Theme.TextSecondaryBrush;
             _retry.Visibility = Visibility.Collapsed;
 
-            // 同一块区域原地变成结果：表单收起，结果顶上来。
-            SetHeading("反馈已保存");
+            // 同一块区域原地变成结果：表单收起，结果顶上来；底部只剩一个关闭。
+            ShowingResult = true;
+            // 标题行保持「反馈」：结论已经由成功页的大标题说了，两处都写就成了同义反复。
+            SetHeading("反馈");
             _formBody.Visibility = Visibility.Collapsed;
             if (_logBlock != null) _logBlock.Visibility = Visibility.Collapsed;
+            if (_clear != null) _clear.Visibility = Visibility.Collapsed;
+            _addFiles.Visibility = Visibility.Collapsed;
+            _submit.Visibility = Visibility.Collapsed;
+            if (_closeResult != null) _closeResult.Visibility = Visibility.Visible;
             _resultBody.Visibility = Visibility.Visible;
             FadeIn(_resultBody);
 
@@ -1228,20 +1290,6 @@ namespace QuadVitals.Settings
             FeedbackStore.ClearDraft(DataDirectory);
             _lastRequest = null;
             CleanupUploadTemp();
-        }
-
-        private void CopyId()
-        {
-            if (_lastResult == null) return;
-            try
-            {
-                Clipboard.SetText(_lastResult.Id);
-                ShowStatus("编号已复制。", false);
-            }
-            catch (Exception ex)
-            {
-                ShowStatus("复制失败：" + ex.Message, true);
-            }
         }
 
         private void ShowStatus(string text, bool isError)
