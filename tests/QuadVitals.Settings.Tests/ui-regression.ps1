@@ -889,6 +889,18 @@ if ($null -ne $feedbackPage) {
 $panelHeading = $windowType.GetField('_feedbackHeading', $flags).GetValue($feedbackWindow)
 Check 'the panel title says feedback once' ($null -ne $panelHeading -and $panelHeading.Text -eq (U @(0x53CD, 0x9988))) ("text=" + $(if ($null -ne $panelHeading) { $panelHeading.Text } else { '(null)' }))
 
+# The three actions are right-aligned, in the order the owner asked for: clear / attach / submit.
+$clearButton = Find-ById $feedbackRoot 'FeedbackClear'
+$attachButton = Find-ById $feedbackRoot 'FeedbackAddFiles'
+$submitButton = Find-ById $feedbackRoot 'FeedbackSubmit'
+if (($null -ne $clearButton) -and ($null -ne $attachButton) -and ($null -ne $submitButton)) {
+    $cx = Screen-X $clearButton
+    $ax = Screen-X $attachButton
+    $sx = Screen-X $submitButton
+    Check 'the three actions sit right of the diagnostics row' ($cx -gt 500) ("clear x=" + [math]::Round($cx))
+    Check 'the actions run clear / attach / submit' (($cx -lt $ax) -and ($ax -lt $sx)) ("x=" + [math]::Round($cx) + "/" + [math]::Round($ax) + "/" + [math]::Round($sx))
+} else { Check 'the three actions are present' $false '' }
+
 $feedbackClose = Find-ById $feedbackRoot 'FeedbackClose'
 Check 'the panel has a close button' ($null -ne $feedbackClose) ''
 if ($null -ne $feedbackClose) {

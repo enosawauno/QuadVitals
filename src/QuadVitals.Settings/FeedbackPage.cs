@@ -42,7 +42,7 @@ namespace QuadVitals.Settings
         private readonly TextBlock _attachmentHint = new TextBlock();
         private readonly TextBlock _status = new TextBlock();
         private readonly FlatButton _submit = new FlatButton("提交反馈", true);
-        private readonly FlatButton _addFiles = new FlatButton("添加文件");
+        private readonly FlatButton _addFiles = new FlatButton("添加附件");
         // 入口从按钮改成小字链接：它是个"看一眼"的次要动作，占一格按钮会把下面那行挤满。
         private readonly Button _previewButton = new Button();
         private readonly StackPanel _previewPanel = new StackPanel();
@@ -386,8 +386,8 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// Card footer: the diagnostics switch and its hint on the left, the two actions on the
-        /// right, with "查看将包含的信息" sitting left of "添加文件".
+        /// Card footer: the diagnostics switch, its hint and the small preview link. The three actions
+        /// live in the footer row below, right-aligned.
         /// </summary>
         private FrameworkElement BuildCardFooter()
         {
@@ -432,33 +432,41 @@ namespace QuadVitals.Settings
             // 「查看将包含的信息 / 添加文件」凑成一个四按钮方块，看着像一坨；现在按从轻到重
             // 左右分开，右下角只剩一个主操作。
             Grid footer = new Grid();
-            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // 左侧两个次要动作（添加文件 / 清空）走一组，右侧只留主操作提交；中间的空白给状态文案。
-            StackPanel leftActions = new StackPanel { Orientation = Orientation.Horizontal };
-            _addFiles.Margin = new Thickness(0, 0, 8, 0);
-            _addFiles.Click += (sender, e) => PickFiles();
-            leftActions.Children.Add(_addFiles);
-
-            FlatButton clear = new FlatButton("清空");
-            clear.Click += (sender, e) => ClearForm();
-            leftActions.Children.Add(clear);
-            Grid.SetColumn(leftActions, 0);
-            footer.Children.Add(leftActions);
-
+            // 三个动作都靠右，从左到右：清空 / 添加附件 / 提交反馈。主操作与两个次要动作之间留一格
+            // 多一点的间距，不然三个同色按钮排成一排分不出主次。
             _status.FontSize = 12;
             _status.Foreground = Theme.TextTertiaryBrush;
             _status.TextWrapping = TextWrapping.Wrap;
             _status.VerticalAlignment = VerticalAlignment.Center;
-            _status.Margin = new Thickness(12, 0, 12, 0);
-            Grid.SetColumn(_status, 1);
+            _status.Margin = new Thickness(0, 0, 14, 0);
+            Grid.SetColumn(_status, 0);
             footer.Children.Add(_status);
 
+            StackPanel actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            FlatButton clear = new FlatButton("清空");
+            clear.Margin = new Thickness(0, 0, 8, 0);
+            AutomationProperties.SetAutomationId(clear, "FeedbackClear");
+            clear.Click += (sender, e) => ClearForm();
+            actions.Children.Add(clear);
+
+            _addFiles.Margin = new Thickness(0, 0, 14, 0);
+            _addFiles.Click += (sender, e) => PickFiles();
+            actions.Children.Add(_addFiles);
+
             _submit.Click += OnSubmit;
-            Grid.SetColumn(_submit, 2);
-            footer.Children.Add(_submit);
+            actions.Children.Add(_submit);
+
+            Grid.SetColumn(actions, 1);
+            footer.Children.Add(actions);
             return footer;
         }
 
