@@ -958,12 +958,11 @@ $lastResultField.SetValue($feedbackPage, $result)
 $feedbackPageType.GetMethod('ShowUploadFailure', $flags).Invoke($feedbackPage, @('timeout')) | Out-Null
 Pump 60
 $reasonLine = $feedbackPageType.GetField('_failureReason', $flags).GetValue($feedbackPage)
-$pathLine = $feedbackPageType.GetField('_failurePath', $flags).GetValue($feedbackPage)
 $headlineLine = $feedbackPageType.GetField('_resultHeadline', $flags).GetValue($feedbackPage)
 $retryBtn = $feedbackPageType.GetField('_retry', $flags).GetValue($feedbackPage)
 Check 'failed upload: the headline stops saying sent' (-not ([string]$headlineLine.Text).Contains((U @(0x5DF2, 0x53D1, 0x9001)))) ("text=" + $headlineLine.Text)
 Check 'failed upload: the reason gets its own line' ($reasonLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $reasonLine.Visibility)
-Check 'failed upload: the path gets its own line' ($pathLine.Visibility -eq [System.Windows.Visibility]::Visible) ("visibility=" + $pathLine.Visibility)
+Check 'failed upload: no file path on the card' ($null -eq $feedbackPageType.GetField('_failurePath', $flags)) ''
 Check 'failed upload: retry is offered next to close' (($retryBtn.Visibility -eq [System.Windows.Visibility]::Visible) -and ([string]$closeResult.Content -eq (U @(0x5173, 0x95ED)))) ("retry=" + $retryBtn.Visibility + " close=" + $closeResult.Content)
 Check 'failed upload: retry sits right of close' ((Screen-X $retryBtn) -gt (Screen-X $closeResult)) ("retry=" + [math]::Round((Screen-X $retryBtn)) + " close=" + [math]::Round((Screen-X $closeResult)))
 Check 'failed upload: retry wears the primary colour' (([string]$retryBtn.Background) -eq ([string]$submitBtn.Background)) ("retry=" + $retryBtn.Background + " submit=" + $submitBtn.Background)

@@ -22,7 +22,6 @@ namespace QuadVitals.Settings
         private readonly ContentControl _resultMark = new ContentControl();
         private readonly TextBlock _resultHeadline = new TextBlock();
         private readonly TextBlock _failureReason = new TextBlock();
-        private readonly TextBlock _failurePath = new TextBlock();
 
 
         private StackPanel BuildResultBody()
@@ -69,15 +68,6 @@ namespace QuadVitals.Settings
             _failureReason.Margin = new Thickness(0, 6, 0, 0);
             _failureReason.Visibility = Visibility.Collapsed;
             content.Children.Add(_failureReason);
-
-            _failurePath.FontSize = 11;
-            _failurePath.Foreground = Theme.TextTertiaryBrush;
-            _failurePath.TextWrapping = TextWrapping.Wrap;
-            _failurePath.TextAlignment = TextAlignment.Center;
-            _failurePath.HorizontalAlignment = HorizontalAlignment.Center;
-            _failurePath.Margin = new Thickness(0, 6, 0, 0);
-            _failurePath.Visibility = Visibility.Collapsed;
-            content.Children.Add(_failurePath);
 
             return content;
         }
@@ -229,7 +219,6 @@ namespace QuadVitals.Settings
                 _resultMark.Content = SuccessMark();
                 _resultHeadline.Text = "反馈已发送成功";
                 _failureReason.Visibility = Visibility.Collapsed;
-                _failurePath.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -256,11 +245,6 @@ namespace QuadVitals.Settings
             _failureReason.Text = "原因：" + reason;
             _failureReason.Visibility = Visibility.Visible;
 
-            if (_lastResult != null)
-            {
-                _failurePath.Text = "文件：" + _lastResult.PackagePath;
-                _failurePath.Visibility = Visibility.Visible;
-            }
             _retry.Visibility = Visibility.Visible;
         }
 
