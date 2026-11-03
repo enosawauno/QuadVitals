@@ -426,16 +426,20 @@ namespace QuadVitals.Settings
             switchRow.Children.Add(_previewButton);
             left.Children.Add(switchRow);
 
-            left.Children.Add(new TextBlock
+            TextBlock logsHint = new TextBlock
             {
-                Text = "传感器、程序日志与当前状态；仅勾选后读取，提交前可查看内容，用户目录已脱敏。",
+                // 一行到底：面板宽度是定的（640），句子必须能装进左栏，所以只留“绑定什么、什么时候读、
+                // 发之前能不能看”。换行会被按钮行挤成两行，那行小字的底边就不再和按钮下沿齐平。
+                Text = "仅勾选后读取传感器与程序日志；提交前可查看，目录已脱敏。",
                 FontSize = 11,
                 Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
+                TextWrapping = TextWrapping.NoWrap,
                 // Aligned under the checkbox caption, not under its square (user picked "B"):
                 // 18 px square + 9 px gap + 1 px glyph bearing.
                 Margin = new Thickness(28, 6, 0, 0)
-            });
+            };
+            AutomationProperties.SetAutomationId(logsHint, "FeedbackLogsHint");
+            left.Children.Add(logsHint);
             Grid.SetColumn(left, 0);
             row.Children.Add(left);
             return row;

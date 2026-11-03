@@ -1014,6 +1014,14 @@ while ($pageQueue.Count -gt 0 -and $null -eq $feedbackPage) {
 Check 'the feedback page is reachable' ($null -ne $feedbackPage) ''
 $feedbackPanel = Find-ById $feedbackRoot 'FeedbackPanel'
 Check 'the feedback panel is the settings dialog board' (($null -ne $feedbackPanel) -and ([math]::Abs($feedbackPanel.Width - 640) -le 0.5) -and ([math]::Abs($feedbackPanel.Height - 427) -le 0.5)) ("size=" + $feedbackPanel.Width + "x" + $feedbackPanel.Height)
+# The diagnostics hint owns one line: it sits on the same bottom edge as the action buttons, so a
+# wrapped second line would push the row out of line. NoWrap + “measured width fits the column”.
+$logsHint = Find-ById $feedbackRoot 'FeedbackLogsHint'
+Check 'the diagnostics hint never wraps' (($null -ne $logsHint) -and ($logsHint.TextWrapping -eq [System.Windows.TextWrapping]::NoWrap)) ''
+if ($null -ne $logsHint) {
+    $hintTextWidth = $logsHint.DesiredSize.Width - $logsHint.Margin.Left - $logsHint.Margin.Right
+    Check 'the diagnostics hint fits its column on one line' ($hintTextWidth -le ($logsHint.ActualWidth + 0.5)) ("text=" + [math]::Round($hintTextWidth, 1) + " column=" + [math]::Round($logsHint.ActualWidth, 1))
+}
 if ($null -ne $feedbackPage) {
     $previewBox = $feedbackPageType.GetField('_previewBox', $flags).GetValue($feedbackPage)
     Check 'the preview box retints the scrollbar corner' ($previewBox.Resources.Contains([System.Windows.SystemColors]::ControlBrushKey)) ''
