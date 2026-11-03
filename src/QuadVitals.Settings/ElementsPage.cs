@@ -175,9 +175,9 @@ namespace QuadVitals.Settings
         private const double TileSize = 64;
         private const double TileGap = 8;
 
-        /// <summary>与概览页「设备状态」卡实测尺寸（988×202）对齐：元素列表卡与它同高同宽。</summary>
-        // 202 = 两排 64 px 方块 + 行距；下面再加一条「元素间距」字段，卡片跟着长高。
-        private const double ListCardHeight = 262;
+        // 列表卡按内容撑高：两排方块 + 「元素间距」一行。固定高度会在方块与字段之间留下
+        // 一段死空白，卡片越高越明显。
+        private const double ListCardMinHeight = 202;
 
         private FrameworkElement BuildLayout()
         {
@@ -186,7 +186,7 @@ namespace QuadVitals.Settings
                 Margin = new Thickness(Theme.PagePadding, 0, Theme.PagePadding, Theme.PagePadding)
             };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(ListCardHeight) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(Theme.CardGap) });
             // 参数卡按内容撑高（VerticalAlignment=Top），剩下的高度留成卡片下方的空白，
             // 页脚固定在最下面一行。

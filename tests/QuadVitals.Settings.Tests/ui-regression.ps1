@@ -125,6 +125,9 @@ if ($null -ne $spacingBox) {
     $rowY = $secondRow.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).Y
     $boxY = $spacingBox.TransformToAncestor($spacingCase.Page).Transform((New-Object System.Windows.Point(0, 0))).Y
     Check 'the spacing box sits under the second row' ($boxY -gt $rowY) ("box=" + [math]::Round($boxY) + " row=" + [math]::Round($rowY))
+    # The card hugs its content: a fixed height left a dead band between the tiles and the field.
+    $gap = $boxY - ($rowY + $secondRow.ActualHeight)
+    Check 'the spacing box follows the row without a dead band' ($gap -lt 26) ("gap=" + [math]::Round($gap))
 }
 $spacingCase.Window.Close()
 
