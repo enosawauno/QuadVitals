@@ -503,7 +503,7 @@ namespace QuadVitals.Settings
         {
             Button button = new Button
             {
-                Width = 36,
+                Width = 30,
                 Height = 33,
                 Foreground = Theme.TextSecondaryBrush,
                 Background = Brushes.Transparent,
@@ -543,17 +543,26 @@ namespace QuadVitals.Settings
                 "m213.333333 0a42.666667 42.666667 0 1 0 0-85.333333 42.666667 42.666667 0 0 0 0 85.333333z" +
                 "m213.333334 0a42.666667 42.666667 0 1 0 0-85.333333 42.666667 42.666667 0 0 0 0 85.333333z"));
             shape.FillRule = FillRule.EvenOdd;
+
+            // 把 1024 单位的图形等比缩到 16 px 并居中放进 17 px 画布：坐标自己算，不靠
+            // Canvas.Left/Top（那套会按整像素/偶数吸附，1 px 的偏差调不上去）。这样气泡的
+            // 墨迹中心和齿轮、最小化、关闭一样落在画布 8.5 px 线上。
+            Rect bounds = shape.Bounds;
+            double scale = 16.0 / Math.Max(bounds.Width, bounds.Height);
+            TransformGroup fit = new TransformGroup();
+            fit.Children.Add(new ScaleTransform(scale, scale));
+            fit.Children.Add(new TranslateTransform(
+                (17 - bounds.Width * scale) / 2 - bounds.X * scale,
+                (17 - bounds.Height * scale) / 2 - bounds.Y * scale));
+            shape.Transform = fit;
+
             System.Windows.Shapes.Path bubble = new System.Windows.Shapes.Path
             {
-                Width = 16,
-                Height = 16,
-                Stretch = Stretch.Uniform,
+                Stretch = Stretch.None,
                 Data = shape
             };
             bubble.SetBinding(Shape.FillProperty,
                 new System.Windows.Data.Binding("Foreground") { Source = owner });
-            Canvas.SetLeft(bubble, 0.5);
-            Canvas.SetTop(bubble, 0.5);
             canvas.Children.Add(bubble);
             return canvas;
         }
@@ -643,7 +652,8 @@ namespace QuadVitals.Settings
                 Content = _agentStatus,
                 Cursor = Cursors.Hand,
                 Padding = new Thickness(9, 3, 9, 3),
-                Margin = new Thickness(0, 0, 12, 0),
+                // 芯片到齿轮的隔距与四个图标之间一致（8 + 按钮左留白 6.5）：整组看起来是排在一起的。
+                Margin = new Thickness(0, 0, 8, 0),
                 VerticalAlignment = VerticalAlignment.Center,
                 Background = idleChip,
                 BorderThickness = new Thickness(0),
@@ -657,15 +667,14 @@ namespace QuadVitals.Settings
             _agentPill.Click += (sender, e) => ShowAgentStatus();
             right.Children.Add(_agentPill);
 
-            // 通用设置只剩一个开关，挂在标题栏齿轮上，不再占侧栏一整页。
+            // 通用设置只剩一个开关，挂在标题栏齿轮上，不再占侧栏一整页。四个图标按钮之间不留
+            // 外边距（紧凑成一组），间距由按钮宽度（30）减字形（17）得出。
             Button general = IconButton("GeneralPill", "通用设置", "通用设置", BuildGearGlyph, ShowGeneralSettings);
-            general.Margin = new Thickness(0, 0, 4, 0);
             right.Children.Add(general);
 
             // Feedback lives in the title bar, not in the sidebar: it is opened on demand and closed
             // again, while the sidebar holds the screens that stay on screen.
             Button feedback = IconButton("FeedbackPill", "发送反馈", "发送反馈", BuildFeedbackGlyph, ShowFeedback);
-            feedback.Margin = new Thickness(0, 0, 8, 0);
             right.Children.Add(feedback);
 
             right.Children.Add(CaptionButton(false, () => WindowState = WindowState.Minimized));
@@ -736,9 +745,10 @@ namespace QuadVitals.Settings
         {
             Button button = new Button
             {
-                // 自绘图标放到系统标题栏的量级：可见尺寸 11 / 12 px、线宽 3.0，
-                // 按钮 36×33 承载（再小字形的圆头就开始发糊）。
-                Width = 36,
+                // 自绘图标放到系统标题栏的量级：可见尺寸 11 / 12 px、线宽 2.5–3.0，
+                // 按钮 30×33 承载（再小字形的圆头就开始发糊）。宽度 30 是为了让四个图标
+                // 紧凑成一组：字形 17，左右各 6.5。
+                Width = 30,
                 Height = 33,
                 Margin = new Thickness(0, 0, 0, 0),
                 Foreground = Theme.TextSecondaryBrush,

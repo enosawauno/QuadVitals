@@ -524,6 +524,46 @@ if (($null -ne $gearPill) -and ($null -ne $feedbackPill)) {
     Check 'the gear sits left of the feedback entry' ($gearX -lt $feedbackX) ("gear=" + [math]::Round($gearX) + " feedback=" + [math]::Round($feedbackX))
 }
 else { Check 'the feedback entry is still in the title bar' $false '' }
+# The four icons are one group: equal pitch, and their ink centres on the same line (the glyphs are
+# drawn in 17 px canvases, so a shape that is not centred in its canvas shows up as an offset here).
+$captionIds = @('GeneralPill', 'FeedbackPill', 'CaptionMinimize', 'CaptionClose')
+$captionButtons = @()
+foreach ($id in $captionIds) { $captionButtons += (Find-ById $generalRoot $id) }
+if (($captionButtons | Where-Object { $null -eq $_ }).Count -eq 0) {
+    $xs = @()
+    foreach ($b in $captionButtons) { $xs += $b.TransformToAncestor($generalRoot).Transform((New-Object System.Windows.Point(0, 0))).X }
+    $pitch = @()
+    for ($i = 1; $i -lt $xs.Count; $i++) { $pitch += [math]::Round($xs[$i] - $xs[$i - 1]) }
+    Check 'the four caption buttons sit on one pitch' (($pitch | Select-Object -Unique).Count -eq 1) ("pitch=" + ($pitch -join ','))
+    Check 'the caption buttons are tight' ($pitch[0] -le 32) ("pitch=" + $pitch[0])
+
+    $barShot = New-Object System.Windows.Media.Imaging.RenderTargetBitmap(1280, 853, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
+    $barShot.Render($generalRoot)
+    $stride = 1280 * 4
+    $buf = New-Object byte[] ($stride * 853)
+    $barShot.CopyPixels($buf, $stride, 0)
+    $centres = @()
+    foreach ($b in $captionButtons) {
+        $p = $b.TransformToAncestor($generalRoot).Transform((New-Object System.Windows.Point(0, 0)))
+        $y0 = [int][math]::Round($p.Y); $y1 = [int][math]::Round($p.Y + $b.ActualHeight)
+        $x0 = [int][math]::Round($p.X); $x1 = [int][math]::Round($p.X + $b.ActualWidth)
+        $minY = 999; $maxY = -1
+        for ($y = $y0; $y -lt $y1; $y++) {
+            for ($x = $x0; $x -lt $x1; $x++) {
+                $i = $y * $stride + $x * 4
+                # #1A1A1A title bar; anything brighter inside the button box is the glyph.
+                if (($buf[$i] + $buf[$i + 1] + $buf[$i + 2]) -gt 108) {
+                    if ($y -lt $minY) { $minY = $y }
+                    if ($y -gt $maxY) { $maxY = $y }
+                    break
+                }
+            }
+        }
+        if ($maxY -ge 0) { $centres += [math]::Round(($minY + $maxY) / 2, 2) }
+    }
+    $spread = ($centres | Measure-Object -Minimum -Maximum)
+    Check 'the four caption icons share one ink centre' (($centres.Count -eq 4) -and (($spread.Maximum - $spread.Minimum) -le 1.0)) ("centres=" + ($centres -join ','))
+}
 $windowType.GetMethod('ShowGeneralSettings', $pubFlags).Invoke($generalWindow, @()) | Out-Null
 Pump 200
 Check 'the gear opens a panel over the window' ([bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
