@@ -636,8 +636,18 @@ if ($null -ne $aboutPage) {
     }
     Check 'the update card is found for row counting' ($null -ne $updateCard) ''
     if ($null -ne $updateCard) {
+        # Counted through the tree: the version row now shares its line with the action button.
         $rowCount = 0
-        foreach ($child in $updateCard.Content.Children) { if ($child.GetType().Name -eq 'KeyValueRow') { $rowCount++ } }
+        $rowQueue = New-Object 'System.Collections.Queue'
+        $rowQueue.Enqueue($updateCard)
+        while ($rowQueue.Count -gt 0) {
+            $node = $rowQueue.Dequeue()
+            if ($node.GetType().Name -eq 'KeyValueRow') { $rowCount++ }
+            if ($node -is [System.Windows.Media.Visual] -or $node -is [System.Windows.Controls.ContentControl]) {
+                $kids = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($node)
+                for ($i = 0; $i -lt $kids; $i++) { $rowQueue.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($node, $i)) }
+            }
+        }
         Check 'the update card shows only the current version row' ($rowCount -eq 1) "rows=$rowCount"
     }
     Check 'the status line starts hidden' ($statusText.Visibility -eq [System.Windows.Visibility]::Collapsed) "visibility=$($statusText.Visibility)"

@@ -42,9 +42,40 @@ namespace QuadVitals.Settings
         {
             Card card = new Card("更新和校验");
 
+            // 版本号与按钮同一行：按钮挂在它要操作的那一行上，而不是孤零零地漂在卡片中间。
             KeyValueRow current = new KeyValueRow("当前版本", ProductVersion.SemVer);
             AutomationProperties.SetAutomationId(current, "AboutUpdateCurrent");
-            card.Content.Children.Add(current);
+
+            StackPanel actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            _checkButton = new FlatButton("检查更新", true);
+            AutomationProperties.SetAutomationId(_checkButton, "AboutUpdateCheck");
+            _checkButton.Click += (sender, e) => BeginUpdateFlow();
+            actions.Children.Add(_checkButton);
+
+            _cancelButton = new FlatButton("取消");
+            AutomationProperties.SetAutomationId(_cancelButton, "AboutUpdateCancel");
+            _cancelButton.Margin = new Thickness(8, 0, 0, 0);
+            _cancelButton.Visibility = Visibility.Collapsed;
+            _cancelButton.Click += (sender, e) =>
+            {
+                _updateCancelled = true;
+                SetStatus("正在取消…", Theme.TextSecondary);
+            };
+            actions.Children.Add(_cancelButton);
+
+            Grid head = new Grid();
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            head.Children.Add(current);
+            Grid.SetColumn(actions, 1);
+            head.Children.Add(actions);
+            card.Content.Children.Add(head);
 
             _progressTrack = new Grid
             {
@@ -81,29 +112,6 @@ namespace QuadVitals.Settings
             AutomationProperties.SetAutomationId(_updateStatus, "AboutUpdateStatus");
             card.Content.Children.Add(_updateStatus);
 
-            StackPanel buttons = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-
-            _checkButton = new FlatButton("检查更新", true);
-            AutomationProperties.SetAutomationId(_checkButton, "AboutUpdateCheck");
-            _checkButton.Click += (sender, e) => BeginUpdateFlow();
-            buttons.Children.Add(_checkButton);
-
-            _cancelButton = new FlatButton("取消");
-            AutomationProperties.SetAutomationId(_cancelButton, "AboutUpdateCancel");
-            _cancelButton.Margin = new Thickness(8, 0, 0, 0);
-            _cancelButton.Visibility = Visibility.Collapsed;
-            _cancelButton.Click += (sender, e) =>
-            {
-                _updateCancelled = true;
-                SetStatus("正在取消…", Theme.TextSecondary);
-            };
-            buttons.Children.Add(_cancelButton);
-
-            card.Content.Children.Add(buttons);
             card.Content.Children.Add(new TextBlock
             {
                 Text = "更新包从 GitHub Releases 获取；下载完成后按发布清单校验 SHA-256，通过才会启动安装程序。",
