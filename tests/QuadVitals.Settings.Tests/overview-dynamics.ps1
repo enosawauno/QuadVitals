@@ -39,6 +39,19 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         Check 'the fan card has a value readout' ($null -ne (Find-ById $ovRoot 'FanValue')) ''
         Check 'the fan card has a caption and a bar' (($null -ne (Find-ById $ovRoot 'FanCaption')) -and ($null -ne (Find-ById $ovRoot 'FanBar'))) ''
 
+        # 标题图标是手绘叶轮，不再是 15 px 的系统字形：那个字形在这个尺寸只剩几根细线。
+        $fanCardInner = Read-Field $fanCard '_card' $flags
+        $fanTitleGroup = Read-Field $fanCardInner '_titleGroup' $flags
+        $fanIcon = if (($null -ne $fanTitleGroup) -and ($fanTitleGroup.Children.Count -gt 1)) { $fanTitleGroup.Children[0] } else { $null }
+        Check 'the fan card icon is drawn, not a glyph' (($null -ne $fanIcon) -and ($fanIcon -is [System.Windows.Controls.Viewbox])) ''
+        Check 'the fan card icon is 18 px square' (($null -ne $fanIcon) -and ([double]$fanIcon.Width -eq 18) -and ([double]$fanIcon.Height -eq 18)) ''
+        Check 'the fan card title still reads the same' ($fanCardInner.Title -eq '风扇') ''
+
+        # 说明行只能一行：换行会把整排格子的对齐拉歪，放不下就用省略号。
+        $cpuCaption = Read-Field (Read-Field $ovPage '_cpuTile' $flags) '_caption' $flags
+        Check 'the cpu caption never wraps' (($null -ne $cpuCaption) -and ($cpuCaption.TextWrapping -eq [System.Windows.TextWrapping]::NoWrap)) ''
+        Check 'the cpu caption ellipsizes instead of clipping' (($null -ne $cpuCaption) -and ($cpuCaption.TextTrimming -eq [System.Windows.TextTrimming]::CharacterEllipsis)) ''
+
         # Feed the card a synthetic snapshot shaped exactly like the agent's: 1700 RPM is the
         # danger band, and the readout must follow it instead of showing a hard-coded colour.
         $fanType = $coreAsm.GetType('QuadVitals.Core.MetricsSnapshot+FanReading')

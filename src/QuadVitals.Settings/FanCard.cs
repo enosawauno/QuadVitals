@@ -87,7 +87,9 @@ namespace QuadVitals.Settings
         {
             _loop = new FrameLoop(this, OnFrame);
             // 与设备卡、网速卡同一个字形位（风扇），三卡并排时标题不会左移。
+            // 图标随后换成手绘叶轮：系统字形在这个尺寸上只剩几根细线。
             _card = new Card("风扇", "");
+            _card.ReplaceIcon(BuildFanIcon());
             AutomationProperties.SetAutomationId(_card, "FanCard");
 
             FlatButton gear = new FlatButton(string.Empty)
@@ -666,6 +668,38 @@ namespace QuadVitals.Settings
             if (value < 0) return 0;
             if (value > 1) return 1;
             return value;
+        }
+
+        /// <summary>
+        /// 标题左侧的风扇图标。系统字形是一圈细线，在 15 px 下几乎看不见；改用卡片自己那片扇叶
+        /// 缩到 18 px，实心叶轮加中心轴，与被吹风的那台转子是同一个形状；五片与卡片一致，
+        /// 小尺寸下也能看出叶片之间的缝。
+        /// </summary>
+        private static FrameworkElement BuildFanIcon()
+        {
+            Canvas blades = new Canvas { Width = 96, Height = 96 };
+            for (int i = 0; i < 5; i++)
+            {
+                blades.Children.Add(new Path
+                {
+                    Data = Geometry.Parse("M 48,14 C 62,18 70,30 68,44 L 57,50 C 53,38 50,26 48,18 Z"),
+                    Fill = Theme.TextSecondaryBrush,
+                    RenderTransform = new RotateTransform(i * 72.0, 48, 48)
+                });
+            }
+            Ellipse hub = new Ellipse { Width = 14, Height = 14, Fill = Theme.TextSecondaryBrush };
+            Canvas.SetLeft(hub, 41);
+            Canvas.SetTop(hub, 41);
+            blades.Children.Add(hub);
+
+            return new Viewbox
+            {
+                Width = 18,
+                Height = 18,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 7, 0),
+                Child = blades
+            };
         }
 
         public void Dispose()

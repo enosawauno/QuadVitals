@@ -18,8 +18,19 @@ namespace QuadVitals.UI
         private readonly StackPanel _content;
         private readonly TextBlock _title;
         private readonly ContentControl _headerRight;
+        private readonly StackPanel _titleGroup;
 
-        public Card(string title, string glyph = null)
+        public Card(string title) : this(title, (FrameworkElement)null)
+        {
+        }
+
+        /// <summary>标题左侧的系统图标字形（Segoe MDL2 Assets）。</summary>
+        public Card(string title, string glyph) : this(title, GlyphText(glyph))
+        {
+        }
+
+        /// <summary>标题左侧的自绘图标；供“系统字形在小尺寸下只剩骨架”的场合使用。</summary>
+        public Card(string title, FrameworkElement icon)
         {
             // The reference cards are flat #303030 blocks on #191919 with no visible border.
             Background = Theme.SurfaceCardBrush;
@@ -43,20 +54,9 @@ namespace QuadVitals.UI
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            if (!string.IsNullOrEmpty(glyph))
-            {
-                titleGroup.Children.Add(new TextBlock
-                {
-                    Text = glyph,
-                    FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                    FontSize = 15,
-                    Foreground = Theme.TextSecondaryBrush,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 0, 7, 0)
-                });
-            }
+            _titleGroup = titleGroup;
+            if (icon != null) titleGroup.Children.Add(icon);
             titleGroup.Children.Add(_title);
-
             _headerRight = new ContentControl
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -76,6 +76,31 @@ namespace QuadVitals.UI
             root.Children.Add(_content);
 
             Child = root;
+        }
+
+        /// <summary>与标题行（15 px 字高、右侧 7 px 间距）对齐的系统字形块。</summary>
+        private static FrameworkElement GlyphText(string glyph)
+        {
+            if (string.IsNullOrEmpty(glyph)) return null;
+            return new TextBlock
+            {
+                Text = glyph,
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 15,
+                Foreground = Theme.TextSecondaryBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 7, 0)
+            };
+        }
+
+        /// <summary>
+        /// 换掉标题左侧的图标。系统字形在小尺寸下只剩几条细线时，卡片改成手绘图标的入口。
+        /// </summary>
+        public void ReplaceIcon(FrameworkElement icon)
+        {
+            if (icon == null || _titleGroup == null) return;
+            if (_titleGroup.Children.Count > 1) _titleGroup.Children.RemoveAt(0);
+            _titleGroup.Children.Insert(0, icon);
         }
 
         public string Title
@@ -578,8 +603,9 @@ namespace QuadVitals.UI
             _caption.FontSize = 11.5;
             _caption.Foreground = Theme.TextSecondaryBrush;
             // 一行：说明文字折成两行时整排格子的对齐就被拉歪了（CPU 格出现过），
-            // 所以宁精简文案也不允许换行。
+            // 所以宁精简文案也不允许换行；真的放不下时用省略号，不要硬切半个字。
             _caption.TextWrapping = TextWrapping.NoWrap;
+            _caption.TextTrimming = TextTrimming.CharacterEllipsis;
             _caption.Margin = new Thickness(0, 10, 0, 0);
             Children.Add(_caption);
         }
