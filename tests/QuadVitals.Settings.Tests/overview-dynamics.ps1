@@ -377,8 +377,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'always-on delivers frames without hover' ($frames -gt 0) "frames=$frames"
             # 保存一次静默设置（同内容）不能把当前概览页 Dispose 掉，否则风扇会从这一秒起永久停转。
             $animWindow.SaveSettingsQuietly($animWindow.CurrentSettings.Clone())
-            Pump 250
-            Check 'a quiet save keeps the visible overview alive' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            Check 'a quiet save keeps the visible overview alive' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
             $animCard.SetAlwaysAnimate($false)
             Pump 200
             Check 'always-off stops without hover' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
@@ -408,8 +407,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             # Restoring refreshes once from the real agent, which empties the card on this
             # machine (no fan channels), so feed the synthetic snapshot again before asserting.
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
-            Pump 300
-            Check 'restoring the window resumes the loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            Check 'restoring the window resumes the loop' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
 
             # Focus pause: the window is still visible, but every frame loop must stop. The
             # overview timer keeps reading snapshots and pushing history so the curve has no gap.
@@ -523,12 +521,11 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 Check 'battery mode stops the fan loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
                 $animWindow.CurrentSettings.PauseAnimationsOnBattery = $false
                 $configureBattery.Invoke($null, @($false)) | Out-Null
-                Pump 250
-                Check 'turning the battery policy off restores animations' (-not [bool]$envType.GetProperty('AnimationsDisabled').GetValue($null)) ''
+                # 固定 250 ms 不等价于「动画循环跑过一拍」：机器忙时帧还没送到就断言了。
+                Check 'turning the battery policy off restores animations' (Wait-Until { -not [bool]$envType.GetProperty('AnimationsDisabled').GetValue($null) }) ''
                 $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
                 $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
-                Pump 200
-                Check 'battery override resumes the fan loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+                Check 'battery override resumes the fan loop' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
             }
             finally {
                 $setPower.Invoke($null, @($null)) | Out-Null

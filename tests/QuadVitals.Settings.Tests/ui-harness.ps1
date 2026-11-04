@@ -43,6 +43,16 @@ function Pump([int]$ms) {
     [System.Windows.Threading.Dispatcher]::PushFrame($frame)
     $timer.Remove_Tick($handler)
 }
+# A fixed Pump is not the same as "wait until the animation loop ran": on a busy machine the frame
+# arrives later, so wait for the condition and fail only on timeout.
+function Wait-Until([scriptblock]$Condition, [int]$TimeoutMs = 3000) {
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if (& $Condition) { return $true }
+        Pump 50
+    }
+    return [bool](& $Condition)
+}
 # CSS-free way to write CJK into an ASCII-only file: literal Chinese would be decoded as GBK.
 function U([int[]]$codes) { -join ($codes | ForEach-Object { [char]$_ }) }
 function AutoId($element) { return [System.Windows.Automation.AutomationProperties]::GetAutomationId($element) }
