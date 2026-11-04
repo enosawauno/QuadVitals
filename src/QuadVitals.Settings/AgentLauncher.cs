@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using QuadVitals.Core;
@@ -9,8 +10,10 @@ namespace QuadVitals.Settings
     /// Starts the sampling agent when the dashboard finds it missing.
     ///
     /// The logon task is tried first: it launches at high integrity, which the temperature sensor
-    /// needs, and it raises no UAC prompt. A direct process start is the fallback for a developer
-    /// build that has no task registered (temperature then reports "--" until it runs elevated).
+    /// needs, and it raises no UAC prompt. When the task is unavailable the exe is started through
+    /// the shell's "runas" verb instead of a plain process start: a plain start inherits the
+    /// dashboard's token, and an unelevated agent reads no CPU temperature and no fan channels -
+    /// a restart that reports success and delivers half the metrics.
     /// </summary>
     internal static class AgentLauncher
     {
@@ -48,24 +51,91 @@ namespace QuadVitals.Settings
         /// <summary>Starts the agent. Returns null when a start was triggered, else a sentence to show.</summary>
         public static string Start()
         {
-            if (TryRunTask()) return null;
-
+            bool logonTaskStarted = TryRunTask();
             string exe = ResolveExe();
-            if (exe == null) return "找不到传感器程序（QuadVitals.Agent.exe）：它应与设置程序同目录，或已安装到本机";
+
+            AgentLaunchMode mode = AgentLaunchPlan.Decide(logonTaskStarted, exe);
+            if (mode == AgentLaunchMode.LogonTask) return null;
+            if (mode == AgentLaunchMode.MissingExe)
+            {
+                return "找不到传感器程序（QuadVitals.Agent.exe）：它应与设置程序同目录，或已安装到本机";
+            }
 
             try
             {
                 ProcessStartInfo info = new ProcessStartInfo(exe)
                 {
                     WorkingDirectory = Path.GetDirectoryName(exe),
-                    UseShellExecute = true
+                    UseShellExecute = true,
+                    Verb = "runas"
                 };
                 Process.Start(info);
                 return null;
             }
+            catch (Win32Exception ex)
+            {
+                if (AgentLaunchPlan.IsElevationCancelled(ex.NativeErrorCode))
+                {
+                    return AgentDiagnostics.ElevationCancelled;
+                }
+                return "无法启动传感器：" + ex.Message;
+            }
             catch (Exception ex)
             {
                 return "无法启动传感器：" + ex.Message;
+            }
+        }
+
+        /// <summary>
+        /// Recreates the logon task with one UAC prompt. This is the cure for the state the fallback
+        /// above only papers over: a disabled or missing task means every start is a fallback, and a
+        /// fallback that is cancelled leaves the agent without temperature and fans.
+        /// </summary>
+        public static string RepairLogonTask()
+        {
+            string exe = ResolveExe();
+            if (exe == null)
+            {
+                return "找不到传感器程序（QuadVitals.Agent.exe）：它应与设置程序同目录，或已安装到本机";
+            }
+
+            string arguments = "/Create /TN \"" + TaskName + "\" /TR \"" + exe + " --quiet\"" +
+                               " /SC ONLOGON /RL HIGHEST /F";
+            try
+            {
+                ProcessStartInfo info = new ProcessStartInfo("schtasks.exe", arguments)
+                {
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                using (Process process = Process.Start(info))
+                {
+                    if (process == null) return AgentDiagnostics.TaskRepairFailed("schtasks 无法启动");
+                    if (!process.WaitForExit(20000))
+                    {
+                        try { process.Kill(); } catch (Exception) { }
+                        return AgentDiagnostics.TaskRepairFailed("schtasks 超时");
+                    }
+                    if (process.ExitCode != 0)
+                    {
+                        return AgentDiagnostics.TaskRepairFailed("schtasks 退出码 " + process.ExitCode);
+                    }
+                    return null;
+                }
+            }
+            catch (Win32Exception ex)
+            {
+                if (AgentLaunchPlan.IsElevationCancelled(ex.NativeErrorCode))
+                {
+                    return AgentDiagnostics.TaskRepairFailed("已取消管理员授权");
+                }
+                return AgentDiagnostics.TaskRepairFailed(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return AgentDiagnostics.TaskRepairFailed(ex.Message);
             }
         }
 

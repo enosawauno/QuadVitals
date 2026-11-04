@@ -448,6 +448,36 @@ namespace QuadVitals.Core.Tests
             Equal("未读取到主板风扇", AgentDiagnostics.FanUnavailableLine(oldAgent), "旧 Agent 风扇文案不变");
         }
 
+        // ---- agent launch path ---------------------------------------------------------
+
+        private static void AgentLaunchPlanBehaviour()
+        {
+            // 任务优先：任务能跑就不该弹 UAC，也不该管 exe 路径（任务自己记着）。
+            Equal(AgentLaunchMode.LogonTask, AgentLaunchPlan.Decide(true, null), "任务可用时不走提权路径");
+            Equal(AgentLaunchMode.LogonTask, AgentLaunchPlan.Decide(true, @"C:\x\QuadVitals.Agent.exe"), "任务可用时不看 exe");
+            // 任务不可用必须走 runas：普通 Process.Start 继承非提权令牌，温度与风扇永远读不到。
+            Equal(AgentLaunchMode.ElevatedShell, AgentLaunchPlan.Decide(false, @"C:\x\QuadVitals.Agent.exe"), "任务不可用改走提权启动");
+            True(AgentLaunchPlan.PromptsForElevation(AgentLaunchMode.ElevatedShell), "提权路径会弹 UAC");
+            True(!AgentLaunchPlan.PromptsForElevation(AgentLaunchMode.LogonTask), "计划任务路径不弹 UAC");
+            Equal(AgentLaunchMode.MissingExe, AgentLaunchPlan.Decide(false, null), "没有 exe 就报缺文件");
+            Equal(AgentLaunchMode.MissingExe, AgentLaunchPlan.Decide(false, string.Empty), "空路径按缺文件处理");
+            True(AgentLaunchPlan.IsElevationCancelled(1223), "UAC 取消码被识别");
+            True(!AgentLaunchPlan.IsElevationCancelled(5), "拒绝访问不等于用户取消");
+
+            // 面板「权限」行：三种状态分开，不能把旧 Agent 说成未提权。
+            MetricFlags known = MetricFlags.ElevationKnown;
+            Equal("未提权：CPU 温度与风扇读不到", AgentDiagnostics.ElevationLine(known), "已知未提权");
+            Equal("管理员：CPU 温度与风扇可读", AgentDiagnostics.ElevationLine(known | MetricFlags.Elevated), "已提权");
+            Equal("未上报（旧版 Agent）", AgentDiagnostics.ElevationLine(MetricFlags.None), "旧 Agent 不下断言");
+            True(AgentDiagnostics.IsKnownUnelevated(known), "flags 与快照两个入口同判");
+            True(!AgentDiagnostics.IsKnownUnelevated(known | MetricFlags.Elevated), "提权不算未提权");
+
+            // 重启回来却没提权时必须说出来并给修复入口，不能报成功。
+            True(AgentDiagnostics.NotElevatedAfterRestart.Contains("修复登录计划任务"), "未提权重启结果给出修复入口");
+            True(AgentDiagnostics.ElevationCancelled.Contains("CPU 温度"), "取消 UAC 时说明温度读不到");
+            Equal("修复登录计划任务失败：schtasks 超时", AgentDiagnostics.TaskRepairFailed("schtasks 超时"), "修复失败文案");
+        }
+
         // ---- agent control events ------------------------------------------------------
 
         private static void AgentControlBehaviour()

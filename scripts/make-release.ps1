@@ -48,6 +48,13 @@ if ($Build) {
     if ($LASTEXITCODE -ne 0) { throw "build-deskband.ps1 failed ($LASTEXITCODE)" }
 }
 
+# A -DevTools dashboard can be told to stop recovering on its own; shipping that switch would let a
+# stray environment variable disable auto recovery on a user's machine.
+$devToolsMarker = Join-Path $out 'ui\.devtools'
+if (Test-Path -LiteralPath $devToolsMarker) {
+    throw 'build\out\ui is a -DevTools build (recording switch compiled in): rebuild with scripts\build-ui.ps1 first'
+}
+
 # ---------------------------------------------------------------- stage ----
 Step 'stage package tree'
 $releaseRoot = if ($OutDir) { $OutDir } else { Join-Path $out 'release' }

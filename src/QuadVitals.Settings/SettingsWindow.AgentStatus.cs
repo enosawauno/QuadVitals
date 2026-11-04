@@ -68,6 +68,37 @@ namespace QuadVitals.Settings
             _metricWatch.AgentRestarted();
 
             ScheduleAgentPanelRefresh();
+            VerifyElevationAfterStart(DateTime.UtcNow);
+        }
+
+        /// <summary>
+        /// 启动后确认第一帧是不是提权实例。回退路径（没有登录计划任务）可能没拿到提权，
+        /// 也可能只拿到一个非提权进程：两种都能让“启动成功”与“温度和风扇还是 --”同时成立。
+        /// </summary>
+        private void VerifyElevationAfterStart(DateTime startedUtc)
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                MetricsSnapshot frame = WaitForFrameAfter(startedUtc, 12000);
+                if (frame == null || !AgentDiagnostics.IsKnownUnelevated(frame)) return;
+                TryOnDispatcher(() => ShowNotice(AgentDiagnostics.NotElevatedAfterRestart, true));
+            });
+        }
+
+        /// <summary>
+        /// 面板上的「修复登录计划任务」：以一次 UAC 重建任务，然后把现役实例换掉。
+        /// 现役实例有可能是回退路径起的非提权进程，光修任务不重启它也不算修好。
+        /// </summary>
+        public void RepairAgentTaskFromDialog()
+        {
+            string error = AgentLauncher.RepairLogonTask();
+            if (error != null)
+            {
+                ShowNotice(error, true);
+                ScheduleAgentPanelRefresh();
+                return;
+            }
+            RestartAgentFromDialog();
         }
 
         public void SetAgentStatus(bool alive, double ageSeconds)
@@ -207,16 +238,20 @@ namespace QuadVitals.Settings
             {
                 return "传感器已请求启动，但进程没有出现。请检查登录计划任务是否被禁用";
             }
-            if (!WaitForFrameAfter(exitedUtc, 12000))
+            if (!WaitForFrameAfter(exitedUtc, 12000, out MetricsSnapshot frame))
             {
                 return "传感器已重新启动，但还没有写出新数据。如果温度仍是 --，请检查登录计划任务是否在运行";
             }
+            // 新实例没拿到管理员权限：进程活着、帧也在写，但温度和风扇注定读不到。
+            // 这种结果不能报成“重启成功”。
+            if (AgentDiagnostics.IsKnownUnelevated(frame)) return AgentDiagnostics.NotElevatedAfterRestart;
             return null;
         }
 
-        /// <summary>True once a frame newer than <paramref name="afterUtc"/> is alive on the channel.</summary>
-        private static bool WaitForFrameAfter(DateTime afterUtc, int timeoutMs)
+        /// <summary>Waits for a frame newer than <paramref name="afterUtc" /> and returns the one that proved it.</summary>
+        private static bool WaitForFrameAfter(DateTime afterUtc, int timeoutMs, out MetricsSnapshot frame)
         {
+            frame = null;
             DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             while (DateTime.UtcNow < deadline)
             {
@@ -228,6 +263,7 @@ namespace QuadVitals.Settings
                         if (snapshot != null && snapshot.TimestampUtc > afterUtc &&
                             snapshot.IsAlive(DateTime.UtcNow, MetricsSnapshot.AliveTimeout))
                         {
+                            frame = snapshot;
                             return true;
                         }
                     }
@@ -235,6 +271,13 @@ namespace QuadVitals.Settings
                 System.Threading.Thread.Sleep(200);
             }
             return false;
+        }
+
+        /// <summary>Same wait, for callers that only need the frame (null when none arrived).</summary>
+        private static MetricsSnapshot WaitForFrameAfter(DateTime afterUtc, int timeoutMs)
+        {
+            MetricsSnapshot frame;
+            return WaitForFrameAfter(afterUtc, timeoutMs, out frame) ? frame : null;
         }
 
         /// <summary>Marshals back to the window thread; a window that closed mid-restart has nowhere to go.</summary>

@@ -46,8 +46,38 @@ namespace QuadVitals.Core
         /// </summary>
         public static bool IsKnownUnelevated(MetricsSnapshot snapshot)
         {
-            return snapshot != null && snapshot.Has(MetricFlags.ElevationKnown) &&
-                   !snapshot.Has(MetricFlags.Elevated);
+            return snapshot != null && IsKnownUnelevated(snapshot.Flags);
+        }
+
+        /// <summary>Same verdict from flags the dashboard already holds, so a panel need not re-read the channel.</summary>
+        public static bool IsKnownUnelevated(MetricFlags flags)
+        {
+            return (flags & MetricFlags.ElevationKnown) != 0 && (flags & MetricFlags.Elevated) == 0;
+        }
+
+        /// <summary>
+        /// The sensor panel's permission row. Elevation is the difference between "temperature and
+        /// fans read fine" and "every number except temperature and fans read fine", so it is
+        /// stated instead of being inferred from two empty tiles.
+        /// </summary>
+        public static string ElevationLine(MetricFlags flags)
+        {
+            if ((flags & MetricFlags.ElevationKnown) == 0) return "未上报（旧版 Agent）";
+            return (flags & MetricFlags.Elevated) != 0 ? "管理员：CPU 温度与风扇可读" : "未提权：CPU 温度与风扇读不到";
+        }
+
+        /// <summary>Reported after a restart that produced a frame, but an unelevated one.</summary>
+        public const string NotElevatedAfterRestart =
+            "已启动，但没有拿到管理员权限：CPU 温度与风扇读不到。点“修复登录计划任务”后重试";
+
+        /// <summary>Reported when the owner dismissed the UAC prompt a start request raised.</summary>
+        public const string ElevationCancelled =
+            "已取消管理员授权：CPU 温度与风扇读不到。可点“修复登录计划任务”改为免 UAC 启动";
+
+        /// <summary>Reported when the repair of the logon task itself failed.</summary>
+        public static string TaskRepairFailed(string reason)
+        {
+            return "修复登录计划任务失败：" + reason;
         }
 
         /// <summary>Why the CPU temperature tile is empty: no admin token vs. a dead sensor session.</summary>

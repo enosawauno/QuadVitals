@@ -1406,6 +1406,28 @@ Check 'the action starts the sensor while offline' ($deadAction.Content -eq $sta
 Check 'the panel names the shared-memory channel' ((Wait-ById $livePanel 'AgentSubline') -ne $null) ''
 Check 'the panel names the shared-memory channel' ((Find-ById $livePanel 'AgentSubline') -ne $null) ''
 
+# Elevation decides whether CPU temperature and fans can be read at all, so the panel states it
+# instead of leaving the user to guess from two empty tiles.
+function New-AgentStateWithFlags([bool]$alive, [int]$flags) {
+    $s = New-AgentState $alive
+    $field = $stateType.GetField('Flags')
+    $field.SetValue($s, [Enum]::ToObject($field.FieldType, $flags))
+    return $s
+}
+$elevationKnown = 8192          # MetricFlags.ElevationKnown
+$elevationElevated = 16384      # MetricFlags.Elevated
+$unelevatedPanel = $buildPanel.Invoke($dialog, @((New-AgentStateWithFlags $true $elevationKnown)))
+$elevatedPanel = $buildPanel.Invoke($dialog, @((New-AgentStateWithFlags $true ($elevationKnown -bor $elevationElevated))))
+$unelevatedLine = (-join [char[]](0x672A, 0x63D0, 0x6743, 0xFF1A)) + 'CPU ' + (-join [char[]](0x6E29, 0x5EA6, 0x4E0E, 0x98CE, 0x6247, 0x8BFB, 0x4E0D, 0x5230))
+$elevatedLine = (-join [char[]](0x7BA1, 0x7406, 0x5458, 0xFF1A)) + 'CPU ' + (-join [char[]](0x6E29, 0x5EA6, 0x4E0E, 0x98CE, 0x6247, 0x53EF, 0x8BFB))
+$unelevatedTexts = @(Find-ByTypeName $unelevatedPanel 'TextBlock' | ForEach-Object { $_.Text })
+$elevatedTexts = @(Find-ByTypeName $elevatedPanel 'TextBlock' | ForEach-Object { $_.Text })
+Check 'an unelevated panel says temperature and fans cannot be read' ($unelevatedTexts -contains $unelevatedLine) ('texts=' + ($unelevatedTexts -join '|'))
+Check 'an elevated panel says temperature and fans are readable' ($elevatedTexts -contains $elevatedLine) ('texts=' + ($elevatedTexts -join '|'))
+Check 'an unelevated panel offers the task repair' ((Find-ById $unelevatedPanel 'AgentRepairTask') -is [System.Windows.Controls.Button]) 'repair button expected'
+Check 'an elevated panel does not offer the task repair' ($null -eq (Find-ById $elevatedPanel 'AgentRepairTask')) 'no repair button expected'
+Check 'an agent that reported nothing does not offer the task repair' ($null -eq (Find-ById $livePanel 'AgentRepairTask')) 'no repair button expected'
+
 $statusField = $windowType.GetField('_agentStatus', $flags)
 $statusBlock = $statusField.GetValue($dialogWindow)
 $dialogWindow.SetAgentStatus($true, 0.4)
@@ -1421,6 +1443,21 @@ Check 'auto recovery waits one confirming tick' (-not $should.Invoke($null, @($f
 Check 'auto recovery fires when due' ($should.Invoke($null, @($false, 2, 0, $nowUtc, [DateTime]::MinValue))) ''
 Check 'auto recovery stops after five attempts' (-not $should.Invoke($null, @($false, 9, 5, $nowUtc, [DateTime]::MinValue))) ''
 Check 'auto recovery does nothing while alive' (-not $should.Invoke($null, @($true, 9, 0, $nowUtc, [DateTime]::MinValue))) ''
+# Recording and manual demos need a dashboard that stays offline until a person clicks, so the
+# watchdog has an environment switch. It exists only in a -DevTools build; a release binary must
+# ignore the variable entirely.
+$env:QUADVITALS_NO_AUTO_RECOVERY = '1'
+try {
+    $devTools = [bool]$recoveryType.GetField('DevToolsAvailable', $staticFlags).GetValue($null)
+    if ($devTools) {
+        Check 'the recording switch stops an automatic start' (-not $should.Invoke($null, @($false, 2, 0, $nowUtc, [DateTime]::MinValue))) ''
+    } else {
+        Check 'a release build ignores the recording switch' ($should.Invoke($null, @($false, 2, 0, $nowUtc, [DateTime]::MinValue))) ''
+    }
+} finally {
+    Remove-Item Env:\QUADVITALS_NO_AUTO_RECOVERY -ErrorAction SilentlyContinue
+}
+Check 'auto recovery fires again once the switch is gone' ($should.Invoke($null, @($false, 2, 0, $nowUtc, [DateTime]::MinValue))) ''
 $statusType = $asm.GetType('QuadVitals.Settings.AgentStatusDialog')
 $autoLine = $statusType.GetMethod('AutoRecoveryLine', $staticFlags).Invoke($null, @())
 Check 'the status panel quotes the live backoff' (($autoLine -like '*3 / 5 / 10 / 30*') -and ($autoLine -notlike '*60*')) ("line=$autoLine")

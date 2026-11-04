@@ -66,7 +66,7 @@ namespace QuadVitals.Settings
 
             content.Children.Add(DetailRow("通道", "Local\\QuadVitals.Metrics.v1"));
             content.Children.Add(DetailRow("采样数据", DescribeData(state)));
-            content.Children.Add(DetailRow("启动方式", "登录计划任务"));
+            content.Children.Add(DetailRow("权限", AgentDiagnostics.ElevationLine(state.Flags)));
             content.Children.Add(DetailRow("自动恢复", AutoRecoveryLine()));
 
             StackPanel buttons = new StackPanel
@@ -75,6 +75,23 @@ namespace QuadVitals.Settings
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(0, 20, 0, 0)
             };
+
+            // 未提权的 agent 读不到 MSR 与 SuperIO：温度和风扇永远空着，重启多少次都一样。
+            // 修复入口放在面板上，状态本身说明为什么重启完温度还是 --。
+            if (AgentDiagnostics.IsKnownUnelevated(state.Flags))
+            {
+                FlatButton repair = new FlatButton("修复登录计划任务");
+                repair.Margin = new Thickness(0, 0, 10, 0);
+                repair.ToolTip = "以管理员身份重建登录计划任务：之后启动传感器不再弹 UAC，温度与风扇可读";
+                AutomationProperties.SetAutomationId(repair, "AgentRepairTask");
+                repair.Click += (sender, e) =>
+                {
+                    repair.IsEnabled = false;
+                    repair.Content = "修复中…";
+                    _window.RepairAgentTaskFromDialog();
+                };
+                buttons.Children.Add(repair);
+            }
 
             FlatButton action = new FlatButton(state.Alive ? "重启传感器" : "启动传感器", true);
             action.MinWidth = 96;

@@ -2,7 +2,7 @@
 # This box has no .NET SDK and no WPF XAML compiler, so the UI is plain C# that references the
 # framework's WPF runtime assemblies directly (no BAML, no XAML build step).
 # ASCII only: PS 5.1 misreads BOM-less UTF-8 as GBK.
-param([switch]$NoRun, [switch]$SkipCore, [string]$OutDir = '')
+param([switch]$NoRun, [switch]$SkipCore, [string]$OutDir = '', [switch]$DevTools)
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -54,6 +54,11 @@ $markPng = Join-Path $root 'assets\icon\png\mark-128.png'
 if (-not (Test-Path -LiteralPath $markPng)) { $markPng = Join-Path $root 'assets\icon\png\mark-64.png' }
 $markArg = if (Test-Path -LiteralPath $markPng) { '/resource:' + $markPng + ',QuadVitals.Settings.mark.png' } else { $null }
 
+# Recording and soak runs need a dashboard that stays in the offline state instead of starting the
+# agent two ticks later. That environment switch only exists in a -DevTools build, so a release
+# binary cannot be silently put into "never recovers on its own" by a stray variable.
+$devToolsArg = if ($DevTools) { '/define:QV_DEV_TOOLS' } else { $null }
+
 & $csc /nologo /target:winexe /langversion:7.3 /codepage:65001 /optimize+ /debug- `
     /out:"$exe" `
     /r:"$coreDll" `
@@ -63,10 +68,22 @@ $markArg = if (Test-Path -LiteralPath $markPng) { '/resource:' + $markPng + ',Qu
     $wpfRefs `
     $iconArg `
     $markArg `
+    $devToolsArg `
     $appSources `
     $sharedAssemblyInfo
 if ($LASTEXITCODE -ne 0) { throw "Settings build failed ($LASTEXITCODE)" }
 "Settings -> $exe"
+
+# Marker for the release packager: a -DevTools build carries the recording switch and must never
+# end up inside a shipped package, so make-release.ps1 refuses while this file is present.
+$devToolsMarker = Join-Path $outDir '.devtools'
+if ($DevTools) {
+    [IO.File]::WriteAllText($devToolsMarker, 'QV_DEV_TOOLS')
+    "dev tools: recording switch compiled in"
+}
+elseif (Test-Path -LiteralPath $devToolsMarker) {
+    Remove-Item -LiteralPath $devToolsMarker -Force
+}
 
 if ($NoRun) { return }
 "launching $exe"

@@ -24,11 +24,38 @@ namespace QuadVitals.Settings
         /// <summary>True when another automatic start should be issued now.</summary>
         public static bool ShouldAttempt(bool alive, int deadTicks, int attempts, DateTime nowUtc, DateTime nextAllowedUtc)
         {
+            if (AutoRecoveryDisabled) return false;
             if (alive) return false;
             if (deadTicks < 2) return false;
             if (attempts < 0 || attempts >= DelaysSeconds.Length) return false;
             return nowUtc >= nextAllowedUtc;
         }
+
+        /// <summary>
+        /// Environment switch for recording and manual testing: with it set, a dashboard left open
+        /// keeps showing the offline state instead of starting the agent two ticks later, so the
+        /// start button can be demonstrated by a person rather than by the watchdog.
+        ///
+        /// Compiled only with QV_DEV_TOOLS (scripts\build-ui.ps1 -DevTools). A release binary never
+        /// contains it, so a stray environment variable cannot stop a shipped app from recovering.
+        /// </summary>
+        public const string DisableVariable = "QUADVITALS_NO_AUTO_RECOVERY";
+
+#if QV_DEV_TOOLS
+        public const bool DevToolsAvailable = true;
+
+        public static bool AutoRecoveryDisabled
+        {
+            get { return Environment.GetEnvironmentVariable(DisableVariable) == "1"; }
+        }
+#else
+        public const bool DevToolsAvailable = false;
+
+        public static bool AutoRecoveryDisabled
+        {
+            get { return false; }
+        }
+#endif
 
         /// <summary>Seconds to wait after the given number of attempts have already been made.</summary>
         public static int DelayAfterAttempt(int attempts)

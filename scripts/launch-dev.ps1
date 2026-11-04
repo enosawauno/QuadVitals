@@ -169,7 +169,8 @@ if ($needBuild) {
     }
 
     Write-Log '== build dashboard' 'Cyan'
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'build-ui.ps1') -NoRun -SkipCore 2>&1 |
+    # -DevTools: the dev build carries the recording switch that keeps a dashboard on the offline state.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'build-ui.ps1') -NoRun -SkipCore -DevTools 2>&1 |
         ForEach-Object { Write-Log "  $_" }
     if ($LASTEXITCODE -ne 0) { Show-Failure 'build failed (dashboard)'; exit 1 }
 }
