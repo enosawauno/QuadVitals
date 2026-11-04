@@ -550,6 +550,36 @@ namespace QuadVitals.Core.Tests
                 True(metadata.Contains("\"kind\":\"feature\""), "metadata 带 kind");
                 True(metadata.Contains("\"fileName\":\"截图 1.png\""), "metadata 带附件名");
                 True(!metadata.Contains("agent"), "无诊断时不带 agent 字段");
+                True(!metadata.Contains("\"includeLogs\":true"), "没勾日志时不能自称带了日志");
+                True(FeedbackUploader.BuildMetadata(context, "bug", new List<string>(), true)
+                    .Contains("\"includeLogs\":true"), "勾了日志时 metadata 如实上报");
+
+                // 勾了“附带诊断日志”时，摘要与日志尾部必须真的进 multipart：本地包在上传成功后
+                // 就删了，漏传等于日志在服务端与本地都不存在。
+                FeedbackUploadRequest withLogs = new FeedbackUploadRequest
+                {
+                    Kind = "bug",
+                    Message = "带日志",
+                    MetadataJson = "{\"kind\":\"bug\",\"includeLogs\":true}",
+                    DiagnosticsText = "QuadVitals 反馈诊断\n程序版本: 9.9.9\n",
+                    Logs = new List<FeedbackLogPart>
+                    {
+                        new FeedbackLogPart { Name = "agent-temp.log", Text = "温度恢复\n" },
+                        new FeedbackLogPart { Name = "agent-slow.log", Text = "tick=500ms\n" }
+                    }
+                };
+                withLogs.AttachmentPaths.Add(attachment);
+                True(FeedbackUploader.Validate(withLogs, out error), "带日志的请求通过预检: " + error);
+
+                FakeTransport withLogsTransport = new FakeTransport();
+                True(FeedbackUploader.Upload(withLogs, withLogsTransport, dir).Ok, "带日志上传成功");
+                string logged = Encoding.UTF8.GetString(withLogsTransport.Sent);
+                True(logged.Contains("name=\"diagnostics\""), "含 diagnostics 部分");
+                True(logged.Contains("filename=\"diagnostics.txt\""), "诊断摘要文件名固定");
+                True(logged.Contains("程序版本: 9.9.9"), "诊断摘要内容在请求里");
+                True(logged.Contains("name=\"logs\"; filename=\"agent-temp.log\""), "含日志部分");
+                True(logged.Contains("name=\"logs\"; filename=\"agent-slow.log\""), "两路日志都带上");
+                True(logged.Contains("温度恢复"), "日志内容在请求里");
             }
             finally { CleanupFeedbackTemp(dir); }
         }
@@ -626,6 +656,47 @@ namespace QuadVitals.Core.Tests
 
                 Equal("20261030-143853-a1b2c3", FeedbackRecovery.IdFromPackageName("20261030-143853-a1b2c3_bug.zip"), "从文件名取 id");
                 Equal(null, FeedbackRecovery.IdFromPackageName("random.zip"), "非本产品包名返回 null");
+
+                // 勾了诊断日志的包：重建请求时必须把 diagnostics.txt 与 logs/ 一起带上。
+                File.WriteAllText(Path.Combine(dir, "agent-temp.log"), "温度恢复\n");
+                FeedbackContext logContext = new FeedbackContext
+                {
+                    AppVersion = "v2",
+                    OsVersion = "Windows Test",
+                    Architecture = "x64",
+                    CpuModel = "Test CPU",
+                    AgentSummary = "在线, cpu=1.0%",
+                    DataDirectory = dir,
+                    LogDirectory = dir
+                };
+                FeedbackSubmission logSubmission = new FeedbackSubmission
+                {
+                    Kind = FeedbackKind.Bug,
+                    Text = "日志要跟着走",
+                    IncludeLogs = true
+                };
+                FeedbackResult logSaved = FeedbackStore.Submit(logSubmission, logContext);
+                True(logSaved.Ok && logSaved.IncludedLogs, "带日志的本地包已生成");
+
+                FeedbackUploadRequest logRequest;
+                string logTemp;
+                string logId;
+                True(FeedbackRecovery.TryBuildRequest(logSaved.PackagePath, out logRequest, out logTemp, out logId),
+                    "带日志的包能重建上传请求");
+                True(!string.IsNullOrEmpty(logRequest.DiagnosticsText), "重建请求带诊断摘要");
+                True(logRequest.DiagnosticsText.Contains("v2"), "诊断摘要含版本");
+                True(logRequest.Logs.Count == 1, "重建请求带 1 路日志，实际 " + logRequest.Logs.Count);
+                True(logRequest.Logs[0].Name == "agent-temp.log", "日志名保持");
+                True(logRequest.Logs[0].Text.Contains("温度恢复"), "日志内容保持");
+                True(logRequest.MetadataJson.Contains("\"includeLogs\":true"), "metadata 与包一致");
+                if (!string.IsNullOrEmpty(logTemp)) Directory.Delete(logTemp, true);
+
+                FakeTransport logTransport = new FakeTransport();
+                Equal(1, FeedbackRecovery.Flush(dir, logTransport).Uploaded, "带日志的包补传成功");
+                True(logTransport.Sent != null, "补传发出了请求");
+                string sentLogs = Encoding.UTF8.GetString(logTransport.Sent);
+                True(sentLogs.Contains("name=\"diagnostics\""), "补传带诊断摘要");
+                True(sentLogs.Contains("name=\"logs\"; filename=\"agent-temp.log\""), "补传带日志尾部");
             }
             finally { CleanupFeedbackTemp(dir); }
         }

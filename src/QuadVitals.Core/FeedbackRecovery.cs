@@ -116,6 +116,8 @@ namespace QuadVitals.Core
 
             FeedbackRecord record;
             bool hasAttachments = false;
+            string diagnosticsText = null;
+            List<FeedbackLogPart> logParts = new List<FeedbackLogPart>();
             List<string> attachmentPaths = new List<string>();
             string temporary = Path.Combine(Path.GetTempPath(), "qv-recover-" + Guid.NewGuid().ToString("N"));
             try
@@ -167,6 +169,22 @@ namespace QuadVitals.Core
                             attachmentPaths.Add(target);
                         }
                     }
+
+                    // 诊断日志也是本地包里的一部分，上传必须原样带上：本地包在成功后就被删了。
+                    ZipArchiveEntry diagnosticsEntry = archive.GetEntry("diagnostics.txt");
+                    if (diagnosticsEntry != null) diagnosticsText = ReadEntryText(diagnosticsEntry);
+
+                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    {
+                        if (!entry.FullName.StartsWith("logs/", StringComparison.OrdinalIgnoreCase) ||
+                            entry.Name.Length == 0)
+                        {
+                            continue;
+                        }
+                        string text = ReadEntryText(entry);
+                        if (string.IsNullOrEmpty(text)) continue;
+                        logParts.Add(new FeedbackLogPart { Name = entry.Name, Text = text });
+                    }
                 }
 
                 id = record.Id;
@@ -185,7 +203,10 @@ namespace QuadVitals.Core
                 {
                     Kind = string.IsNullOrEmpty(record.Kind) ? "other" : record.Kind,
                     Message = (record.Text ?? string.Empty).Trim(),
-                    MetadataJson = FeedbackUploader.BuildMetadata(context, record.Kind, attachmentPaths),
+                    MetadataJson = FeedbackUploader.BuildMetadata(context, record.Kind, attachmentPaths,
+                        record.IncludeLogs),
+                    DiagnosticsText = diagnosticsText,
+                    Logs = logParts,
                     AttachmentPaths = attachmentPaths
                 };
                 tempDirectory = hasAttachments ? temporary : null;
@@ -244,6 +265,16 @@ namespace QuadVitals.Core
             catch (Exception)
             {
                 return false;
+            }
+        }
+
+        /// <summary>Reads one zip entry as UTF-8 text (logs and diagnostics are written that way).</summary>
+        private static string ReadEntryText(ZipArchiveEntry entry)
+        {
+            using (Stream stream = entry.Open())
+            using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true))
+            {
+                return reader.ReadToEnd();
             }
         }
 

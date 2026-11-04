@@ -51,10 +51,13 @@ namespace QuadVitals.Core
         }
 
         /// <summary>Why the CPU temperature tile is empty: no admin token vs. a dead sensor session.</summary>
+        /// <remarks>
+        /// 两行都控制在十个字内：格子说明行不允许换行，长了只能被裁。
+        /// </remarks>
         public static string TemperatureUnavailableLine(MetricsSnapshot snapshot)
         {
-            if (IsKnownUnelevated(snapshot)) return "传感器未提权，温度不可用";
-            return "温度数据读取失败，请重启传感器";
+            if (IsKnownUnelevated(snapshot)) return "未提权，读不到温度";
+            return "温度读取失败";
         }
 
         /// <summary>

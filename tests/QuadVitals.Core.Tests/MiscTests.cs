@@ -435,9 +435,12 @@ namespace QuadVitals.Core.Tests
             True(AgentDiagnostics.IsKnownUnelevated(unelevated), "已知未提权");
             True(!AgentDiagnostics.IsKnownUnelevated(elevated), "已提权不算未提权");
             True(!AgentDiagnostics.IsKnownUnelevated(oldAgent), "旧 Agent 不声称未提权");
-            Equal("传感器未提权，温度不可用", AgentDiagnostics.TemperatureUnavailableLine(unelevated), "未提权温度文案");
-            Equal("温度数据读取失败，请重启传感器", AgentDiagnostics.TemperatureUnavailableLine(elevated), "已提权但温度缺失走重启文案");
-            Equal("温度数据读取失败，请重启传感器", AgentDiagnostics.TemperatureUnavailableLine(oldAgent), "旧 Agent 保持原文案");
+            Equal("未提权，读不到温度", AgentDiagnostics.TemperatureUnavailableLine(unelevated), "未提权温度文案");
+            Equal("温度读取失败", AgentDiagnostics.TemperatureUnavailableLine(elevated), "已提权但温度缺失是会话失效");
+            Equal("温度读取失败", AgentDiagnostics.TemperatureUnavailableLine(oldAgent), "旧 Agent 不下断言");
+            // 格子说明行不许换行：两段文案都必须短到一行放得下。
+            True(AgentDiagnostics.TemperatureUnavailableLine(unelevated).Length <= 10, "未提权文案一行内");
+            True(AgentDiagnostics.TemperatureUnavailableLine(elevated).Length <= 10, "失效文案一行内");
             Equal("传感器未提权，风扇不可用", AgentDiagnostics.FanUnavailableLine(unelevated), "未提权风扇文案");
             Equal("风扇数据读取失败，请重启传感器", AgentDiagnostics.FanUnavailableLine(elevated), "已提权且温度也缺时是会话失效");
             elevated.Flags |= MetricFlags.TemperatureValid;

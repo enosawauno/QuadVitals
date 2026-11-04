@@ -22,6 +22,22 @@ namespace QuadVitals.Core
         public string Message = string.Empty;
         public string MetadataJson = "{}";
         public List<string> AttachmentPaths = new List<string>();
+
+        /// <summary>
+        /// 诊断摘要，原样来自本地包的 <c>diagnostics.txt</c>（已脱敏）。为空表示没有勾选
+        /// “附带诊断日志”，此时不上传系统与硬件字段。
+        /// </summary>
+        public string DiagnosticsText;
+
+        /// <summary>日志尾部，各来自本地包的 <c>logs/</c>（已脱敏）；与诊断摘要同进同出。</summary>
+        public List<FeedbackLogPart> Logs = new List<FeedbackLogPart>();
+    }
+
+    /// <summary>One log tail as it travels to the receiver: already redacted plain text.</summary>
+    public sealed class FeedbackLogPart
+    {
+        public string Name;
+        public string Text;
     }
 
     /// <summary>Transport boundary so assertions never touch the network.</summary>
@@ -136,7 +152,28 @@ namespace QuadVitals.Core
                     return false;
                 }
             }
+
+            // 诊断摘要与日志尾部也算进请求预算：它们和附件走同一次 multipart。
+            total += TextSize(request.DiagnosticsText);
+            if (request.Logs != null)
+            {
+                foreach (FeedbackLogPart log in request.Logs)
+                {
+                    if (log != null) total += TextSize(log.Text);
+                }
+            }
+            if (total > MaxRequestBytes)
+            {
+                error = "反馈内容总大小不能超过 " + MetricFormat.Bytes(MaxRequestBytes) + "。";
+                return false;
+            }
             return true;
+        }
+
+        /// <summary>Payload cost of one text part, boundary overhead included.</summary>
+        private static long TextSize(string text)
+        {
+            return string.IsNullOrEmpty(text) ? 0 : Utf8.GetByteCount(text) + 256;
         }
 
         /// <summary>
@@ -169,6 +206,35 @@ namespace QuadVitals.Core
                 written += WriteBytes(stream, Utf8.GetBytes(request.MetadataJson ?? "{}"));
                 written += WriteText(stream, "\r\n");
 
+                // 诊断摘要与日志尾部：服务端落回包里的 diagnostics.txt 与 logs/，否则勾了开关
+                // 的日志只存在于本地包，而本地包在上传成功后立刻删除，等于谁都没有。
+                if (!string.IsNullOrEmpty(request.DiagnosticsText))
+                {
+                    written += WriteText(stream, "--" + boundary + "\r\n");
+                    written += WriteText(stream,
+                        "Content-Disposition: form-data; name=\"diagnostics\"; filename=\"diagnostics.txt\"\r\n");
+                    written += WriteText(stream, "Content-Type: text/plain; charset=utf-8\r\n\r\n");
+                    written += WriteBytes(stream, Utf8.GetBytes(request.DiagnosticsText));
+                    written += WriteText(stream, "\r\n");
+                }
+
+                if (request.Logs != null)
+                {
+                    foreach (FeedbackLogPart log in request.Logs)
+                    {
+                        if (log == null || string.IsNullOrEmpty(log.Text)) continue;
+                        string logName = FeedbackStore.SanitizeFileName(
+                            string.IsNullOrEmpty(log.Name) ? "log.txt" : log.Name);
+                        written += WriteText(stream, "--" + boundary + "\r\n");
+                        written += WriteText(stream, "Content-Disposition: form-data; name=\"logs\"; filename=\""
+                                                     + AsciiFallback(logName) + "\"; filename*=UTF-8''"
+                                                     + PercentEncode(logName) + "\r\n");
+                        written += WriteText(stream, "Content-Type: text/plain; charset=utf-8\r\n\r\n");
+                        written += WriteBytes(stream, Utf8.GetBytes(log.Text));
+                        written += WriteText(stream, "\r\n");
+                    }
+                }
+
                 foreach (string attachment in request.AttachmentPaths)
                 {
                     string name = FeedbackStore.SanitizeFileName(Path.GetFileName(attachment));
@@ -196,8 +262,15 @@ namespace QuadVitals.Core
             return path;
         }
 
-        /// <summary>Builds the metadata JSON the receiver stores next to the package.</summary>
-        public static string BuildMetadata(FeedbackContext context, string kind, IList<string> attachmentPaths)
+        /// <summary>
+        /// Builds the metadata JSON the receiver stores next to the package.
+        /// </summary>
+        /// <param name="includeLogs">
+        /// 表单是否勾选“附带诊断日志”。它必须由调用方如实传入：早先版本用“有没有 Agent 摘要”
+        /// 反推，于是每个包都自称带了日志，而包里一个字都没有。
+        /// </param>
+        public static string BuildMetadata(FeedbackContext context, string kind, IList<string> attachmentPaths,
+                                           bool includeLogs = false)
         {
             UploadMetadata metadata = new UploadMetadata
             {
@@ -208,7 +281,7 @@ namespace QuadVitals.Core
             };
             if (context != null)
             {
-                metadata.IncludeLogs = !string.IsNullOrEmpty(context.AgentSummary);
+                metadata.IncludeLogs = includeLogs;
                 metadata.Cpu = string.IsNullOrEmpty(context.CpuModel) ? null : context.CpuModel;
                 metadata.MemoryTotalBytes = context.MemoryTotalBytes;
                 metadata.Agent = string.IsNullOrEmpty(context.AgentSummary) ? null : context.AgentSummary;
