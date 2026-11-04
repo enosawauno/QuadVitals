@@ -10,6 +10,9 @@ namespace QuadVitals.Settings
 {
     internal sealed partial class OverviewPage
     {
+        /// <summary>一次只跑一个局域网探测：枚举是后台活儿，结果回 Dispatcher 再写界面。</summary>
+        private bool _lanProbeRunning;
+
         private void UpdateLanIp(MetricsSnapshot snapshot)
         {
             string adapter = snapshot == null ? string.Empty : (snapshot.AdapterName ?? string.Empty);
@@ -19,7 +22,28 @@ namespace QuadVitals.Settings
             _lanAdapterName = adapter;
             _lanCheckedUtc = DateTime.UtcNow;
 
-            string ip = ResolveLanIp(adapter);
+            // IP Helper 的枚举在忙的机器上要几十毫秒。放在 1 Hz 刷新里，就是每 5 秒让风扇
+            // 掉一两帧（“转几圈卡一下”）。所以枚举挪到后台线程，结果回 Dispatcher 再落界面。
+            if (_lanProbeRunning) return;
+            _lanProbeRunning = true;
+            Task.Run(() =>
+            {
+                string resolved = ResolveLanIp(adapter);
+                try
+                {
+                    Dispatcher.BeginInvoke(new Action(() => ApplyLanIp(resolved)));
+                }
+                catch (Exception)
+                {
+                    // 窗口已关闭：结果没人接，也要把标志复位，下次打开不卡在“进行中”。
+                    _lanProbeRunning = false;
+                }
+            });
+        }
+
+        private void ApplyLanIp(string ip)
+        {
+            _lanProbeRunning = false;
             if (string.Equals(_lanIp, ip, StringComparison.Ordinal)) return;
 
             _lanIp = ip;

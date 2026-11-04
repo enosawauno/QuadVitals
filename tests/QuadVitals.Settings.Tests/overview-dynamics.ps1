@@ -267,6 +267,15 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         }
         Check 'the fan card sets a minimum height, not a fixed one' ([double]::IsNaN($freshCard.Height) -and $freshCard.MinHeight -gt 0) ("height=" + $freshCard.Height + " min=" + $freshCard.MinHeight)
 
+        # IP 枚举是后台活儿：把 5 秒缓存打旧后调一次 Refresh，界面线程只应把活儿排出去，
+        # 否则每 5 秒就会在 1 Hz 刷新里卡掉一两帧。
+        $lanStamp = $ovPage.GetType().GetField('_lanCheckedUtc', $flags)
+        if ($null -ne $lanStamp) { $lanStamp.SetValue($ovPage, [DateTime]::MinValue) }
+        Call $ovPage 'Refresh' @() | Out-Null
+        Check 'the lan ip probe is handed to a worker thread' ((Read-Field $ovPage '_lanProbeRunning' $flags) -eq $true) ''
+        Pump 500
+        Check 'the lan ip probe clears its in-flight flag' ((Read-Field $ovPage '_lanProbeRunning' $flags) -eq $false) ''
+
         # 离线自动恢复的退避表：首次立即，之后 3 / 5 / 10 / 30 秒。
         $recoveryType = $asm.GetType('QuadVitals.Settings.AgentAutoRecovery')
         $staticFlags = [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Static
