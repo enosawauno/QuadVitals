@@ -171,8 +171,16 @@ namespace QuadVitals.Core
                     }
 
                     // 诊断日志也是本地包里的一部分，上传必须原样带上：本地包在成功后就被删了。
-                    ZipArchiveEntry diagnosticsEntry = archive.GetEntry("diagnostics.txt");
-                    if (diagnosticsEntry != null) diagnosticsText = ReadEntryText(diagnosticsEntry);
+                    // 诊断摘要现在就在记录里；旧包里它是单独的 diagnostics.txt，继续兼容。
+                    if (!string.IsNullOrEmpty(record.Diagnostics))
+                    {
+                        diagnosticsText = record.Diagnostics;
+                    }
+                    else
+                    {
+                        ZipArchiveEntry diagnosticsEntry = archive.GetEntry("diagnostics.txt");
+                        if (diagnosticsEntry != null) diagnosticsText = ReadEntryText(diagnosticsEntry);
+                    }
 
                     foreach (ZipArchiveEntry entry in archive.Entries)
                     {

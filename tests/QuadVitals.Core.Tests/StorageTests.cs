@@ -319,7 +319,7 @@ namespace QuadVitals.Core.Tests
 
                     string json = ReadZipEntry(result.PackagePath, "feedback.json");
                     string md = ReadZipEntry(result.PackagePath, "feedback.md");
-                    string diagnostics = ReadZipEntry(result.PackagePath, "diagnostics.txt");
+                    True(!ZipHasEntry(result.PackagePath, "diagnostics.txt"), "诊断不再单独成文件");
                     True(json != null && json.Contains("\"kind\": \"bug\""), "JSON 记录类型");
                     True(json != null && json.Contains("first line") && json.Contains("second line"), "JSON 保留换行");
                     True(json != null && json.Contains("\"cpu\": \"Test CPU\""), "JSON 记录 CPU");
@@ -328,7 +328,8 @@ namespace QuadVitals.Core.Tests
                     string packagedLog = ReadZipEntry(result.PackagePath, "logs/agent-crash.log");
                     True(packagedLog != null && packagedLog.Contains("%USERPROFILE%"), "日志路径脱敏");
                     True(packagedLog != null && !packagedLog.Contains(profile), "不含原始用户目录");
-                    True(diagnostics != null && diagnostics.Contains("test-1.0"), "诊断含版本");
+                    True(json != null && json.Contains("QuadVitals 反馈诊断"), "诊断并进 feedback.json");
+                    True(json != null && json.Contains("test-1.0"), "诊断含版本");
                     True(md != null && md.Contains("first line"), "Markdown 含正文");
 
                     string ledger = FeedbackStore.LedgerPath(dir);
@@ -346,10 +347,11 @@ namespace QuadVitals.Core.Tests
                 True(second.Ok, "无日志提交成功: " + second.Error);
                 if (second.Ok)
                 {
-                    True(!ZipHasEntry(second.PackagePath, "diagnostics.txt"), "未勾选时无 diagnostics");
+                    True(!ZipHasEntry(second.PackagePath, "diagnostics.txt"), "未勾选时无 diagnostics 文件");
                     True(!ZipHasEntry(second.PackagePath, "logs/agent-crash.log"), "未勾选时无日志");
                     string json = ReadZipEntry(second.PackagePath, "feedback.json");
                     True(json != null && json.Contains("\"includeLogs\": false"), "记录 includeLogs=false");
+                    True(json != null && !json.Contains("\"diagnostics\""), "未勾选时记录里也没有诊断");
                     True(json != null && !json.Contains("\"cpu\""), "未勾选时不采集 CPU");
                 }
                 Equal(2, File.ReadAllLines(FeedbackStore.LedgerPath(dir)).Length, "台账两行");
@@ -657,7 +659,7 @@ namespace QuadVitals.Core.Tests
                 Equal("20261030-143853-a1b2c3", FeedbackRecovery.IdFromPackageName("20261030-143853-a1b2c3_bug.zip"), "从文件名取 id");
                 Equal(null, FeedbackRecovery.IdFromPackageName("random.zip"), "非本产品包名返回 null");
 
-                // 勾了诊断日志的包：重建请求时必须把 diagnostics.txt 与 logs/ 一起带上。
+                // 勾了诊断日志的包：重建请求时诊断摘要与 logs/ 都要带上（摘要现在在记录里）。
                 File.WriteAllText(Path.Combine(dir, "agent-temp.log"), "温度恢复\n");
                 FeedbackContext logContext = new FeedbackContext
                 {

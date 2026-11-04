@@ -293,6 +293,13 @@ namespace QuadVitals.Core
         [DataMember(Name = "agent", EmitDefaultValue = false)]
         public string Agent;
 
+        /// <summary>
+        /// 诊断摘要原文（已脱敏）。以前单独写一个 diagnostics.txt，内容与这里的字段重复，
+        /// 现在并进记录本身，一个包不再多一份副本。
+        /// </summary>
+        [DataMember(Name = "diagnostics", EmitDefaultValue = false)]
+        public string Diagnostics;
+
         [DataMember(Name = "settings", EmitDefaultValue = false)]
         public string Settings;
 
@@ -526,12 +533,10 @@ namespace QuadVitals.Core
                     }
                 }
 
-                string diagnostics = submission.IncludeLogs ? BuildDiagnosticsText(context) : null;
-                if (diagnostics != null)
-                {
-                    File.WriteAllText(Path.Combine(temporary, "diagnostics.txt"),
-                        RedactText(diagnostics, context), Utf8NoBom);
-                }
+                // 诊断摘要不再写成单独的文件：它与记录里的字段是同一份内容，合并进 feedback.json。
+                string diagnostics = submission.IncludeLogs
+                    ? RedactText(BuildDiagnosticsText(context), context)
+                    : null;
 
                 FeedbackRecord record = new FeedbackRecord
                 {
@@ -543,6 +548,7 @@ namespace QuadVitals.Core
                     Os = context.OsVersion,
                     Arch = context.Architecture,
                     IncludeLogs = submission.IncludeLogs,
+                    Diagnostics = diagnostics,
                     Cpu = submission.IncludeLogs ? context.CpuModel : null,
                     MemoryTotalBytes = submission.IncludeLogs ? context.MemoryTotalBytes : 0,
                     Agent = submission.IncludeLogs ? context.AgentSummary : null,
