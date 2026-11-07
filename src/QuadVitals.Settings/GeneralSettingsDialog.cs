@@ -71,40 +71,30 @@ namespace QuadVitals.Settings
 
             StackPanel body = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
 
+            // 设置项按组排：组标题四个字，组内每行左边四个字、右边紧接控件（横向一行）。
+            body.Children.Add(GroupHeader("启动设置", "GeneralGroupStart"));
+
             CheckBox autostart = new DarkCheckBox
             {
-                Content = "登录时自动启动传感器",
                 IsChecked = settings.StartAgentWithWindows
             };
             AutomationProperties.SetAutomationId(autostart, "GeneralAutostart");
-            // 只是草稿：勾选框本身不写盘。
-            body.Children.Add(autostart);
+            AutomationProperties.SetName(autostart, "开机自启");
+            body.Children.Add(Row("开机自启", autostart, "GeneralAutostartLabel"));
+
+            body.Children.Add(GroupHeader("性能设置", "GeneralGroupPerformance"));
 
             CheckBox battery = new DarkCheckBox
             {
-                Content = "电池模式下暂停动画",
-                IsChecked = settings.PauseAnimationsOnBattery != false,
-                Margin = new Thickness(0, 8, 0, 0)
+                IsChecked = settings.PauseAnimationsOnBattery != false
             };
             AutomationProperties.SetAutomationId(battery, "GeneralBatteryAnimations");
-            body.Children.Add(battery);
+            AutomationProperties.SetName(battery, "电池暂停");
+            body.Children.Add(Row("电池暂停", battery, "GeneralBatteryAnimationsLabel"));
 
             // 渲染时机是独立的一档：它不改变风扇的 hover/always 动效，只决定仪表盘在失焦或
             // 前台全屏时是否继续逐帧重绘。
-            TextBlock renderLabel = new TextBlock
-            {
-                Text = "渲染策略",
-                FontSize = 12,
-                Foreground = Theme.TextTertiaryBrush,
-                Margin = new Thickness(0, 16, 0, 8)
-            };
-            AutomationProperties.SetAutomationId(renderLabel, "GeneralRenderPolicyLabel");
-            body.Children.Add(renderLabel);
-
-            DarkComboBox renderPolicy = new DarkComboBox
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
+            DarkComboBox renderPolicy = new DarkComboBox { Width = 240 };
             AutomationProperties.SetAutomationId(renderPolicy, "GeneralRenderPolicy");
             AutomationProperties.SetName(renderPolicy, "渲染策略");
             int selectedPolicy = 0;
@@ -118,7 +108,7 @@ namespace QuadVitals.Settings
                 }
             }
             renderPolicy.SelectedIndex = selectedPolicy;
-            body.Children.Add(renderPolicy);
+            body.Children.Add(Row("渲染策略", renderPolicy, "GeneralRenderPolicyLabel"));
 
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
@@ -143,6 +133,46 @@ namespace QuadVitals.Settings
 
             panel.Child = grid;
             return panel;
+        }
+
+        /// <summary>组的标题：四个字，比行标签淡一档，只做分组用。</summary>
+        private static FrameworkElement GroupHeader(string text, string automationId)
+        {
+            TextBlock header = new TextBlock
+            {
+                Text = text,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Theme.TextTertiaryBrush,
+                Margin = new Thickness(0, 18, 0, 10)
+            };
+            AutomationProperties.SetAutomationId(header, automationId);
+            return header;
+        }
+
+        /// <summary>一行设置：左边四个字标签，右边紧接控件，两者垂直居中对齐。</summary>
+        private static FrameworkElement Row(string label, FrameworkElement control, string labelAutomationId)
+        {
+            Grid row = new Grid { Height = 32, Margin = new Thickness(0, 0, 0, 10) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            TextBlock caption = new TextBlock
+            {
+                Text = label,
+                FontSize = 12,
+                Foreground = Theme.TextSecondaryBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            AutomationProperties.SetAutomationId(caption, labelAutomationId);
+            row.Children.Add(caption);
+
+            // “紧接着”：控件紧跟标签，不推到面板右边缘。
+            control.HorizontalAlignment = HorizontalAlignment.Left;
+            control.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(control, 1);
+            row.Children.Add(control);
+            return row;
         }
 
         /// <summary>把面板里的草稿写回最新设置（别处可能已经改过网卡/刷新等字段）。</summary>

@@ -603,6 +603,39 @@ if ($null -ne $renderPolicy) {
     elseif ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen) { $expectedIndex = 2 }
     Check 'the render policy reflects the saved choice' ($renderPolicy.SelectedIndex -eq $expectedIndex) ("index=" + $renderPolicy.SelectedIndex + " saved=" + $savedPolicy)
     Check 'the render policy has a label' ($null -ne (Find-ById $generalRoot 'GeneralRenderPolicyLabel')) ''
+
+# Settings are grouped: a four-character group title, then one line per row with the label on the
+# left and the control right next to it; the battery switch belongs to the performance group.
+$groupStart = Find-ById $generalRoot 'GeneralGroupStart'
+$groupPerf = Find-ById $generalRoot 'GeneralGroupPerformance'
+$startText = -join [char[]](0x542F, 0x52A8, 0x8BBE, 0x7F6E)
+$perfText = -join [char[]](0x6027, 0x80FD, 0x8BBE, 0x7F6E)
+Check 'the panel is split into two named groups' (($null -ne $groupStart) -and ($null -ne $groupPerf) -and ($groupStart.Text -eq $startText) -and ($groupPerf.Text -eq $perfText)) ("start=" + $(if ($null -eq $groupStart) { 'none' } else { $groupStart.Text }) + " perf=" + $(if ($null -eq $groupPerf) { 'none' } else { $groupPerf.Text }))
+Check 'every group title is four characters' (($null -ne $groupStart) -and ($null -ne $groupPerf) -and ($groupStart.Text.Length -eq 4) -and ($groupPerf.Text.Length -eq 4)) ''
+
+function Row-Centre($element) {
+    if ($null -eq $element) { return $null }
+    $top = $element.TranslatePoint((New-Object System.Windows.Point(0, 0)), $generalPanel).Y
+    return $top + ($element.ActualHeight / 2)
+}
+$autostartLabel = Find-ById $generalRoot 'GeneralAutostartLabel'
+$batteryLabel = Find-ById $generalRoot 'GeneralBatteryAnimationsLabel'
+$policyLabel = Find-ById $generalRoot 'GeneralRenderPolicyLabel'
+$labelLengths = @($autostartLabel, $batteryLabel, $policyLabel) | ForEach-Object { if ($null -eq $_) { -1 } else { $_.Text.Length } }
+Check 'every row label is four characters' (($labelLengths -join ',') -eq '4,4,4') ("lengths=" + ($labelLengths -join ','))
+$rowPairs = @(@($autostartLabel, $autoStart), @($batteryLabel, $batterySwitch), @($policyLabel, $renderPolicy))
+$oneLine = $true
+foreach ($pair in $rowPairs) {
+    $c1 = Row-Centre $pair[0]
+    $c2 = Row-Centre $pair[1]
+    if (($null -eq $c1) -or ($null -eq $c2) -or ([math]::Abs($c1 - $c2) -gt 2)) { $oneLine = $false }
+}
+Check 'each row keeps its label and control on one line' $oneLine ''
+$yStart = Row-Centre $groupStart
+$yPerf = Row-Centre $groupPerf
+$yBattery = Row-Centre $batteryLabel
+$yAuto = Row-Centre $autostartLabel
+Check 'the battery row sits under the performance group' (($null -ne $yStart) -and ($null -ne $yPerf) -and ($null -ne $yAuto) -and ($null -ne $yBattery) -and ($yAuto -gt $yStart) -and ($yBattery -gt $yPerf) -and ($yPerf -gt $yAuto)) ("start=$yStart auto=$yAuto perf=$yPerf battery=$yBattery")
 }
 Check 'the panel no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
 # 面板是“取消 / 保存”：勾选只是草稿，点保存才写盘。
