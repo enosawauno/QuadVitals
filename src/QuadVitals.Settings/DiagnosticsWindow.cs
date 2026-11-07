@@ -90,7 +90,9 @@ namespace QuadVitals.Settings
 
             TextBlock intro = new TextBlock
             {
-                Text = "传感器进程最近一帧的读取结果，用来判断哪一项没有数据。某项显示 -- 表示这一项没有有效值。",
+                // 说明与数据来源合并成一句放在顶部：窗口只有一屏，底部那行说明离它解释的表格太远。
+                Text = "传感器进程最近一帧的读数用于判断缺少哪一项数据，-- 表示该项无有效值，"
+                     + "温度与风扇由 LHM 每 5 秒读取并需管理员权限，显卡由 NVML 读取，其余为本机采样。",
                 FontSize = 12,
                 Foreground = Theme.TextSecondaryBrush,
                 TextWrapping = TextWrapping.Wrap,
@@ -150,16 +152,6 @@ namespace QuadVitals.Settings
             content.Children.Add(Row("设置文件", QuadVitals.Core.Settings.DefaultPath));
             content.Children.Add(Row("共享内存", MetricsChannel.MapName, null, "DiagnosticsSharedMemory"));
 
-            TextBlock note = new TextBlock
-            {
-                Text = "温度与风扇来自 LHM，需要管理员权限并按 5 秒节拍更新；显卡来自 NVML；其余为本机采样。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 8, 0, 0)
-            };
-            AutomationProperties.SetAutomationId(note, "DiagnosticsNote");
-            content.Children.Add(note);
 
             StackPanel buttons = new StackPanel
             {

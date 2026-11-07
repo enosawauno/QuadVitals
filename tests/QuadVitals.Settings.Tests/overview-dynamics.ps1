@@ -292,6 +292,10 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the diagnostics window has a title' (($null -ne $diagTitle) -and ($diagTitle.Text -eq '诊断信息')) "title=$(if($null -ne $diagTitle){$diagTitle.Text}else{'none'})"
             $diagIntro = Find-ById $diagRoot 'DiagnosticsIntro'
             Check 'the diagnostics window explains itself' (($null -ne $diagIntro) -and $diagIntro.Text.Contains('传感器进程')) ''
+            # One line carries both the reading and where the data comes from; the sources used to sit
+            # at the bottom of the window, far from the table they explain.
+            Check 'the diagnostics hint merges the data sources' (($null -ne $diagIntro) -and $diagIntro.Text.Contains('LHM') -and $diagIntro.Text.Contains('NVML') -and $diagIntro.Text.Contains('--')) "text=$(if($null -ne $diagIntro){$diagIntro.Text}else{'none'})"
+            Check 'the separate sources line is gone' ($null -eq (Find-ById $diagRoot 'DiagnosticsNote')) ''
             $diagStatus = Find-ById $diagRoot 'DiagnosticsStatus'
             Check 'the diagnostics window shows the agent state' (($null -ne $diagStatus) -and ($diagStatus.Text.Length -gt 0)) ''
             $diagMissing = Find-ById $diagRoot 'DiagnosticsMissing'
