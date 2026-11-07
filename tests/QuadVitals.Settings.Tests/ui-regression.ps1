@@ -1400,6 +1400,27 @@ $deadIcon = Find-ById $deadPanel 'AgentStateIcon'
 $liveAction = Find-ById $livePanel 'AgentAction'
 $deadAction = Find-ById $deadPanel 'AgentAction'
 
+# The action button carries a drawn shield before its label, so the label lives in a child TextBlock
+# instead of the button's own Content string.
+function Action-Label($button) {
+    if ($null -eq $button) { return $null }
+    $panel = $button.Content -as [System.Windows.Controls.Panel]
+    if ($null -eq $panel) { return $button.Content }
+    foreach ($child in $panel.Children) {
+        if ($child -is [System.Windows.Controls.TextBlock]) { return $child.Text }
+    }
+    return $null
+}
+function Action-Shield($button) {
+    if ($null -eq $button) { return $null }
+    $panel = $button.Content -as [System.Windows.Controls.Panel]
+    if ($null -eq $panel) { return $null }
+    foreach ($child in $panel.Children) {
+        if ($child -is [System.Windows.Shapes.Path]) { return $child }
+    }
+    return $null
+}
+
 # The status light is a 30 px halo ring with a 9 px dot inside it, not a text glyph: a live agent
 # breathes (halo scale + opacity animation), a dead one holds the halo at half opacity.
 function Status-Shapes($icon) {
@@ -1429,8 +1450,9 @@ Check 'a live agent shows the green dot' ((Dot-Color $liveIcon) -eq [QuadVitals.
 Check 'a live halo breathes' (($null -ne $liveLight.Halo) -and $liveLight.Halo.HasAnimatedProperties -and ($liveLight.Halo.RenderTransform -is [System.Windows.Media.ScaleTransform])) 'animation expected'
 Check 'a dead agent shows the red dot' ((Dot-Color $deadIcon) -eq [QuadVitals.UI.Theme]::AccentRed) "dot=$(Dot-Color $deadIcon)"
 Check 'a dead halo holds still at half opacity' (($null -ne $deadLight.Halo) -and (-not $deadLight.Halo.HasAnimatedProperties) -and ($deadLight.Halo.Opacity -eq 0.5)) "opacity=$($deadLight.Halo.Opacity) animated=$($deadLight.Halo.HasAnimatedProperties)"
-Check 'the action restarts the sensor while alive' ($liveAction.Content -eq $restartSensor) "text=$($liveAction.Content)"
-Check 'the action starts the sensor while offline' ($deadAction.Content -eq $startSensor) "text=$($deadAction.Content)"
+Check 'the action restarts the sensor while alive' ((Action-Label $liveAction) -eq $restartSensor) "text=$(Action-Label $liveAction)"
+Check 'the action starts the sensor while offline' ((Action-Label $deadAction) -eq $startSensor) "text=$(Action-Label $deadAction)"
+Check 'the action leads with a uac shield' ($null -ne (Action-Shield $liveAction)) 'shield path expected'
 Check 'the panel names the shared-memory channel' ((Wait-ById $livePanel 'AgentSubline') -ne $null) ''
 Check 'the panel names the shared-memory channel' ((Find-ById $livePanel 'AgentSubline') -ne $null) ''
 
@@ -1452,9 +1474,9 @@ $unelevatedTexts = @(Find-ByTypeName $unelevatedPanel 'TextBlock' | ForEach-Obje
 $elevatedTexts = @(Find-ByTypeName $elevatedPanel 'TextBlock' | ForEach-Object { $_.Text })
 Check 'an unelevated panel says temperature and fans cannot be read' ($unelevatedTexts -contains $unelevatedLine) ('texts=' + ($unelevatedTexts -join '|'))
 Check 'an elevated panel says temperature and fans are readable' ($elevatedTexts -contains $elevatedLine) ('texts=' + ($elevatedTexts -join '|'))
-Check 'an unelevated panel offers the task repair' ((Find-ById $unelevatedPanel 'AgentRepairTask') -is [System.Windows.Controls.Button]) 'repair button expected'
-Check 'an elevated panel does not offer the task repair' ($null -eq (Find-ById $elevatedPanel 'AgentRepairTask')) 'no repair button expected'
-Check 'an agent that reported nothing does not offer the task repair' ($null -eq (Find-ById $livePanel 'AgentRepairTask')) 'no repair button expected'
+Check 'an unelevated panel merges the task repair into the restart' (($null -eq (Find-ById $unelevatedPanel 'AgentRepairTask')) -and ((Action-Label (Find-ById $unelevatedPanel 'AgentAction')) -eq $restartSensor)) 'one action expected'
+Check 'an elevated panel has no separate repair button' ($null -eq (Find-ById $elevatedPanel 'AgentRepairTask')) 'no repair button expected'
+Check 'an agent that reported nothing has no separate repair button' ($null -eq (Find-ById $livePanel 'AgentRepairTask')) 'no repair button expected'
 
 $statusField = $windowType.GetField('_agentStatus', $flags)
 $statusBlock = $statusField.GetValue($dialogWindow)

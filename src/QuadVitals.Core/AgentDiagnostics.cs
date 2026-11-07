@@ -68,16 +68,16 @@ namespace QuadVitals.Core
 
         /// <summary>Reported after a restart that produced a frame, but an unelevated one.</summary>
         public const string NotElevatedAfterRestart =
-            "已启动，但没有拿到管理员权限：CPU 温度与风扇读不到。点“修复登录计划任务”后重试";
+            "已启动，但没有拿到管理员权限：CPU 温度与风扇读不到。点“重启传感器”并允许管理员授权后重试";
 
         /// <summary>Reported when the owner dismissed the UAC prompt a start request raised.</summary>
         public const string ElevationCancelled =
-            "已取消管理员授权：CPU 温度与风扇读不到。可点“修复登录计划任务”改为免 UAC 启动";
+            "已取消管理员授权：CPU 温度与风扇读不到。可点“重启传感器”重新授权";
 
         /// <summary>Reported when the repair of the logon task itself failed.</summary>
         public static string TaskRepairFailed(string reason)
         {
-            return "修复登录计划任务失败：" + reason;
+            return "重建登录计划任务失败：" + reason;
         }
 
         /// <summary>Why the CPU temperature tile is empty: no admin token vs. a dead sensor session.</summary>

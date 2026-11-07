@@ -472,10 +472,10 @@ namespace QuadVitals.Core.Tests
             True(AgentDiagnostics.IsKnownUnelevated(known), "flags 与快照两个入口同判");
             True(!AgentDiagnostics.IsKnownUnelevated(known | MetricFlags.Elevated), "提权不算未提权");
 
-            // 重启回来却没提权时必须说出来并给修复入口，不能报成功。
-            True(AgentDiagnostics.NotElevatedAfterRestart.Contains("修复登录计划任务"), "未提权重启结果给出修复入口");
+            // 重启回来却没提权时必须说出来并给出下一步，不能报成功。
+            True(AgentDiagnostics.NotElevatedAfterRestart.Contains("重启传感器"), "未提权重启结果指向重启入口");
             True(AgentDiagnostics.ElevationCancelled.Contains("CPU 温度"), "取消 UAC 时说明温度读不到");
-            Equal("修复登录计划任务失败：schtasks 超时", AgentDiagnostics.TaskRepairFailed("schtasks 超时"), "修复失败文案");
+            Equal("重建登录计划任务失败：schtasks 超时", AgentDiagnostics.TaskRepairFailed("schtasks 超时"), "重建失败文案");
         }
 
         // ---- agent control events ------------------------------------------------------

@@ -85,22 +85,6 @@ namespace QuadVitals.Settings
             });
         }
 
-        /// <summary>
-        /// 面板上的「修复登录计划任务」：以一次 UAC 重建任务，然后把现役实例换掉。
-        /// 现役实例有可能是回退路径起的非提权进程，光修任务不重启它也不算修好。
-        /// </summary>
-        public void RepairAgentTaskFromDialog()
-        {
-            string error = AgentLauncher.RepairLogonTask();
-            if (error != null)
-            {
-                ShowNotice(error, true);
-                ScheduleAgentPanelRefresh();
-                return;
-            }
-            RestartAgentFromDialog();
-        }
-
         public void SetAgentStatus(bool alive, double ageSeconds)
         {
             // 芯片只说健康度：秒数会每帧跳，放在面板里。
@@ -167,9 +151,13 @@ namespace QuadVitals.Settings
             _agentRestartInProgress = true;
             _deadTicks = 0;
 
+            // 面板只有一个动作：换成提权实例。任务缺失或被禁用是“每次启动都没温度”的根因，
+            // 所以手动重启时先把它补上（一次 UAC）再按任务启动；自动恢复不碰任务，游戏里不弹框。
+            bool repairTask = reason == null && AgentDiagnostics.IsKnownUnelevated(ReadAgentState().Flags);
+
             System.Threading.Tasks.Task.Run(() =>
             {
-                string error = RestartAgent();
+                string error = RestartAgent(repairTask);
                 TryOnDispatcher(() =>
                 {
                     _agentRestartInProgress = false;
@@ -180,9 +168,35 @@ namespace QuadVitals.Settings
                         if (reason == null) ShowNotice(error, true);
                         return;
                     }
+                    // 新进程 = 新的采样会话：面板上的数据整套重来，旧进程的曲线与峰值不留在上面。
+                    if (reason == null) ResetDisplayedData();
                     ScheduleAgentPanelRefresh(250);
                 });
             });
+        }
+
+        /// <summary>
+        /// 重启成功后的“数据重来”：丢掉旧的共享内存读端（旧映射还指向上一轮），再把所有页面
+        /// 拆掉重建——概览的曲线、峰值、EMA 与各卡片的“本次会话”状态都从新进程的第一帧重新开始。
+        /// 落盘的网速历史不删：它是跨启动的曲线，不是旧进程的缓存。
+        /// </summary>
+        private void ResetDisplayedData()
+        {
+            try
+            {
+                if (_statusReader != null)
+                {
+                    _statusReader.Dispose();
+                    _statusReader = null;
+                }
+            }
+            catch (Exception)
+            {
+                // 旧读端关不掉不影响新读端的建立；下一次 ReadAgentState 会重试。
+            }
+
+            _statusReaderAttemptUtc = DateTime.MinValue;
+            ReloadSettings();
         }
 
         /// <summary>
@@ -219,13 +233,20 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>Blocking half of the restart; runs on a worker thread, never on the UI thread.</summary>
-        private static string RestartAgent()
+        /// <param name="repairTask">
+        /// True for a manual restart of an instance that reported itself as unelevated: the logon task
+        /// is the reason every start lands without the sensor driver, so it is rebuilt first. A
+        /// cancelled prompt is not fatal - the runas fallback below still asks for elevation.
+        /// </param>
+        private static string RestartAgent(bool repairTask)
         {
             AgentLauncher.RequestExit();
             if (!AgentLauncher.WaitForExit(6000))
             {
                 return "传感器没有退出：可能被安全软件拦住。请稍后重试，或手动结束 QuadVitals.Agent.exe";
             }
+
+            if (repairTask) AgentLauncher.RepairLogonTask();
 
             // Only frames published after the old process is gone count as proof the new one
             // started. A frame the old process wrote between the click and its exit would
