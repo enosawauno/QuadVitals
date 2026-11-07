@@ -161,6 +161,32 @@ namespace QuadVitals.Core.Tests
             Equal(false, battery.PauseAnimationsOnBattery, "用户关闭电池暂停后保持关闭");
         }
 
+        private static void RenderPolicyBehaviour()
+        {
+            Settings fresh = Settings.CreateDefault();
+            Equal(Settings.RenderPolicyAlways, fresh.RenderPolicy, "默认全局重绘");
+            True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyAlways), "always 合法");
+            True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyUnfocused), "unfocused 合法");
+            True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyFullscreen), "fullscreen 合法");
+            True(Settings.IsKnownRenderPolicy("ALWAYS"), "大小写不敏感");
+            True(!Settings.IsKnownRenderPolicy("sometimes"), "乱写的值不合法");
+            True(!Settings.IsKnownRenderPolicy(null), "空值不合法");
+
+            Settings old = new Settings();
+            old.Normalize();
+            Equal(Settings.RenderPolicyAlways, old.RenderPolicy, "旧配置缺字段按全局重绘处理");
+
+            Settings odd = Settings.CreateDefault();
+            odd.RenderPolicy = "sometimes";
+            odd.Normalize();
+            Equal(Settings.RenderPolicyAlways, odd.RenderPolicy, "非法值回退为全局重绘");
+
+            Settings kept = Settings.CreateDefault();
+            kept.RenderPolicy = Settings.RenderPolicyFullscreen;
+            kept.Normalize();
+            Equal(Settings.RenderPolicyFullscreen, kept.RenderPolicy, "全屏策略不会被 Normalize 改掉");
+        }
+
         private static void FanToneLatchReset()
         {
             FanToneLatch latch = new FanToneLatch();
@@ -717,6 +743,7 @@ namespace QuadVitals.Core.Tests
             original.IndicatorStyle = Settings.IndicatorCapsule;
             original.AnimationMode = Settings.AnimationAlways;
             original.PauseAnimationsOnBattery = false;
+            original.RenderPolicy = Settings.RenderPolicyFullscreen;
             original.Items[1].Lines[0].Color = "#FF00CC6A";
             original.Save(path);
 
@@ -728,6 +755,7 @@ namespace QuadVitals.Core.Tests
             True(json.Contains("\"indicatorStyle\""), "JSON 含 indicatorStyle");
             True(json.Contains("\"animationMode\""), "JSON 含 animationMode");
             True(json.Contains("\"pauseAnimationsOnBattery\""), "JSON 含 pauseAnimationsOnBattery");
+            True(json.Contains("\"renderPolicy\""), "JSON 含 renderPolicy");
             True(!json.Contains("\"fill2\""), "JSON 不再写 fill2");
             True(!json.Contains("\"verticalSpacing\""), "JSON 不再写 verticalSpacing");
             True(!json.Contains("\"theme\""), "JSON 不再写 theme");
@@ -744,6 +772,7 @@ namespace QuadVitals.Core.Tests
             Equal(Settings.IndicatorCapsule, loaded.IndicatorStyle, "指示器样式保持");
             Equal(Settings.AnimationAlways, loaded.AnimationMode, "动效模式保持");
             Equal(false, loaded.PauseAnimationsOnBattery, "电池暂停偏好保持");
+            Equal(Settings.RenderPolicyFullscreen, loaded.RenderPolicy, "渲染策略保持");
             Equal("#FF00CC6A", loaded.Items[1].Lines[0].Color, "行颜色保持");
             Equal(16, loaded.Items[0].HistoryColumns, "柱数保持");
             Equal(3, loaded.Band.HorizontalSpacing, "间距保持");

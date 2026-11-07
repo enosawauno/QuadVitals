@@ -1017,7 +1017,15 @@ namespace QuadVitals.Settings
         {
             AppSettings s = _settings;
             RenderEnvironment.ConfigureBatteryPolicy(s == null || s.PauseAnimationsOnBattery != false);
-            RenderEnvironment.Refresh();
+
+            string policy = s == null ? AppSettings.RenderPolicyAlways : s.RenderPolicy;
+            bool pauseWhenUnfocused = string.Equals(policy, AppSettings.RenderPolicyUnfocused,
+                StringComparison.OrdinalIgnoreCase);
+            bool pauseInFullscreen = string.Equals(policy, AppSettings.RenderPolicyFullscreen,
+                StringComparison.OrdinalIgnoreCase);
+            // ConfigureRenderPolicy refreshes the environment itself (including the fullscreen
+            // probe), so the 1 Hz policy tick never needs a second call.
+            RenderEnvironment.ConfigureRenderPolicy(pauseWhenUnfocused, pauseInFullscreen);
         }
 
         public AppSettings CurrentSettings { get { return _settings; } }

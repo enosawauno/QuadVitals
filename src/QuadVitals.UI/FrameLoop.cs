@@ -140,7 +140,9 @@ namespace QuadVitals.UI
         private bool CanRender()
         {
             if (RenderEnvironment.AnimationsDisabled) return false;
-            if (_focusSuspended) return false;
+            // The focus gate is optional: "全局重绘" and "全屏停止动画" keep animating while the
+            // dashboard sits behind another window, and only the policy decides when that stops.
+            if (RenderEnvironment.PauseWhenUnfocused && _focusSuspended) return false;
             if (!_owner.IsVisible) return false;
             Window window = _window ?? Window.GetWindow(_owner);
             if (window == null) return true;              // not in a window yet: the owner decides
@@ -217,14 +219,29 @@ namespace QuadVitals.UI
         private void OnHostDeactivated(object sender, EventArgs e)
         {
             // Focus-aware pause: the window is still visible, so the old IsVisible check would
-            // keep every frame loop running behind another app.
+            // keep every frame loop running behind another app. Under "全局重绘" and "全屏停止动画"
+            // this event is deliberately ignored; the fullscreen/ceiling checks still apply.
             if (!_everActivated) return;
-            _focusSuspended = true;
+            if (RenderEnvironment.PauseWhenUnfocused) _focusSuspended = true;
             Refresh();
         }
 
         private void OnEnvironmentChanged()
         {
+            // Switching the policy while the window is already in the background has to take
+            // effect now: the deactivation event will not fire a second time.
+            if (_window != null)
+            {
+                if (_window.IsActive)
+                {
+                    _everActivated = true;
+                    _focusSuspended = false;
+                }
+                else if (_everActivated && RenderEnvironment.PauseWhenUnfocused)
+                {
+                    _focusSuspended = true;
+                }
+            }
             if (_wantRunning) Refresh();
         }
 

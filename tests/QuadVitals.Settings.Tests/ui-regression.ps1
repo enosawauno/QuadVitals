@@ -593,27 +593,55 @@ if ($null -ne $batterySwitch) {
     $savedBattery = $generalWindow.CurrentSettings.PauseAnimationsOnBattery -ne $false
     Check 'the battery switch reflects the saved preference' (($batterySwitch.IsChecked -eq $true) -eq $savedBattery) ("checked=" + $batterySwitch.IsChecked + " saved=" + $savedBattery)
 }
+$renderPolicy = Find-ById $generalRoot 'GeneralRenderPolicy'
+Check 'the panel carries the render policy dropdown' ($null -ne $renderPolicy) ''
+if ($null -ne $renderPolicy) {
+    Check 'the render policy offers three choices' ($renderPolicy.Items.Count -eq 3) ("items=" + $renderPolicy.Items.Count)
+    $savedPolicy = [string]$generalWindow.CurrentSettings.RenderPolicy
+    $expectedIndex = 0
+    if ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused) { $expectedIndex = 1 }
+    elseif ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen) { $expectedIndex = 2 }
+    Check 'the render policy reflects the saved choice' ($renderPolicy.SelectedIndex -eq $expectedIndex) ("index=" + $renderPolicy.SelectedIndex + " saved=" + $savedPolicy)
+    Check 'the render policy has a label' ($null -ne (Find-ById $generalRoot 'GeneralRenderPolicyLabel')) ''
+}
 Check 'the panel no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
 # 面板是“取消 / 保存”：勾选只是草稿，点保存才写盘。
 $generalSave = Find-ById $generalRoot 'GeneralSave'
 $generalClose = Find-ById $generalRoot 'GeneralClose'
 Check 'the panel has cancel and save buttons' (($null -ne $generalSave) -and ($null -ne $generalClose)) ''
-if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch)) {
+if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch) -and ($null -ne $renderPolicy)) {
     $before = [bool]$generalWindow.CurrentSettings.StartAgentWithWindows
     $beforeBattery = $generalWindow.CurrentSettings.PauseAnimationsOnBattery -ne $false
+    $beforePolicy = [string]$generalWindow.CurrentSettings.RenderPolicy
+    $targetIndex = 2
+    $targetPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
+    if ($beforePolicy -eq $targetPolicy) {
+        $targetIndex = 1
+        $targetPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+    }
     $autoStart.IsChecked = -not $before
     $batterySwitch.IsChecked = -not $beforeBattery
+    $renderPolicy.SelectedIndex = $targetIndex
     Pump 150
     Check 'toggling the switch alone changes nothing on disk' ([bool]$generalWindow.CurrentSettings.StartAgentWithWindows -eq $before) ''
+    Check 'choosing a render policy alone changes nothing on disk' ([string]$generalWindow.CurrentSettings.RenderPolicy -eq $beforePolicy) ''
     $generalSave.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
     Pump 200
     Check 'saving applies the draft' ([bool]$generalWindow.CurrentSettings.StartAgentWithWindows -eq (-not $before)) ''
     Check 'saving applies the battery preference' ($generalWindow.CurrentSettings.PauseAnimationsOnBattery -eq (-not $beforeBattery)) ''
+    Check 'saving applies the render policy' ([string]$generalWindow.CurrentSettings.RenderPolicy -eq $targetPolicy) ''
+    # Other settings windows in this process have their own 1 Hz policy tick and share the same
+    # process-wide environment; apply this window's just-saved value right before reading it.
+    $windowType.GetMethod('ApplyRenderPolicy', $flags).Invoke($generalWindow, @()) | Out-Null
+    $envType = $uiAsm.GetType('QuadVitals.UI.RenderEnvironment')
+    Check 'saving applies the fullscreen gate' (([bool]$envType.GetProperty('PauseInFullscreen').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen)) ''
+    Check 'saving applies the unfocused gate' (([bool]$envType.GetProperty('PauseWhenUnfocused').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused)) ''
     Check 'saving closes the panel' (-not [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
     # 还原这次写入的设置
     $restore = $generalWindow.CurrentSettings.Clone()
     $restore.StartAgentWithWindows = $before
     $restore.PauseAnimationsOnBattery = $beforeBattery
+    $restore.RenderPolicy = $beforePolicy
     $restore.Normalize()
     $windowType.GetMethod('SaveSettingsQuietly').Invoke($generalWindow, @($restore)) | Out-Null
 }

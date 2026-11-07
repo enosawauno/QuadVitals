@@ -313,6 +313,15 @@ namespace QuadVitals.Core
         /// <summary>动效常驻：观感最好，代价是仪表盘一直在重绘（实测 GPU 8–10%、CPU 20–30%）。</summary>
         public const string AnimationAlways = "always";
 
+        /// <summary>渲染时机：失焦也继续渲染（默认）。</summary>
+        public const string RenderPolicyAlways = "always";
+
+        /// <summary>渲染时机：失焦时停止渲染，回到前台后恢复。</summary>
+        public const string RenderPolicyUnfocused = "unfocused";
+
+        /// <summary>渲染时机：前台窗口占满整块显示器时停止渲染。</summary>
+        public const string RenderPolicyFullscreen = "fullscreen";
+
         // One palette for the settings UI, the band defaults and the tests: the old XMeters
         // greens (#00CC6A/#FF0000) used to leak back in through hand-written defaults.
         public const string DefaultGreen = "#FF1DB954";
@@ -396,6 +405,14 @@ namespace QuadVitals.Core
         public bool? PauseAnimationsOnBattery { get; set; }
 
         /// <summary>
+        /// 何时渲染仪表盘动画：<c>always</c>（默认，失焦也渲染）、<c>unfocused</c>（失焦停）、
+        /// <c>fullscreen</c>（前台全屏时停）。它只决定“渲染时机”，不改风扇的 hover/always 动效模式，
+        /// 也不绕过 RDP / WPF Tier 0 / 电池这些环境上限。
+        /// </summary>
+        [DataMember(Name = "renderPolicy")]
+        public string RenderPolicy { get; set; }
+
+        /// <summary>
         /// 概览四格各自显示哪个指标（设置弹窗里的四个下拉）。不在目录里的值回退到占用，
         /// 因为“占用”永远是有的那个指标。
         /// </summary>
@@ -437,6 +454,7 @@ namespace QuadVitals.Core
                 IndicatorStyle = IndicatorSegments,
                 AnimationMode = AnimationHover,
                 PauseAnimationsOnBattery = true,
+                RenderPolicy = RenderPolicyAlways,
                 DeviceMetrics = new DeviceMetricChoices(),
                 StartAgentWithWindows = false
             };
@@ -542,6 +560,14 @@ namespace QuadVitals.Core
                 || string.Equals(value, AnimationAlways, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Unknown / empty values fall back to "always render".</summary>
+        public static bool IsKnownRenderPolicy(string value)
+        {
+            return string.Equals(value, RenderPolicyAlways, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, RenderPolicyUnfocused, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, RenderPolicyFullscreen, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Unknown / empty values fall back to the segmented indicator.</summary>
         public static bool IsKnownIndicatorStyle(string value)
         {
@@ -618,6 +644,12 @@ namespace QuadVitals.Core
                 AnimationMode = AnimationHover;
             }
             if (!PauseAnimationsOnBattery.HasValue) PauseAnimationsOnBattery = true;
+
+            if (!IsKnownRenderPolicy(RenderPolicy))
+            {
+                if (!string.IsNullOrEmpty(RenderPolicy)) warnings.Add("renderPolicy 非法，已恢复为全局重绘");
+                RenderPolicy = RenderPolicyAlways;
+            }
 
             if (!IsKnownIndicatorStyle(IndicatorStyle))
             {

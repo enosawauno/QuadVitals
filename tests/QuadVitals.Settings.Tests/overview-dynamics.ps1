@@ -411,6 +411,16 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
 
             # Focus pause: the window is still visible, but every frame loop must stop. The
             # overview timer keeps reading snapshots and pushing history so the curve has no gap.
+            # The shipped default is now "always render", so pin the unfocused policy first; the
+            # window's 1 Hz policy tick reads the same settings object and keeps it pinned.
+            $envType = $uiAsm.GetType('QuadVitals.UI.RenderEnvironment')
+            $configurePolicy = $envType.GetMethod('ConfigureRenderPolicy')
+            $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+            # "$ovWindow" is still open and its own 1 Hz policy tick would otherwise push the
+            # default back every second: the render policy is process-wide by design.
+            $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+            $configurePolicy.Invoke($null, @($true, $false)) | Out-Null
+            Pump 150
             $activatedHandler = $loopType.GetField('_activatedHandler', $flags).GetValue($animLoop)
             $deactivatedHandler = $loopType.GetField('_deactivatedHandler', $flags).GetValue($animLoop)
             $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
@@ -453,6 +463,55 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Pump 200
             Check 'regaining focus resumes the loop' ([bool]$isAnimating.GetValue($animCard, $null)) ''
 
+            # "全局重绘": losing focus must not stop anything.
+            $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+            # The other open settings window shares the same process-wide policy; pin it too.
+            $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+            $configurePolicy.Invoke($null, @($false, $false)) | Out-Null
+            $animCard.SetAlwaysAnimate($true)
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 250
+            $deactivatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+            Pump 250
+            Check 'global repaint keeps the fan loop after focus loss' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
+            $before = [long]$animLoop.FramesDelivered
+            Check 'global repaint delivers frames after focus loss' (Wait-Until { ([long]$animLoop.FramesDelivered - $before) -gt 0 }) ("frames=" + ([long]$animLoop.FramesDelivered - $before))
+
+            # "全屏停止动画": same unfocused state, but a fullscreen foreground stops it.
+            $setFullscreen = $envType.GetMethod('SetFullscreenForTests', [Reflection.BindingFlags]'NonPublic,Static')
+            try {
+                # No fullscreen app yet: losing focus must not stop anything under this policy.
+                $setFullscreen.Invoke($null, @($false)) | Out-Null
+                $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
+                $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
+                $configurePolicy.Invoke($null, @($false, $true)) | Out-Null
+                Pump 250
+                Check 'fullscreen policy keeps the fan loop while unfocused' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+                Check 'fullscreen policy keeps the overview painting while unfocused' (-not [bool]$renderSuspended.GetValue($animPage)) ''
+
+                $setFullscreen.Invoke($null, @($true)) | Out-Null
+                Pump 300
+                Check 'fullscreen policy stops the fan loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+                Check 'fullscreen policy marks the overview not painting' ([bool]$renderSuspended.GetValue($animPage)) ''
+                $setFullscreen.Invoke($null, @($false)) | Out-Null
+                Pump 250
+                # The resume path refreshes once from the real agent; this machine may have no fan
+                # channels, so feed the synthetic snapshot again before checking the loop.
+                $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+                $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
+                Check 'leaving fullscreen resumes the fan loop' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
+                Check 'leaving fullscreen resumes overview painting' (-not [bool]$renderSuspended.GetValue($animPage)) ''
+            }
+            finally {
+                $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+                $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+                $configurePolicy.Invoke($null, @($true, $false)) | Out-Null
+                $setFullscreen.Invoke($null, @($null)) | Out-Null
+                $animCard.SetAlwaysAnimate($false)
+                Pump 150
+            }
+
             # An empty card used to keep spinning a still fan and rebuilding fourteen invisible
             # trails twenty times a second; the loop has to stop with the data.
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($null, $false)) | Out-Null
@@ -476,7 +535,6 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'restoring resumes the overview refresh' ($animTimer.IsEnabled) ''
 
             # RDP / WPF tier 0: stop every frame loop, but keep the 1 Hz data refresh alive.
-            $envType = $uiAsm.GetType('QuadVitals.UI.RenderEnvironment')
             Check 'the render environment gate exists' ($null -ne $envType) ''
             $setOverride = $envType.GetMethod('SetOverrideForTests', [Reflection.BindingFlags]'NonPublic,Static')
             try {

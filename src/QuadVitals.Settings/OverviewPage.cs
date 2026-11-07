@@ -146,6 +146,13 @@ namespace QuadVitals.Settings
             _host.StateChanged += OnHostStateChanged;
             _host.Activated += OnHostActivated;
             _host.Deactivated += OnHostDeactivated;
+            // Fullscreen policy changes arrive through the shared environment, not through focus:
+            // the dashboard can be inactive for a normal window (keep painting) or a fullscreen
+            // one (stop painting) and the difference must be visible here.
+            RenderEnvironment.Changed += OnRenderEnvironmentChanged;
+            // The policy is applied when the page is shown, before this subscription exists; if a
+            // fullscreen window was already in front, the first Changed event would never arrive.
+            _renderSuspended = RenderEnvironment.PauseInFullscreen && RenderEnvironment.FullscreenActive;
         }
 
         private void UnhookHostWindow()
@@ -154,25 +161,61 @@ namespace QuadVitals.Settings
             _host.StateChanged -= OnHostStateChanged;
             _host.Activated -= OnHostActivated;
             _host.Deactivated -= OnHostDeactivated;
+            RenderEnvironment.Changed -= OnRenderEnvironmentChanged;
             _host = null;
         }
 
         private void OnHostDeactivated(object sender, EventArgs e)
         {
             // Stop painting, keep sampling: the 1 Hz timer still reads the snapshot and pushes
-            // history points, so the curve has no gap when the user comes back.
-            _renderSuspended = true;
+            // history points, so the curve has no gap when the user comes back. "全局重绘" and
+            // "全屏停止动画" both ignore this event on purpose.
+            if (RenderEnvironment.PauseWhenUnfocused) _renderSuspended = true;
             _ipTimer.Stop();
         }
 
         private void OnHostActivated(object sender, EventArgs e)
         {
-            _renderSuspended = false;
+            _renderSuspended = RenderEnvironment.PauseInFullscreen && RenderEnvironment.FullscreenActive;
+            if (_renderSuspended)
+            {
+                _ipTimer.Stop();
+                return;
+            }
             if (!IsVisible) return;
             if (!_timer.IsEnabled) _timer.Start();
             if (!_ipTimer.IsEnabled) _ipTimer.Start();
             Refresh();
             RefreshPublicIp(false);
+        }
+
+        /// <summary>
+        /// The policy can change while the dashboard is already in the background (switch from
+        /// 全局重绘 to 失焦停止动画 without touching the window), and a fullscreen app can appear
+        /// or leave while focus stays put. Both arrive as one environment change.
+        /// </summary>
+        private void OnRenderEnvironmentChanged()
+        {
+            bool fullscreen = RenderEnvironment.PauseInFullscreen && RenderEnvironment.FullscreenActive;
+            bool unfocused = RenderEnvironment.PauseWhenUnfocused && _host != null && !_host.IsActive;
+            bool suspended = fullscreen || unfocused;
+            if (suspended == _renderSuspended) return;
+
+            _renderSuspended = suspended;
+            if (suspended)
+            {
+                _ipTimer.Stop();
+                return;
+            }
+
+            if (_host != null && _host.WindowState != WindowState.Minimized && IsVisible)
+            {
+                // The 1 Hz timer keeps running through a fullscreen freeze (Refresh() early-returns
+                // while suspended), so restart it only when the window is minimized; a stopped
+                // timer here may be deliberate (page not on screen, or a test driving the card).
+                if (!_ipTimer.IsEnabled) _ipTimer.Start();
+                Refresh();
+            }
         }
 
         private void OnHostStateChanged(object sender, EventArgs e)
