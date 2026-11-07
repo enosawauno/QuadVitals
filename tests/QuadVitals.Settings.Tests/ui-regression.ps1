@@ -1487,6 +1487,7 @@ $restartErrorText = -join [char[]](0x91CD, 0x542F, 0x4F20, 0x611F, 0x5668, 0x65F
 $firstAttempt = $statusSource.IndexOf('RestartOnce(out unelevated)')
 Check 'the restart attempt comes before the logon task repair' (($firstAttempt -ge 0) -and ($firstAttempt -lt $statusSource.IndexOf('AgentLauncher.RepairLogonTask()'))) 'repair must follow the first attempt'
 Check 'a worker exception cannot leave the button disabled' (($statusSource -match 'try\s*\{[^}]*error = RestartAgent') -and $statusSource.Contains($restartErrorText)) 'worker guard expected'
+Check 'a successful restart closes the panel' ($statusSource -match 'ResetDisplayedData\(\);[\s\S]{0,200}?CloseOverlay\(\)') 'panel close expected'
 
 $statusField = $windowType.GetField('_agentStatus', $flags)
 $statusBlock = $statusField.GetValue($dialogWindow)

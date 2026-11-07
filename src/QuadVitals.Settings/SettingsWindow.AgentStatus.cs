@@ -151,8 +151,8 @@ namespace QuadVitals.Settings
             _agentRestartInProgress = true;
             _deadTicks = 0;
 
-            // 面板只有一个动作：换成提权实例。任务缺失或被禁用是“每次启动都没温度”的根因，
-            // 所以手动重启时先把它补上（一次 UAC）再按任务启动；自动恢复不碰任务，游戏里不弹框。
+            // 面板只有一个动作：换成提权实例。任务缺失或被禁用时新实例会回到未提权，那时才重建
+            // 登录计划任务（一次 UAC）；重建放在重启之后，授权框卡住也卡不住已经起来的进程。
             bool repairTask = reason == null && AgentDiagnostics.IsKnownUnelevated(ReadAgentState().Flags);
 
             System.Threading.Tasks.Task.Run(() =>
@@ -178,7 +178,13 @@ namespace QuadVitals.Settings
                         return;
                     }
                     // 新进程 = 新的采样会话：面板上的数据整套重来，旧进程的曲线与峰值不留在上面。
-                    if (reason == null) ResetDisplayedData();
+                    // 重启成功就把弹窗关掉：此时面板上没有要看的东西，留着只是挡住已经刷新的概览。
+                    if (reason == null)
+                    {
+                        ResetDisplayedData();
+                        if (IsOverlayOpen) CloseOverlay();
+                        return;
+                    }
                     ScheduleAgentPanelRefresh(250);
                 });
             });
