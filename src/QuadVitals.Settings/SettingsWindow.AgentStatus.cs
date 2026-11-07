@@ -160,7 +160,7 @@ namespace QuadVitals.Settings
                 string error;
                 try
                 {
-                    error = RestartAgent(repairTask);
+                    error = RestartAgent(repairTask, reason == null);
                 }
                 catch (Exception ex)
                 {
@@ -254,26 +254,62 @@ namespace QuadVitals.Settings
         /// prompt in front of the restart, and a prompt left unanswered blocked the whole attempt
         /// (the button stayed on its "restarting" label with no agent running).
         /// </param>
-        private static string RestartAgent(bool repairTask)
+        private static string RestartAgent(bool repairTask, bool waitForSettled)
         {
             bool unelevated;
-            string error = RestartOnce(out unelevated);
+            MetricsSnapshot firstFrame;
+            string error = RestartOnce(out unelevated, out firstFrame);
             if (error != null) return error;
-            if (!unelevated) return null;
-            if (!repairTask) return AgentDiagnostics.NotElevatedAfterRestart;
 
-            // 新实例还是没提权：登录计划任务缺失或被禁用。重建任务（一次 UAC），再换一次进程。
-            if (AgentLauncher.RepairLogonTask() != null) return AgentDiagnostics.NotElevatedAfterRestart;
+            if (unelevated)
+            {
+                if (!repairTask) return AgentDiagnostics.NotElevatedAfterRestart;
 
-            error = RestartOnce(out unelevated);
-            if (error != null) return error;
-            return unelevated ? AgentDiagnostics.NotElevatedAfterRestart : null;
+                // 新实例还是没提权：登录计划任务缺失或被禁用。重建任务（一次 UAC），再换一次进程。
+                if (AgentLauncher.RepairLogonTask() != null) return AgentDiagnostics.NotElevatedAfterRestart;
+
+                error = RestartOnce(out unelevated, out firstFrame);
+                if (error != null) return error;
+                if (unelevated) return AgentDiagnostics.NotElevatedAfterRestart;
+            }
+
+            // 温度、风扇与功耗在 5 s 节拍里采样：多等一拍再返回，页面重建时才不是一片 --。
+            if (waitForSettled && firstFrame != null) WaitForSettledFrame(firstFrame, 9000);
+            return null;
+        }
+
+        /// <summary>Temperature, fans and CPU power share one 5 s tick in the agent.</summary>
+        private const int TemperatureTickMs = 5000;
+
+        /// <summary>
+        /// Waits for a frame published after the first temperature tick of the new process. The first
+        /// frame proves the process is alive but has nothing from that tick yet, and the page rebuilt
+        /// from it would show `--` for temperature, fans and power.
+        /// </summary>
+        private static void WaitForSettledFrame(MetricsSnapshot firstFrame, int timeoutMs)
+        {
+            DateTime target = firstFrame.TimestampUtc.AddMilliseconds(TemperatureTickMs + 500);
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                using (MetricsChannel.Reader reader = MetricsChannel.Reader.TryOpen())
+                {
+                    if (reader != null)
+                    {
+                        MetricsSnapshot snapshot = reader.TryRead();
+                        if (snapshot != null && snapshot.TimestampUtc >= target &&
+                            snapshot.IsAlive(DateTime.UtcNow, MetricsSnapshot.AliveTimeout)) return;
+                    }
+                }
+                System.Threading.Thread.Sleep(200);
+            }
         }
 
         /// <summary>One attempt: old instance out, new instance in, first frame checked for elevation.</summary>
-        private static string RestartOnce(out bool unelevated)
+        private static string RestartOnce(out bool unelevated, out MetricsSnapshot firstFrame)
         {
             unelevated = false;
+            firstFrame = null;
             AgentLauncher.RequestExit();
             if (!AgentLauncher.WaitForExit(6000))
             {
@@ -297,6 +333,7 @@ namespace QuadVitals.Settings
             }
             // 新实例没拿到管理员权限：进程活着、帧也在写，但温度和风扇注定读不到。
             // 这种结果不能报成“重启成功”。
+            firstFrame = frame;
             unelevated = AgentDiagnostics.IsKnownUnelevated(frame);
             return null;
         }

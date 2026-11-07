@@ -1484,10 +1484,11 @@ Check 'an agent that reported nothing has no separate repair button' ($null -eq 
 # prompt blocked the worker, so the button stayed on its "restarting" label with no agent running.
 $statusSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\SettingsWindow.AgentStatus.cs')
 $restartErrorText = -join [char[]](0x91CD, 0x542F, 0x4F20, 0x611F, 0x5668, 0x65F6, 0x51FA, 0x9519)
-$firstAttempt = $statusSource.IndexOf('RestartOnce(out unelevated)')
+$firstAttempt = $statusSource.IndexOf('RestartOnce(out unelevated, out firstFrame)')
 Check 'the restart attempt comes before the logon task repair' (($firstAttempt -ge 0) -and ($firstAttempt -lt $statusSource.IndexOf('AgentLauncher.RepairLogonTask()'))) 'repair must follow the first attempt'
 Check 'a worker exception cannot leave the button disabled' (($statusSource -match 'try\s*\{[^}]*error = RestartAgent') -and $statusSource.Contains($restartErrorText)) 'worker guard expected'
 Check 'a successful restart closes the panel' ($statusSource -match 'ResetDisplayedData\(\);[\s\S]{0,200}?CloseOverlay\(\)') 'panel close expected'
+Check 'the manual restart waits for the temperature tick' (($statusSource -match 'waitForSettled && firstFrame != null[\s\S]{0,120}?WaitForSettledFrame') -and ($statusSource -match 'TemperatureTickMs = 5000')) 'settle wait expected'
 
 $statusField = $windowType.GetField('_agentStatus', $flags)
 $statusBlock = $statusField.GetValue($dialogWindow)
