@@ -1726,4 +1726,17 @@ if ($null -ne $ovPage) {
 
 $ovWindow.Close()
 
+"== agent activation and taskbar menu =="
+# A second agent launch used to pop the diagnostics window: the logon task, the scripts and the
+# updater all start the exe again, so that window appeared without anyone asking for it.
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$agentSource = Get-Content -Encoding UTF8 -Raw (Join-Path $repoRoot 'src\QuadVitals.Agent\Program.cs')
+Check 'a second agent launch opens no window' (-not ($agentSource -match 'ActivateRequested\s*\+=')) 'activation must stay silent'
+$bandSource = Get-Content -Encoding UTF8 -Raw (Join-Path $repoRoot 'src\QuadVitals.DeskBand\DeskBand.cpp')
+$restartAt = $bandSource.IndexOf('u91CD\u542F\u4F20\u611F\u5668')
+$diagAt = $bandSource.IndexOf('u8BCA\u65AD\u4FE1\u606F')
+$feedbackAt = $bandSource.IndexOf('u53D1\u9001\u53CD\u9988')
+Check 'the taskbar menu lists diagnostics above feedback' (($restartAt -ge 0) -and ($diagAt -gt $restartAt) -and ($feedbackAt -gt $diagAt)) ("restart=$restartAt diagnostics=$diagAt feedback=$feedbackAt")
+Check 'the diagnostics entry opens the diagnostics window' ($bandSource -match 'case 7: OpenDashboard\(L"--diagnostics"\)') ''
+
 Complete-Run 'settings-ui-elements'

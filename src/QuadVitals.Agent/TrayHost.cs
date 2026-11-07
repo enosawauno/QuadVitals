@@ -120,11 +120,6 @@ namespace QuadVitals.Agent
             _quit = quit;
         }
 
-        public void ShowStatusNow()
-        {
-            OpenDiagnostics();
-        }
-
         /// <summary>
         /// The diagnostics entry now opens the dashboard's dark window instead of a system
         /// MessageBox. Keeping the content in the Settings process means the tray and the

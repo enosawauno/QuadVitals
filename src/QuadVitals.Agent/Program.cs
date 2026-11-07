@@ -141,7 +141,9 @@ namespace QuadVitals.Agent
                 {
                     quitAgent = tray.Quit;
                     tray.SetQuitAction(() => tray.Quit());
-                    single.ActivateRequested += () => tray.Post(tray.ShowStatusNow);
+                    // 第二次启动只负责告诉已有实例“我在”，不再弹诊断窗：登录任务重复触发、
+                    // 脚本重启与更新拉起都会走到这里，一弹就是一个盖住其他窗口的深色面板。
+                    // 诊断信息改由托盘菜单与任务栏右键菜单打开。
                     single.QuitRequested += tray.Quit;
                     // 任务栏右键的「重启传感器」：换一个新进程重建温度与显卡的读取会话。手动请求不受
                     // 一小时自动重启预算的限制，也不消耗它。

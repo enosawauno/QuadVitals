@@ -572,6 +572,8 @@ private:
 
         std::vector<pb::CustomMenu::Item> items;
         items.push_back({ 1, L"\u91CD\u542F\u4F20\u611F\u5668", true });
+        // 诊断信息原本只能从托盘打开；放在发送反馈上面，顺序是“先看数据、后发反馈”。
+        items.push_back({ 7, L"\u8BCA\u65AD\u4FE1\u606F", true });
         items.push_back({ 6, L"\u53D1\u9001\u53CD\u9988", true });
         items.push_back({ 0, L"", true });
         items.push_back({ 4, L"\u5173\u4E8E QuadVitals", true });
@@ -585,6 +587,7 @@ private:
         switch (command)
         {
         case 1: RestartSensor(); break;
+        case 7: OpenDashboard(L"--diagnostics"); break;
         case 4: OpenDashboard(L"--about"); break;
         case 6: OpenDashboard(L"--feedback"); break;
         case 8: ConfirmAndExit(); break;
