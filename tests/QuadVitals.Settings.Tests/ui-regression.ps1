@@ -1480,6 +1480,14 @@ Check 'an unelevated panel merges the task repair into the restart' (($null -eq 
 Check 'an elevated panel has no separate repair button' ($null -eq (Find-ById $elevatedPanel 'AgentRepairTask')) 'no repair button expected'
 Check 'an agent that reported nothing has no separate repair button' ($null -eq (Find-ById $livePanel 'AgentRepairTask')) 'no repair button expected'
 
+# A restart that started with the logon-task repair put a UAC prompt in front of it: an unanswered
+# prompt blocked the worker, so the button stayed on its "restarting" label with no agent running.
+$statusSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\SettingsWindow.AgentStatus.cs')
+$restartErrorText = -join [char[]](0x91CD, 0x542F, 0x4F20, 0x611F, 0x5668, 0x65F6, 0x51FA, 0x9519)
+$firstAttempt = $statusSource.IndexOf('RestartOnce(out unelevated)')
+Check 'the restart attempt comes before the logon task repair' (($firstAttempt -ge 0) -and ($firstAttempt -lt $statusSource.IndexOf('AgentLauncher.RepairLogonTask()'))) 'repair must follow the first attempt'
+Check 'a worker exception cannot leave the button disabled' (($statusSource -match 'try\s*\{[^}]*error = RestartAgent') -and $statusSource.Contains($restartErrorText)) 'worker guard expected'
+
 $statusField = $windowType.GetField('_agentStatus', $flags)
 $statusBlock = $statusField.GetValue($dialogWindow)
 $dialogWindow.SetAgentStatus($true, 0.4)

@@ -157,7 +157,16 @@ namespace QuadVitals.Settings
 
             System.Threading.Tasks.Task.Run(() =>
             {
-                string error = RestartAgent(repairTask);
+                string error;
+                try
+                {
+                    error = RestartAgent(repairTask);
+                }
+                catch (Exception ex)
+                {
+                    // 工作线程里抛出去会让面板永远停在“重启中…”：按钮已禁用，没人再把它打开。
+                    error = "重启传感器时出错：" + ex.Message;
+                }
                 TryOnDispatcher(() =>
                 {
                     _agentRestartInProgress = false;
@@ -234,19 +243,36 @@ namespace QuadVitals.Settings
 
         /// <summary>Blocking half of the restart; runs on a worker thread, never on the UI thread.</summary>
         /// <param name="repairTask">
-        /// True for a manual restart of an instance that reported itself as unelevated: the logon task
-        /// is the reason every start lands without the sensor driver, so it is rebuilt first. A
-        /// cancelled prompt is not fatal - the runas fallback below still asks for elevation.
+        /// True for a manual restart of an instance that reported itself as unelevated. The task is
+        /// rebuilt only when the restart still lands without admin: rebuilding it first put a UAC
+        /// prompt in front of the restart, and a prompt left unanswered blocked the whole attempt
+        /// (the button stayed on its "restarting" label with no agent running).
         /// </param>
         private static string RestartAgent(bool repairTask)
         {
+            bool unelevated;
+            string error = RestartOnce(out unelevated);
+            if (error != null) return error;
+            if (!unelevated) return null;
+            if (!repairTask) return AgentDiagnostics.NotElevatedAfterRestart;
+
+            // 新实例还是没提权：登录计划任务缺失或被禁用。重建任务（一次 UAC），再换一次进程。
+            if (AgentLauncher.RepairLogonTask() != null) return AgentDiagnostics.NotElevatedAfterRestart;
+
+            error = RestartOnce(out unelevated);
+            if (error != null) return error;
+            return unelevated ? AgentDiagnostics.NotElevatedAfterRestart : null;
+        }
+
+        /// <summary>One attempt: old instance out, new instance in, first frame checked for elevation.</summary>
+        private static string RestartOnce(out bool unelevated)
+        {
+            unelevated = false;
             AgentLauncher.RequestExit();
             if (!AgentLauncher.WaitForExit(6000))
             {
                 return "传感器没有退出：可能被安全软件拦住。请稍后重试，或手动结束 QuadVitals.Agent.exe";
             }
-
-            if (repairTask) AgentLauncher.RepairLogonTask();
 
             // Only frames published after the old process is gone count as proof the new one
             // started. A frame the old process wrote between the click and its exit would
@@ -265,7 +291,7 @@ namespace QuadVitals.Settings
             }
             // 新实例没拿到管理员权限：进程活着、帧也在写，但温度和风扇注定读不到。
             // 这种结果不能报成“重启成功”。
-            if (AgentDiagnostics.IsKnownUnelevated(frame)) return AgentDiagnostics.NotElevatedAfterRestart;
+            unelevated = AgentDiagnostics.IsKnownUnelevated(frame);
             return null;
         }
 
