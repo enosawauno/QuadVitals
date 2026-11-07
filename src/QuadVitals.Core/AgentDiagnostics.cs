@@ -63,7 +63,9 @@ namespace QuadVitals.Core
         public static string ElevationLine(MetricFlags flags)
         {
             if ((flags & MetricFlags.ElevationKnown) == 0) return "未上报（旧版 Agent）";
-            return (flags & MetricFlags.Elevated) != 0 ? "管理员：CPU 温度与风扇可读" : "未提权：CPU 温度与风扇读不到";
+            return (flags & MetricFlags.Elevated) != 0
+                ? "管理员：CPU 温度与风扇可读"
+                : "普通权限，无法获取CPU温度和风扇转速数据";
         }
 
         /// <summary>Reported after a restart that produced a frame, but an unelevated one.</summary>
