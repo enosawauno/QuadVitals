@@ -78,7 +78,7 @@ namespace QuadVitals.Settings
 
             // 一个动作：重启传感器。原先“修复登录计划任务”是第二个按钮，但它与重启是同一件事的两半
             // （重建任务 → 换进程），拆开后点哪个都只完成一半；现在重建任务在重启里自动完成。
-            // 按钮带 UAC 盾牌：点下去拿到的是提权实例，温度与风扇才读得到。
+            // 按钮只留文案：图标在 12 px 上只能画成一块色斑，读不出“授权”的含义。
             FlatButton action = new FlatButton(state.Alive ? "重启传感器" : "启动传感器", true);
             action.MinWidth = 118;
             action.ToolTip = state.Alive
@@ -91,7 +91,7 @@ namespace QuadVitals.Settings
                 Text = state.Alive ? "重启传感器" : "启动传感器",
                 VerticalAlignment = VerticalAlignment.Center
             };
-            action.Content = BuildActionLabel(actionLabel);
+            action.Content = actionLabel;
 
             action.Click += (sender, e) =>
             {
@@ -130,39 +130,6 @@ namespace QuadVitals.Settings
                 SnapsToDevicePixels = true,
                 Child = content
             };
-        }
-
-        /// <summary>
-        /// 按钮内容 = UAC 盾牌 + 文案。盾牌是自绘 Path：字体里的盾牌字形在不同字号下粗细不一，
-        /// 而这是面板里唯一会弹系统授权框的动作，图标必须看得清楚。填充绑到按钮前景色，
-        /// 所以主按钮上的白字与盾牌一致，禁用时随模板一起变淡。
-        /// </summary>
-        private static FrameworkElement BuildActionLabel(TextBlock label)
-        {
-            StackPanel row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            Path shield = new Path
-            {
-                Data = Geometry.Parse("M 7,0.8 L 12.6,3.1 L 12.6,7.3 C 12.6,10.4 10.2,12.4 7,13.4 C 3.8,12.4 1.4,10.4 1.4,7.3 L 1.4,3.1 Z"),
-                Width = 12,
-                Height = 12,
-                Stretch = Stretch.Uniform,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0)
-            };
-            shield.SetBinding(Shape.FillProperty, new System.Windows.Data.Binding("Foreground")
-            {
-                RelativeSource = new System.Windows.Data.RelativeSource(
-                    System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(Control), 1)
-            });
-
-            row.Children.Add(shield);
-            row.Children.Add(label);
-            return row;
         }
 
         /// <summary>

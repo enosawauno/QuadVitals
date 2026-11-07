@@ -1400,10 +1400,12 @@ $deadIcon = Find-ById $deadPanel 'AgentStateIcon'
 $liveAction = Find-ById $livePanel 'AgentAction'
 $deadAction = Find-ById $deadPanel 'AgentAction'
 
-# The action button carries a drawn shield before its label, so the label lives in a child TextBlock
-# instead of the button's own Content string.
+# The action button is label-only; the helper still accepts a panel so a future icon does not silently
+# change what the label assertions read.
 function Action-Label($button) {
     if ($null -eq $button) { return $null }
+    $text = $button.Content -as [System.Windows.Controls.TextBlock]
+    if ($null -ne $text) { return $text.Text }
     $panel = $button.Content -as [System.Windows.Controls.Panel]
     if ($null -eq $panel) { return $button.Content }
     foreach ($child in $panel.Children) {
@@ -1452,7 +1454,7 @@ Check 'a dead agent shows the red dot' ((Dot-Color $deadIcon) -eq [QuadVitals.UI
 Check 'a dead halo holds still at half opacity' (($null -ne $deadLight.Halo) -and (-not $deadLight.Halo.HasAnimatedProperties) -and ($deadLight.Halo.Opacity -eq 0.5)) "opacity=$($deadLight.Halo.Opacity) animated=$($deadLight.Halo.HasAnimatedProperties)"
 Check 'the action restarts the sensor while alive' ((Action-Label $liveAction) -eq $restartSensor) "text=$(Action-Label $liveAction)"
 Check 'the action starts the sensor while offline' ((Action-Label $deadAction) -eq $startSensor) "text=$(Action-Label $deadAction)"
-Check 'the action leads with a uac shield' ($null -ne (Action-Shield $liveAction)) 'shield path expected'
+Check 'the action carries no icon' ($null -eq (Action-Shield $liveAction)) 'label only expected'
 Check 'the panel names the shared-memory channel' ((Wait-ById $livePanel 'AgentSubline') -ne $null) ''
 Check 'the panel names the shared-memory channel' ((Find-ById $livePanel 'AgentSubline') -ne $null) ''
 
