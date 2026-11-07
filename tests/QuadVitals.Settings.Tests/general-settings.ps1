@@ -86,7 +86,7 @@ if ($null -ne $generalPanel) {
     # is sized once instead of growing a row at a time.
     # A short settings list does not take the 640x427 board the form dialogs use: the height follows
     # the content, and the width matches the sensor panel instead of leaving half a sheet empty.
-    Check 'the panel is a content-fitted 460 sheet' (([math]::Abs($generalPanel.ActualWidth - 460) -le 0.5) -and ($generalPanel.ActualHeight -ge 240) -and ($generalPanel.ActualHeight -le 330)) ("size=" + [math]::Round($generalPanel.ActualWidth) + "x" + [math]::Round($generalPanel.ActualHeight))
+    Check 'the panel is a 613x377 card' (([math]::Abs($generalPanel.ActualWidth - 613) -le 0.5) -and ([math]::Abs($generalPanel.ActualHeight - 377) -le 0.5)) ("size=" + [math]::Round($generalPanel.ActualWidth) + "x" + [math]::Round($generalPanel.ActualHeight))
     # The scheduler hint under the switch was removed on request: the switch only stores a
     # preference, and the install-time script name is not something the dialog should carry.
     $hintLines = 0
@@ -176,7 +176,7 @@ if (($null -ne $renderPolicy) -and ($null -ne $generalPanel)) {
     $edge = $renderPolicy.TransformToAncestor($generalPanel).Transform((New-Object System.Windows.Point($renderPolicy.ActualWidth, 0)))
     $policyRight = [math]::Round($edge.X, 2)
 }
-$panelRight = $generalPanel.ActualWidth - 20
+$panelRight = $generalPanel.ActualWidth - $generalPanel.Padding.Right
 Check 'the dropdown fills the rest of its row' ([math]::Abs($policyRight - $panelRight) -le 1) ("right=$policyRight panel=$panelRight")
 Check 'the rows sit close to each other' (([math]::Abs(($yPerf - $yAuto)) -le 44) -and ([math]::Abs(($yBattery - $yPerf)) -le 44)) ("auto=$yAuto perf=$yPerf battery=$yBattery")
 }
@@ -192,6 +192,11 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {
     Pump 50
 }
 Check 'the panel has cancel and save buttons' (($null -ne $generalSave) -and ($null -ne $generalClose)) ''
+# The extra height is reserved for settings rows that are not written yet: the buttons stay at the
+# bottom, so there is room for at least two more 34 px rows between the last row and the buttons.
+$lastRowBottom = (Row-Centre $policyLabel) + 17
+$buttonTop = $generalSave.TranslatePoint((New-Object System.Windows.Point(0, 0)), $generalPanel).Y
+Check 'the card keeps two rows of room for later settings' (($buttonTop - $lastRowBottom) -ge 72) ("room=" + [math]::Round($buttonTop - $lastRowBottom, 1))
 if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch) -and ($null -ne $renderPolicy)) {
     $before = [bool](Read-Settings $generalWindow).StartAgentWithWindows
     $beforeBattery = (Read-Settings $generalWindow).PauseAnimationsOnBattery -ne $false
@@ -202,6 +207,7 @@ if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batter
         $targetIndex = 1
         $targetPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
     }
+try {
     $autoStart.IsChecked = -not $before
     $batterySwitch.IsChecked = -not $beforeBattery
     $renderPolicy.SelectedIndex = $targetIndex
@@ -220,7 +226,9 @@ if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batter
     Check 'saving applies the fullscreen gate' (([bool]$envType.GetProperty('PauseInFullscreen').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen)) ''
     Check 'saving applies the unfocused gate' (([bool]$envType.GetProperty('PauseWhenUnfocused').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused)) ''
     Check 'saving closes the panel' (-not [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
-    # 还原这次写入的设置：直接改当前设置对象再写盘，不走 Clone（这一步在门禁机上读到过空对象）。
+} finally {
+    # 还原这次写入的设置：即使断言中途抛异常也要还原——留着改过的 renderPolicy 会让后面的
+    # 动画套件把整片帧循环停掉，失败点看起来完全无关。
     $restore = $null
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
         $restore = Read-Property $generalWindow 'CurrentSettings'
@@ -232,6 +240,7 @@ if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batter
     $restore.RenderPolicy = $beforePolicy
     $restore.Normalize()
     $windowType.GetMethod('SaveSettingsQuietly').Invoke($generalWindow, @($restore)) | Out-Null
+    }
 }
 $generalWindow.Close()
 

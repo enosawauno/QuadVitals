@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Media;
 using QuadVitals.UI;
 using AppSettings = QuadVitals.Core.Settings;
 
@@ -14,11 +15,13 @@ namespace QuadVitals.Settings
     /// </summary>
     internal sealed class GeneralSettingsDialog
     {
-        public const double DialogWidth = 460;
+        public const double DialogWidth = 613;
+        /// <summary>面板高度：当前三行只占一半，余下留给后加的设置项。</summary>
+        public const double DialogHeight = 377;
         /// <summary>面板内边距；行宽与按钮位置都从这里算。</summary>
-        public const double PanelPadding = 20;
+        public const double PanelPadding = 24;
         /// <summary>行左侧标签列宽：四个字 + 余量，保证各行控件从同一条竖线起。</summary>
-        public const double LabelColumnWidth = 76;
+        public const double LabelColumnWidth = 96;
 
         private static readonly string[] RenderPolicyLabels =
         {
@@ -50,6 +53,8 @@ namespace QuadVitals.Settings
                 // 不再用 640×427 那块表单板把内容摊成半张空桌子。
                 Background = Theme.SurfaceCardBrush,
                 CornerRadius = new CornerRadius(Theme.CardRadius),
+                // 比内容高一截：多出来的地方是给后来要加的设置项留的，按钮贴底不动。
+                Height = DialogHeight,
                 Padding = new Thickness(PanelPadding),
                 SnapsToDevicePixels = true
             };
@@ -57,7 +62,7 @@ namespace QuadVitals.Settings
 
             Grid grid = new Grid();
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             TextBlock title = new TextBlock
@@ -70,7 +75,11 @@ namespace QuadVitals.Settings
             AutomationProperties.SetAutomationId(title, "GeneralSettingsTitle");
             grid.Children.Add(title);
 
-            StackPanel body = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+            StackPanel body = new StackPanel
+            {
+                Margin = new Thickness(0, 14, 0, 0),
+                VerticalAlignment = VerticalAlignment.Top
+            };
 
             // 设置项按组排：组标题四个字；开关行把勾选框放最前，紧接四字标签，后面补一句说明；
             // 下拉行是四字标签 + 撑满的下拉。
@@ -122,7 +131,7 @@ namespace QuadVitals.Settings
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 18, 0, 0)
+                VerticalAlignment = VerticalAlignment.Bottom
             };
             FlatButton cancel = new FlatButton("取消");
             AutomationProperties.SetAutomationId(cancel, "GeneralClose");
@@ -181,9 +190,9 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>勾选框列的宽度：勾选框在最左，标签与下拉行都从这条竖线之后开始。</summary>
-        private const double CheckColumnWidth = 20;
+        private const double CheckColumnWidth = 22;
         /// <summary>勾选框与标签之间的间距。</summary>
-        private const double CheckGap = 8;
+        private const double CheckGap = 10;
 
         /// <summary>
         /// 开关行：勾选框在前、四字标签紧跟、后面一句说明。
@@ -220,7 +229,7 @@ namespace QuadVitals.Settings
                 FontSize = 11,
                 Foreground = Theme.TextSecondaryBrush,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(14, 0, 0, 0),
+                Margin = new Thickness(20, 0, 0, 0),
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             AutomationProperties.SetAutomationId(note, hintAutomationId);
@@ -249,7 +258,7 @@ namespace QuadVitals.Settings
             row.Children.Add(caption);
 
             control.VerticalAlignment = VerticalAlignment.Center;
-            control.Margin = new Thickness(14, 0, 0, 0);
+            control.Margin = new Thickness(20, 0, 0, 0);
             Grid.SetColumn(control, 2);
             row.Children.Add(control);
             return row;

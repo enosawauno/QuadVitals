@@ -611,6 +611,8 @@ namespace QuadVitals.UI
             box.SetValue(Border.BackgroundProperty, Theme.SurfaceHoverBrush);
             box.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 9, 0));
             box.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            // 18 px 盒子 + 1 px 圆角描边落在半像素上会发糊：钉到设备像素，四角才利。
+            box.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
 
             FrameworkElementFactory tick = new FrameworkElementFactory(typeof(Path));
             tick.Name = "tick";
