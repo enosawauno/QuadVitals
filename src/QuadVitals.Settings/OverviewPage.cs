@@ -114,6 +114,9 @@ namespace QuadVitals.Settings
             _ipTimer.Interval = TimeSpan.FromMinutes(5);
             _ipTimer.Tick += (sender, e) => RefreshPublicIp(true);
 
+            // 窗口变窄时说明行要换字号：布局完成后再量，ActualWidth 才是真实列宽。
+            SizeChanged += (sender, e) => FitCaptionFont();
+
             Loaded += (sender, e) =>
             {
                 // 只在页面上屏时跑定时器：页面被重建/换页时不会再留一个后台定时器继续往
@@ -830,6 +833,7 @@ namespace QuadVitals.Settings
                 _downValue.Text = MetricFormat.Invalid;
                 _upValue.Text = MetricFormat.Invalid;
                 _fanCard.Update(snapshot, false);
+                FitCaptionFont();
                 return;
             }
 
@@ -876,6 +880,40 @@ namespace QuadVitals.Settings
             _downPeak.Text = "峰值 " + MetricFormat.Rate(Max(downValues));
             _upSpark.SetLabels(TakeLabels(stamps, upValues));
             _downSpark.SetLabels(TakeLabels(stamps, downValues));
+
+            FitCaptionFont();
+        }
+
+        /// <summary>
+        /// 四格说明行共用一号字：按设计字号 11.5 先量一遍，任何一格放不下就整排一起缩
+        /// （每次 0.25，最低 8.5）。缩到底仍放不下才交给省略号，这样窄窗口不会出现
+        /// “一行四种字号”，也不会把型号、核数与线程数截掉一半。
+        /// </summary>
+        private void FitCaptionFont()
+        {
+            MetricTile[] tiles = { _cpuTile, _memoryTile, _gpuTile, _diskTile };
+            double size = MetricTile.CaptionFontSizeDefault;
+            while (size > MetricTile.CaptionFontSizeFloor + 0.001)
+            {
+                if (CaptionsFit(tiles, size)) break;
+                size -= 0.25;
+            }
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                if (Math.Abs(tiles[i].CaptionFontSize - size) > 0.01) tiles[i].CaptionFontSize = size;
+            }
+        }
+
+        private static bool CaptionsFit(MetricTile[] tiles, double size)
+        {
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                MetricTile tile = tiles[i];
+                // 还没布局（ActualWidth = 0）时不做判断：等 SizeChanged 或下一帧再量。
+                if (tile.ActualWidth <= 0) continue;
+                if (tile.CaptionWidthAt(size) > tile.ActualWidth) return false;
+            }
+            return true;
         }
 
         /// <summary>

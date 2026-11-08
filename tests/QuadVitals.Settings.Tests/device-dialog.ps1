@@ -1,4 +1,4 @@
-# Device-status dialog and tile-formatting suite (overview page, the device-status card).
+﻿# Device-status dialog and tile-formatting suite (overview page, the device-status card).
 #
 # Why it is its own file: these assertions drive an overlay panel whose content is rebuilt on every
 # show, and in the element-list suite that panel kept answering "not found" for the first walk of a
@@ -306,6 +306,56 @@ if ($null -ne $devicePanel) {
     Call $ovWindow 'CloseOverlay' @() | Out-Null
     Pump 350
     Check 'closing the panel removes it' ($null -eq (Find-ById $ovRoot 'DeviceSettingsDialog')) ''
+}
+
+"== tile captions fit =="
+# 四格说明行共用一号字：放不下时整排一起缩，不把文字截成省略号。
+$tiles = @(Find-ByTypeName $ovRoot 'MetricTile')
+Check 'the device card has four tiles' ($tiles.Count -eq 4) ("tiles=" + $tiles.Count)
+if ($tiles.Count -eq 4) {
+    $page = $null
+    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        $page = Find-ByTypeName $ovRoot 'OverviewPage'
+        if (($null -ne $page) -and ($page.Count -gt 0)) { break }
+        Pump 50
+    }
+    $page = @($page)[0]
+    Check 'the overview page is on screen' ($null -ne $page) ''
+    if ($null -ne $page) {
+        $samples = @(
+            ('Intel Core i9-13900K ' + [char]0x00B7 + ' 24' + [char]0x6838 + ' ' + [char]0x00B7 + ' 32' + [char]0x7EBF + [char]0x7A0B),
+            ('G.Skill DDR5 4200 ' + [char]0x00B7 + ' 19 / 64 GB'),
+            ('NVIDIA GeForce RTX 4080 ' + [char]0x00B7 + ' 46' + [char]0x00B0 + 'C'),
+            ([char]0x8BFB + ' 933.9 KB/s ' + [char]0x00B7 + ' ' + [char]0x5199 + ' 1.4 MB/s')
+        )
+        for ($i = 0; $i -lt 4; $i++) {
+            $tiles[$i].SetValue('1', '', 0.5, $samples[$i], [QuadVitals.Core.MetricTone]::Normal, $null)
+        }
+        $fit = $page.GetType().GetMethod('FitCaptionFont', $flags)
+        $fit.Invoke($page, $null) | Out-Null
+        $sizes = @($tiles | ForEach-Object { [double]$_.CaptionFontSize })
+        $overflow = 0
+        foreach ($tile in $tiles) {
+            if (([double]$tile.CaptionWidthAt($tile.CaptionFontSize)) -gt ($tile.ActualWidth + 0.5)) { $overflow++ }
+        }
+        Check 'captions keep the design size at 1280' (($sizes | Where-Object { [math]::Abs($_ - 11.5) -gt 0.01 }).Count -eq 0) ("sizes=" + ($sizes -join ','))
+        Check 'captions fit their tiles at 1280' ($overflow -eq 0) ("overflow=" + $overflow)
+
+        $ovWindow.Width = 980
+        $ovWindow.Height = 620
+        $ovRoot.Measure((New-Object System.Windows.Size(980, 620)))
+        $ovRoot.Arrange((New-Object System.Windows.Rect(0, 0, 980, 620)))
+        $ovRoot.UpdateLayout()
+        $fit.Invoke($page, $null) | Out-Null
+        $narrowSizes = @($tiles | ForEach-Object { [double]$_.CaptionFontSize })
+        $narrowOverflow = 0
+        foreach ($tile in $tiles) {
+            if (([double]$tile.CaptionWidthAt($tile.CaptionFontSize)) -gt ($tile.ActualWidth + 0.5)) { $narrowOverflow++ }
+        }
+        Check 'a narrow window shrinks the caption row' (($narrowSizes | Where-Object { $_ -lt 11.49 }).Count -eq 4) ("sizes=" + ($narrowSizes -join ','))
+        Check 'the shrunken captions still fit' ($narrowOverflow -eq 0) ("overflow=" + $narrowOverflow)
+        Check 'all four captions share one size' (($narrowSizes | Select-Object -Unique).Count -eq 1) ("sizes=" + ($narrowSizes -join ','))
+    }
 }
 $ovWindow.Close()
 

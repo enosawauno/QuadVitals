@@ -62,9 +62,14 @@ namespace QuadVitals.Settings
                     if (clock.CurrentMhz > 0)
                     {
                         double fraction = clock.MaxMhz > 0 ? Math.Min(1.0, (double)clock.CurrentMhz / clock.MaxMhz) : 0;
+                        // 最高频率不跟说明行挤：它是静态硬件参数，说明行已经要放型号、核数与线程数。
+                        if (clock.MaxMhz > 0)
+                        {
+                            _cpuTile.ToolTip = "处理器最高频率 " +
+                                (clock.MaxMhz / 1000.0).ToString("0.0") + " GHz";
+                        }
                         _cpuTile.SetValue((clock.CurrentMhz / 1000.0).ToString("0.0"), "GHz", fraction,
-                            CpuNoteText() + " · 最高 " + (clock.MaxMhz / 1000.0).ToString("0.0") + " GHz",
-                            MetricTone.Normal);
+                            CpuNoteText(), MetricTone.Normal);
                     }
                     else
                     {
