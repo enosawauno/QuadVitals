@@ -1170,8 +1170,8 @@ function Page-Title([string]$key) {
     return @($text, $sub)
 }
 $expectedTitles = @{}
-$expectedTitles['overview'] = U @(0x6982, 0x89C8)
-$expectedTitles['elements'] = U @(0x663E, 0x793A, 0x9879)
+$expectedTitles['overview'] = U @(0x4EEA, 0x8868, 0x76D8)
+$expectedTitles['elements'] = U @(0x4EFB, 0x52A1, 0x680F)
 $expectedTitles['about'] = U @(0x5173, 0x4E8E)
 foreach ($key in $expectedTitles.Keys) {
     $pair = Page-Title $key

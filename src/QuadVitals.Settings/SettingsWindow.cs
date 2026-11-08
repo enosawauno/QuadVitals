@@ -904,8 +904,8 @@ namespace QuadVitals.Settings
             host.Children.Add(_navGlider);
 
             StackPanel stack = new StackPanel();
-            AddNav(stack, "overview", "概览");
-            AddNav(stack, "elements", "显示项");
+            AddNav(stack, "overview", "仪表盘");
+            AddNav(stack, "elements", "任务栏");
             AddNav(stack, "about", "关于");
 
             host.Children.Add(stack);

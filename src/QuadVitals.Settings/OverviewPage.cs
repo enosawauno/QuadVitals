@@ -368,7 +368,7 @@ namespace QuadVitals.Settings
 
             // ScrollViewer 会把唯一子元素拉满视口高度，包一层 StackPanel 让它按内容高度收。
             StackPanel root = new StackPanel();
-            root.Children.Add(new PageHeading("概览", "设备状态、实时网速与风扇"));
+            root.Children.Add(new PageHeading("仪表盘", "设备状态、实时网速与风扇"));
             root.Children.Add(device);
             root.Children.Add(lower);
 
