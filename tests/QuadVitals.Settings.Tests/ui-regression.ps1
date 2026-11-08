@@ -1198,6 +1198,85 @@ if ($null -ne $editorCard) {
     Check 'the editor card sits at the top of its row' ($editorCard.VerticalAlignment -eq [System.Windows.VerticalAlignment]::Top) "align=$($editorCard.VerticalAlignment)"
 }
 
+"== colour preset on confirm =="
+# 这一节会点页面上的「保存」，而保存写的是真实的 settings.json（页面没有可注入的路径）。
+# 先整份备份、结束时整份还原：只回填几个字段不够，草稿里的元素列表也会一起落盘。
+$settingsFile = Join-Path $env:APPDATA 'QuadVitals\settings.json'
+$settingsCopy = Join-Path $env:TEMP ('quadvitals-ui-settings-' + [guid]::NewGuid().ToString('n') + '.json')
+$settingsHadFile = Test-Path -LiteralPath $settingsFile
+if ($settingsHadFile) { Copy-Item -LiteralPath $settingsFile -Destination $settingsCopy -Force }
+$pc = New-Case 1
+$presetWindow = $pc.Window
+# New-Case 只改草稿里的类型、不重建编辑器，所以这里要按柱子重新建一次：
+# 否则编辑器还是上一个元素（文本两行）的配色行，断言就会在 line 角色上做，和“用户态”无关。
+$pageType.GetMethod('BuildEditor', $flags).Invoke($pc.Page, $null) | Out-Null
+Layout $pc
+$swatch = $null
+for ($attempt = 0; $attempt -lt 8; $attempt++) {
+    $swatch = Find-ById $pc.Page 'ColorSwatch'
+    if ($null -ne $swatch) { break }
+    Pump 50
+}
+$fillLabel = U @(0x7528, 0x6237, 0x6001)
+Check 'the editor offers the fill colour row' (($null -ne $swatch) -and ([System.Windows.Automation.AutomationProperties]::GetName($swatch) -eq $fillLabel)) ("name=" + $(if ($null -eq $swatch) { 'none' } else { [System.Windows.Automation.AutomationProperties]::GetName($swatch) }))
+if ($null -ne $swatch) {
+    try {
+        $swatch.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+        Pump 120
+        $picker = $windowType.GetField('_overlayContent', $flags).GetValue($presetWindow).Content
+        $autoAdd = $null; $hexBox = $null; $okButton = $null
+        for ($attempt = 0; $attempt -lt 8; $attempt++) {
+            if ($null -eq $autoAdd) { $autoAdd = Find-ById $picker 'ColorPickerAutoAdd' }
+            if ($null -eq $hexBox) { $hexBox = Find-ById $picker 'ColorPickerHex' }
+            if ($null -eq $okButton) { $okButton = Find-ById $picker 'ColorPickerOk' }
+            if (($null -ne $autoAdd) -and ($null -ne $hexBox) -and ($null -ne $okButton)) { break }
+            Pump 50
+        }
+        Check 'the picker opens with the preset switch' (($null -ne $autoAdd) -and ($null -ne $hexBox) -and ($null -ne $okButton)) ''
+        if (($null -ne $autoAdd) -and ($null -ne $hexBox) -and ($null -ne $okButton)) {
+            $autoAdd.IsChecked = $true
+            Pump 100
+            $hexBox.Text = '#FF0A0B0C'
+            Pump 100
+            $okButton.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+            Pump 150
+            $picked = Read-Property $presetWindow 'CurrentSettings'
+            $afterList = @($picked.ColorPresets.Get('fill'))
+            Check 'confirming with the switch on remembers the colour' ($afterList -contains '#FF0A0B0C') ("presets=" + ($afterList -join ','))
+            Layout $pc
+            $shownChips = @()
+            foreach ($chip in (Find-All-ById $pc.Page 'ColorPreset')) {
+                $shownChips += [System.Windows.Automation.AutomationProperties]::GetName($chip)
+            }
+            Check 'the saved colour shows up in the row right away' ($shownChips -contains '#FF0A0B0C') ("chips=" + ($shownChips -join ','))
+            $saveText = U @(0x4FDD, 0x5B58)
+            $saveButton = $null
+            foreach ($b in (Find-ByTypeName $pc.Page 'FlatButton')) {
+                if (($b -is [System.Windows.Controls.ContentControl]) -and ([string]$b.Content -eq $saveText)) { $saveButton = $b; break }
+            }
+            Check 'the element page still has its save button' ($null -ne $saveButton) ''
+            if ($null -ne $saveButton) {
+                $saveButton.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+                Pump 250
+                $saved = Read-Property $presetWindow 'CurrentSettings'
+                $savedList = @($saved.ColorPresets.Get('fill'))
+                Check 'saving the element page keeps the remembered colour' ($savedList -contains '#FF0A0B0C') ("presets=" + ($savedList -join ','))
+                Check 'saving the element page keeps the preset switch' ([bool]$saved.AutoAddPreset) ("autoAdd=" + $saved.AutoAddPreset)
+            }
+        }
+    }
+    finally {
+        if ($settingsHadFile) {
+            Copy-Item -LiteralPath $settingsCopy -Destination $settingsFile -Force
+        }
+        elseif (Test-Path -LiteralPath $settingsFile) {
+            Remove-Item -LiteralPath $settingsFile -Force
+        }
+        if (Test-Path -LiteralPath $settingsCopy) { Remove-Item -LiteralPath $settingsCopy -Force }
+    }
+}
+$pc.Window.Close()
+
 "== page heading alignment =="
 $alignWindow = [Activator]::CreateInstance($windowType, @('overview'))
 $alignWindow.Width = 1280

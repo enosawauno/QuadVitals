@@ -203,7 +203,7 @@ namespace QuadVitals.Settings
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            FrameworkElement heading = new PageHeading("显示项", "编辑任务栏显示内容");
+            FrameworkElement heading = new PageHeading("任务栏", "编辑任务栏显示内容");
             Grid.SetRow(heading, 0);
             root.Children.Add(heading);
 
@@ -343,9 +343,11 @@ namespace QuadVitals.Settings
             FlatButton save = new FlatButton("保存", true);
             save.Click += (sender, e) =>
             {
-                _draft.Normalize();
-                _draft.Save(AppSettings.DefaultPath);
-                _window.SaveSettings(_draft.Clone(), _widthOnLoad);
+                // 元素页只改元素与条间距：色板、开关这类全局设置可能在本页打开后被其它弹窗保存过，
+                // 合并后再落盘，避免一次“保存”把它们抹回旧值。
+                AppSettings merged = AppSettings.MergeBandEdits(_window.CurrentSettings, _draft);
+                merged.Normalize();
+                _window.SaveSettings(merged, _widthOnLoad);
             };
             footer.Children.Add(save);
 

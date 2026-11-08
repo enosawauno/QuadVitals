@@ -93,6 +93,28 @@ function Find-ByTypeName($root, [string]$typeName) {
     return $found
 }
 
+# Same walk as Find-ById, but every match: used where the assertion is about how many copies of a
+# control are on screen (palette chips) rather than where a single control ended up.
+function Find-All-ById($root, [string]$id) {
+    $found = @()
+    if ($null -eq $root) { return $found }
+    $queue = New-Object 'System.Collections.Queue'
+    $queue.Enqueue($root)
+    while ($queue.Count -gt 0) {
+        $e = $queue.Dequeue()
+        if ($e -is [System.Windows.DependencyObject] -and
+            [System.Windows.Automation.AutomationProperties]::GetAutomationId($e) -eq $id) { $found += $e }
+        if ($e -is [System.Windows.Media.Visual] -or $e -is [System.Windows.Media.Media3D.Visual3D]) {
+            $kids = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($e)
+            for ($i = 0; $i -lt $kids; $i++) { $queue.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($e, $i)) }
+        }
+        else {
+            foreach ($child in [System.Windows.LogicalTreeHelper]::GetChildren($e)) { $queue.Enqueue($child) }
+        }
+    }
+    return $found
+}
+
 # A single pass over a freshly built subtree sometimes reports nothing and the next pass finds the
 # element, so lookups retry instead of asserting on one attempt. Retrying matters: a pumped frame
 # re-renders the overlay, so pumping is only added once plain passes have failed.

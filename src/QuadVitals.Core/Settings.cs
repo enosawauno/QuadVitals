@@ -533,12 +533,37 @@ namespace QuadVitals.Core
                 };
             }
             copy.Palette = Palette == null ? null : new List<string>(Palette);
+            // 色板是可变容器：共用一个实例时，克隆体上的增删会改到原件，"保存草稿"与
+            // "确定时加入预设"两条路径互相覆盖。
+            copy.ColorPresets = ColorPresets == null ? null : ColorPresets.Clone();
             if (Items != null)
             {
                 copy.Items = new List<BandElement>(Items.Count);
                 foreach (BandElement item in Items) copy.Items.Add(item.Clone());
             }
             return copy;
+        }
+
+        /// <summary>
+        /// 元素页只改元素列表与条间距，其余设置（色板、渲染策略、开机自启…）可能在页面打开后
+        /// 被别的弹窗各自保存过。保存草稿时把它们从当前设置拿回来；否则一次"保存元素"就会
+        /// 把别人刚存的值改回打开页面那一刻的旧值。
+        /// </summary>
+        public static Settings MergeBandEdits(Settings current, Settings draft)
+        {
+            if (draft == null) return current == null ? null : current.Clone();
+            if (current == null) return draft.Clone();
+
+            Settings merged = current.Clone();
+            if (merged.Band == null) merged.Band = draft.Band;
+            else if (draft.Band != null) merged.Band.HorizontalSpacing = draft.Band.HorizontalSpacing;
+
+            merged.Items = new List<BandElement>(draft.Items == null ? 0 : draft.Items.Count);
+            if (draft.Items != null)
+            {
+                foreach (BandElement item in draft.Items) merged.Items.Add(item.Clone());
+            }
+            return merged;
         }
 
         /// <summary>

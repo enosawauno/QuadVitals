@@ -647,6 +647,38 @@ namespace QuadVitals.Core.Tests
             True(dirty.ColorPresets.Get(ColorRoles.Outline)[0] != "#FF000000", "截断时丢的是最早的");
             Equal(Settings.DefaultPalette[0], dirty.ColorPresets.Get(ColorRoles.Line)[0], "非法项换成默认色");
             Equal("#FF00CC6A", dirty.ColorPresets.Get(ColorRoles.Line)[1], "合法项保留");
+
+            // 克隆必须带走色板的副本：共用实例时，“确定时加入预设”和“保存草稿”会互相覆盖。
+            Settings original = Settings.CreateDefault();
+            original.ColorPresets = new ColorPresets();
+            original.ColorPresets.Set(ColorRoles.Fill, new List<string> { "#FF112233" });
+            Settings cloned = original.Clone();
+            cloned.ColorPresets.Get(ColorRoles.Fill).Add("#FF445566");
+            Equal(1, original.ColorPresets.Get(ColorRoles.Fill).Count, "克隆体改色板不影响原件");
+
+            // 元素页保存：只带元素与条间距，其余设置取当前值（别把别人刚存的改回去）。
+            Settings live = Settings.CreateDefault();
+            live.ColorPresets = new ColorPresets();
+            live.AutoAddPreset = true;
+            live.RenderPolicy = Settings.RenderPolicyFullscreen;
+            live.ColorPresets.Set(ColorRoles.Fill, new List<string> { "#FF112233", "#FF445566" });
+            live.Band.HorizontalSpacing = 3;
+
+            Settings stale = live.Clone();
+            stale.AutoAddPreset = false;
+            stale.RenderPolicy = Settings.RenderPolicyAlways;
+            stale.ColorPresets.Set(ColorRoles.Fill, new List<string> { "#FF112233" });
+            stale.Items[0].Colors.Fill = "#FF778899";
+            stale.Band.HorizontalSpacing = 7;
+
+            Settings merged = Settings.MergeBandEdits(live, stale);
+            Equal("#FF778899", merged.Items[0].Colors.Fill, "元素颜色取草稿");
+            Equal(7, merged.Band.HorizontalSpacing, "元素间距取草稿");
+            True(merged.AutoAddPreset, "开关状态取当前设置");
+            Equal(Settings.RenderPolicyFullscreen, merged.RenderPolicy, "渲染策略取当前设置");
+            Equal(2, merged.ColorPresets.Get(ColorRoles.Fill).Count, "色板取当前设置");
+            merged.Items[0].Colors.Fill = "#FF000001";
+            Equal("#FF778899", stale.Items[0].Colors.Fill, "改合并结果不影响草稿");
         }
 
         private static void ColourTextParsing()

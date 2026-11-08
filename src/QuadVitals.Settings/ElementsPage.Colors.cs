@@ -91,7 +91,9 @@ namespace QuadVitals.Settings
                     box.Text = hex;
                     swatch.Background = new SolidColorBrush(Theme.ToColor(hex, Theme.AccentGreen));
                     RefreshList();
-                    if (chips != null) chips.UpdateSelection();
+                    // 取色器确认时可能刚把颜色记进预设（“添加到颜色预设”开关）：重建这一行，
+                    // 否则颜色已经写进 settings.json，界面上还是原来的几个色块。
+                    if (chips != null) chips.Fill();
                 });
                 _window.ShowOverlay(picker.Build());
             };
