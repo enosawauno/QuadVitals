@@ -332,10 +332,11 @@ namespace QuadVitals.Core.Tests
             True(seen.Observe(noGpu, true, false, t0.AddSeconds(11), out missing), "曾经有效的显卡失效后重启");
 
             // 风扇：见过一次之后才预期，风扇板/无风扇头的主板不会被重启。
+            // 只缺风扇的场景必须带上温度有效：温度也缺时是“这一帧没到”，走 LHM 单独计时。
             MetricFlags fansThenGone = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.DiskValid |
-                                       MetricFlags.FanValid | MetricFlags.AgentAlive;
+                                       MetricFlags.FanValid | MetricFlags.TemperatureValid | MetricFlags.AgentAlive;
             MetricFlags noFans = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.DiskValid |
-                                 MetricFlags.AgentAlive;
+                                 MetricFlags.TemperatureValid | MetricFlags.AgentAlive;
             MetricWatchdog fans = new MetricWatchdog();
             fans.Observe(fansThenGone, true, false, t0, out missing);
             fans.Observe(noFans, true, false, t0.AddSeconds(1), out missing);
@@ -344,6 +345,31 @@ namespace QuadVitals.Core.Tests
 
             MetricWatchdog fanless = new MetricWatchdog();
             True(!fanless.Observe(noFans, true, false, t0.AddSeconds(120), out missing), "从未有效的风扇不触发重启");
+
+            // 温度与风扇一起缺：同一次 LHM 采样没到，风扇不按 10 秒算，等 30 秒才动进程。
+            MetricFlags lhmStalled = MetricFlags.CpuValid | MetricFlags.MemoryValid | MetricFlags.DiskValid |
+                                     MetricFlags.AgentAlive;
+            MetricWatchdog lhm = new MetricWatchdog();
+            lhm.Observe(fansThenGone, true, false, t0, out missing);
+            lhm.Observe(lhmStalled, true, false, t0.AddSeconds(1), out missing);
+            True((missing & MetricFlags.FanValid) != 0, "LHM 停顿时缺失集合仍写风扇，便于日志");
+            True(!lhm.Observe(lhmStalled, true, false, t0.AddSeconds(10), out missing), "温度也缺时 10 秒不重启");
+            True(!lhm.Observe(lhmStalled, true, false, t0.AddSeconds(29), out missing), "满 30 秒前仍不重启");
+            True(lhm.Observe(lhmStalled, true, false, t0.AddSeconds(31), out missing), "满 30 秒后重启一次");
+            Equal(1, lhm.Attempts, "LHM 停顿只记一次尝试");
+
+            // 停顿中途恢复：计时清零，下一次停顿重新从 30 秒算。
+            MetricWatchdog lhmRecover = new MetricWatchdog();
+            lhmRecover.Observe(fansThenGone, true, false, t0, out missing);
+            lhmRecover.Observe(lhmStalled, true, false, t0.AddSeconds(1), out missing);
+            lhmRecover.Observe(fansThenGone, true, false, t0.AddSeconds(20), out missing);
+            lhmRecover.Observe(lhmStalled, true, false, t0.AddSeconds(21), out missing);
+            True(!lhmRecover.Observe(lhmStalled, true, false, t0.AddSeconds(50), out missing), "恢复后重新计 30 秒");
+            True(lhmRecover.Observe(lhmStalled, true, false, t0.AddSeconds(52), out missing), "重新计时满 30 秒后重启");
+
+            // 温度从未有效且风扇从未有效：两个都不追（虚拟机/无传感器主板）。
+            MetricWatchdog noLhm = new MetricWatchdog();
+            True(!noLhm.Observe(lhmStalled, true, false, t0.AddSeconds(120), out missing), "从未有效的 LHM 指标不触发重启");
 
             Equal(3, MetricWatchdog.RetryDelaysSeconds[0], "退避从 3 秒起");
             Equal(30, MetricWatchdog.RetryDelaysSeconds[MetricWatchdog.RetryDelaysSeconds.Length - 1], "最长退避 30 秒");

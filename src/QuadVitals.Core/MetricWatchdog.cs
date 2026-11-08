@@ -23,6 +23,13 @@ namespace QuadVitals.Core
         public const int GraceSeconds = 10;
         public const int HealthyResetSeconds = 60;
         public const int MaxAttempts = 5;
+
+        /// <summary>
+        /// 温度与风扇共用一次 LHM 全量采样：两样一起缺说明这一拍还没到（满载时一次 Update 会
+        /// 明显变慢），而不是风扇单独坏掉。等 Agent 自己重开会话（静默 20 s 后一次），满这个
+        /// 秒数才动进程；只缺风扇（温度正常）仍按 <see cref="GraceSeconds"/> 处理。
+        /// </summary>
+        public const int LhmStallSeconds = 30;
         public static readonly int[] RetryDelaysSeconds = { 3, 5, 10, 30 };
 
         // Temperature has its own recovery in the agent, and network/power/clock can legitimately
@@ -37,6 +44,8 @@ namespace QuadVitals.Core
         // 把 5 次配额用完再来一轮（真实发生过：风扇曾经有效，换回不带风扇的 Agent 之后每轮都重启）。
         private MetricFlags _givenUp;
         private DateTime _invalidSinceUtc = DateTime.MinValue;
+        // 温度+风扇同时缺（同一帧的两种输出）单独计时，不跟着风扇的 10 s 宽限走。
+        private DateTime _lhmMissingSinceUtc = DateTime.MinValue;
         private DateTime _nextAttemptUtc = DateTime.MinValue;
         private DateTime _healthySinceUtc = DateTime.MinValue;
         private int _attempts;
@@ -50,6 +59,7 @@ namespace QuadVitals.Core
         public void Reset()
         {
             _invalidSinceUtc = DateTime.MinValue;
+            _lhmMissingSinceUtc = DateTime.MinValue;
             _nextAttemptUtc = DateTime.MinValue;
             _healthySinceUtc = DateTime.MinValue;
             _attempts = 0;
@@ -65,6 +75,7 @@ namespace QuadVitals.Core
         public void AgentRestarted()
         {
             _invalidSinceUtc = DateTime.MinValue;
+            _lhmMissingSinceUtc = DateTime.MinValue;
             _healthySinceUtc = DateTime.MinValue;
             _seenValid = MetricFlags.None;
             Missing = MetricFlags.None;
@@ -74,6 +85,7 @@ namespace QuadVitals.Core
         public void AgentOffline()
         {
             _invalidSinceUtc = DateTime.MinValue;
+            _lhmMissingSinceUtc = DateTime.MinValue;
             _healthySinceUtc = DateTime.MinValue;
             Missing = MetricFlags.None;
         }
@@ -103,10 +115,39 @@ namespace QuadVitals.Core
                                     MetricFlags.DiskValid | _seenValid) & ~_givenUp;
             if (expectNvidiaGpu) expected |= MetricFlags.GpuValid;
 
-            missing = expected & ~flags;
-            Missing = missing;
+            MetricFlags reported = expected & ~flags;
 
-            if (missing == MetricFlags.None)
+            // 温度与风扇是同一帧的两个输出：两样一起缺是“采样没到”，不是风扇坏了。
+            // 风扇那一位拆出去单独计时，免得一次满载就被当成风扇缺失、10 秒后重启整个进程；
+            // 对外的缺失集合仍写风扇，日志与面板据此说明是哪一项。
+            bool lhmStalled = (reported & MetricFlags.FanValid) != 0 &&
+                              (flags & MetricFlags.TemperatureValid) == 0;
+            MetricFlags generic = lhmStalled ? (reported & ~MetricFlags.FanValid) : reported;
+            missing = reported;
+            Missing = reported;
+
+            if (generic == MetricFlags.None && lhmStalled)
+            {
+                _invalidSinceUtc = DateTime.MinValue;
+                _healthySinceUtc = DateTime.MinValue;
+                if (_lhmMissingSinceUtc == DateTime.MinValue) _lhmMissingSinceUtc = nowUtc;
+                if ((nowUtc - _lhmMissingSinceUtc).TotalSeconds < LhmStallSeconds) return false;
+                if (_attempts >= MaxAttempts)
+                {
+                    _givenUp |= MetricFlags.FanValid;
+                    return false;
+                }
+                if (_nextAttemptUtc != DateTime.MinValue && nowUtc < _nextAttemptUtc) return false;
+                _attempts++;
+                int stallIndex = _attempts - 1;
+                if (stallIndex >= RetryDelaysSeconds.Length) stallIndex = RetryDelaysSeconds.Length - 1;
+                _nextAttemptUtc = nowUtc.AddSeconds(RetryDelaysSeconds[stallIndex]);
+                return true;
+            }
+
+            _lhmMissingSinceUtc = DateTime.MinValue;
+
+            if (generic == MetricFlags.None)
             {
                 _invalidSinceUtc = DateTime.MinValue;
                 if (_healthySinceUtc == DateTime.MinValue) _healthySinceUtc = nowUtc;
@@ -125,7 +166,7 @@ namespace QuadVitals.Core
             if (_attempts >= MaxAttempts)
             {
                 // 配额用完还在缺：这一项本会话不再追（写一次日志由调用方做）。
-                _givenUp |= missing;
+                _givenUp |= generic;
                 return false;
             }
             if (_nextAttemptUtc != DateTime.MinValue && nowUtc < _nextAttemptUtc) return false;
