@@ -623,6 +623,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             # window's 1 Hz policy tick reads the same settings object and keeps it pinned.
             $envType = $uiAsm.GetType('QuadVitals.UI.RenderEnvironment')
             $configurePolicy = $envType.GetMethod('ConfigureRenderPolicy')
+            $configureHover = $envType.GetMethod('ConfigureHoverOnlyCards')
             $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
             # "$ovWindow" is still open and its own 1 Hz policy tick would otherwise push the
             # default back every second: the render policy is process-wide by design.
@@ -822,6 +823,37 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         Pump 250
         Check 'always keeps the fan after focus loss' ([bool]$isAnimating.GetValue($animCard, $null)) ''
         Check 'always keeps the power card after focus loss' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
+        # 悬停档：只把风扇与功耗卡的门控交给指针；其他动画仍按全局重绘继续。
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyHover
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyHover
+        $configurePolicy.Invoke($null, @($false, $false)) | Out-Null
+        $configureHover.Invoke($null, @($true)) | Out-Null
+        & $rewake
+        Check 'hover policy keeps the fan idle without the pointer' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'hover policy keeps the power card idle without the pointer' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $hoverEnter = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+        $hoverEnter.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
+        $animCard.RaiseEvent($hoverEnter)
+        $animPower.RaiseEvent($hoverEnter)
+        Pump 250
+        Check 'hover policy runs the fan while hovered' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'hover policy runs the power card while hovered' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $fanDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        $powDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        Pump 250
+        Check 'hover policy ignores focus loss while hovered' (([bool]$isAnimating.GetValue($animCard, $null)) -and ([bool]$powerIsAnimating.GetValue($animPower, $null))) ''
+        $hoverLeave = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+        $hoverLeave.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
+        $animCard.RaiseEvent($hoverLeave)
+        $animPower.RaiseEvent($hoverLeave)
+        Pump 250
+        Check 'hover policy stops the fan after the pointer leaves' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'hover policy stops the power card after the pointer leaves' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        # 先把两个窗口的策略写离 hover，再关掉 HoverOnlyCards；否则 1 Hz 策略 tick 会把它设回 true。
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+        $configureHover.Invoke($null, @($false)) | Out-Null
 
         # 失焦停止：两张卡都停；回前台都恢复，且停着时不再出帧。
         $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused

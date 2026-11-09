@@ -19,6 +19,7 @@ namespace QuadVitals.UI
         private static bool _animationsDisabled;
         private static bool _pauseWhenUnfocused = true;
         private static bool _pauseInFullscreen;
+        private static bool _hoverOnlyCards;
         private static bool _fullscreenActive;
         private static bool _hasFullscreenOverride;
         private static bool _fullscreenOverride;
@@ -57,6 +58,12 @@ namespace QuadVitals.UI
             get { return _pauseInFullscreen; }
         }
 
+        /// <summary>True when the fan and power cards animate only while the pointer is on them.</summary>
+        public static bool HoverOnlyCards
+        {
+            get { return _hoverOnlyCards; }
+        }
+
         /// <summary>True while the foreground window covers its whole monitor.</summary>
         public static bool FullscreenActive
         {
@@ -90,8 +97,8 @@ namespace QuadVitals.UI
         }
 
         /// <summary>
-        /// Applies the user's render policy from settings. The two flags are independent so the
-        /// caller never has to translate the three UI options into a single enum here.
+        /// Applies the user's render policy from settings. The flags are independent so the
+        /// caller never has to translate the four UI options into a single enum here.
         /// </summary>
         public static void ConfigureRenderPolicy(bool pauseWhenUnfocused, bool pauseInFullscreen)
         {
@@ -113,6 +120,17 @@ namespace QuadVitals.UI
             // always notify even when the effective ceiling stayed the same.
             if (changed) Raise(Changed);
             Refresh();
+        }
+
+        /// <summary>
+        /// Applies the "hover" option: the fan and power cards only animate while the pointer is
+        /// on them. Other frame loops keep following the focus/fullscreen flags above.
+        /// </summary>
+        public static void ConfigureHoverOnlyCards(bool hoverOnly)
+        {
+            if (_hoverOnlyCards == hoverOnly) return;
+            _hoverOnlyCards = hoverOnly;
+            Raise(Changed);
         }
 
         /// <summary>

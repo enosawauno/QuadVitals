@@ -25,13 +25,13 @@ namespace QuadVitals.Settings
 
         private static readonly string[] RenderPolicyLabels =
         {
-            "全局重绘", "失焦停止动画", "全屏停止动画"
+            "全局重绘", "悬停时播放动画", "失焦停止动画", "全屏停止动画"
         };
 
         private static readonly string[] RenderPolicyKeys =
         {
-            AppSettings.RenderPolicyAlways, AppSettings.RenderPolicyUnfocused,
-            AppSettings.RenderPolicyFullscreen
+            AppSettings.RenderPolicyAlways, AppSettings.RenderPolicyHover,
+            AppSettings.RenderPolicyUnfocused, AppSettings.RenderPolicyFullscreen
         };
 
         private readonly SettingsWindow _window;

@@ -58,6 +58,7 @@ namespace QuadVitals.Settings
         private double _flowPendingSeconds;
         private double _pumpTime;
         private bool _disposed;
+        private bool _hover;
         private bool _pumpBreathing;
         private bool _heat;
         private int _lastKind = -1;
@@ -274,6 +275,17 @@ namespace QuadVitals.Settings
             Loaded += (sender, e) => StartIfAllowed();
             Unloaded += (sender, e) => Stop();
             IsVisibleChanged += (sender, e) => { if ((bool)e.NewValue) StartIfAllowed(); else Stop(); };
+            // 悬停门控只在「悬停时播放动画」档生效；其他档由 FrameLoop 按渲染策略/环境上限决定。
+            MouseEnter += (sender, e) => { _hover = true; StartIfAllowed(); };
+            MouseLeave += (sender, e) => { _hover = false; if (RenderEnvironment.HoverOnlyCards) Stop(); };
+            RenderEnvironment.Changed += OnRenderEnvironmentChanged;
+        }
+
+        private void OnRenderEnvironmentChanged()
+        {
+            if (_disposed) return;
+            if (RenderEnvironment.HoverOnlyCards && !_hover) Stop();
+            else StartIfAllowed();
         }
 
         /// <summary>Live read-out for the card. Called from the overview tick (about once per second).</summary>
@@ -552,6 +564,11 @@ namespace QuadVitals.Settings
         private void StartIfAllowed()
         {
             if (_disposed) return;
+            if (RenderEnvironment.HoverOnlyCards && !_hover)
+            {
+                Stop();
+                return;
+            }
             if (!SystemParameters.ClientAreaAnimation)
             {
                 // 系统关了动画：气流按当前状态画一帧就不动了，扇叶停在上一次的角度；
@@ -694,6 +711,7 @@ namespace QuadVitals.Settings
         {
             if (_disposed) return;
             _disposed = true;
+            RenderEnvironment.Changed -= OnRenderEnvironmentChanged;
             _loop.Dispose();
         }
     }

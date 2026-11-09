@@ -73,6 +73,7 @@ namespace QuadVitals.Settings
         private double _flickerLength;
         private int _flickerSteps;
         private bool _disposed;
+        private bool _hover;
         private Color _sceneColour = Theme.AccentGreen;
         private MetricTone _tone = MetricTone.Normal;
 
@@ -113,6 +114,17 @@ namespace QuadVitals.Settings
             Loaded += (sender, e) => StartIfAllowed();
             Unloaded += (sender, e) => Stop();
             IsVisibleChanged += (sender, e) => { if ((bool)e.NewValue) StartIfAllowed(); else Stop(); };
+            // 悬停门控只在「悬停时播放动画」档生效；其他档由 FrameLoop 按渲染策略/环境上限决定。
+            MouseEnter += (sender, e) => { _hover = true; StartIfAllowed(); };
+            MouseLeave += (sender, e) => { _hover = false; if (RenderEnvironment.HoverOnlyCards) Stop(); };
+            RenderEnvironment.Changed += OnRenderEnvironmentChanged;
+        }
+
+        private void OnRenderEnvironmentChanged()
+        {
+            if (_disposed) return;
+            if (RenderEnvironment.HoverOnlyCards && !_hover) Stop();
+            else StartIfAllowed();
         }
 
         /// <summary>Called from the overview tick (about once per second).</summary>
@@ -552,6 +564,11 @@ namespace QuadVitals.Settings
         private void StartIfAllowed()
         {
             if (_disposed) return;
+            if (RenderEnvironment.HoverOnlyCards && !_hover)
+            {
+                Stop();
+                return;
+            }
             if (!SystemParameters.ClientAreaAnimation)
             {
                 RenderStatic();
@@ -632,6 +649,7 @@ namespace QuadVitals.Settings
         {
             if (_disposed) return;
             _disposed = true;
+            RenderEnvironment.Changed -= OnRenderEnvironmentChanged;
             _loop.Dispose();
         }
     }

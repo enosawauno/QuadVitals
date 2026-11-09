@@ -310,6 +310,9 @@ namespace QuadVitals.Core
         /// <summary>渲染时机：失焦也继续渲染（默认）。</summary>
         public const string RenderPolicyAlways = "always";
 
+        /// <summary>渲染时机：风扇与功耗卡只在指针停在卡上时逐帧；其他动画照常。</summary>
+        public const string RenderPolicyHover = "hover";
+
         /// <summary>渲染时机：失焦时停止渲染，回到前台后恢复。</summary>
         public const string RenderPolicyUnfocused = "unfocused";
 
@@ -568,6 +571,7 @@ namespace QuadVitals.Core
         public static bool IsKnownRenderPolicy(string value)
         {
             return string.Equals(value, RenderPolicyAlways, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, RenderPolicyHover, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(value, RenderPolicyUnfocused, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(value, RenderPolicyFullscreen, StringComparison.OrdinalIgnoreCase);
         }

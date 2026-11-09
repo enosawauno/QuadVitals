@@ -197,6 +197,7 @@ namespace QuadVitals.Core.Tests
             Settings fresh = Settings.CreateDefault();
             Equal(Settings.RenderPolicyAlways, fresh.RenderPolicy, "默认全局重绘");
             True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyAlways), "always 合法");
+            True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyHover), "hover 合法");
             True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyUnfocused), "unfocused 合法");
             True(Settings.IsKnownRenderPolicy(Settings.RenderPolicyFullscreen), "fullscreen 合法");
             True(Settings.IsKnownRenderPolicy("ALWAYS"), "大小写不敏感");

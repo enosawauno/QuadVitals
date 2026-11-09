@@ -110,11 +110,14 @@ if ($null -ne $batterySwitch) {
 $renderPolicy = Find-ById $generalRoot 'GeneralRenderPolicy'
 Check 'the panel carries the render policy dropdown' ($null -ne $renderPolicy) ''
 if ($null -ne $renderPolicy) {
-    Check 'the render policy offers three choices' ($renderPolicy.Items.Count -eq 3) ("items=" + $renderPolicy.Items.Count)
+    Check 'the render policy offers four choices' ($renderPolicy.Items.Count -eq 4) ("items=" + $renderPolicy.Items.Count)
+    $hoverLabel = -join [char[]](0x60AC, 0x505C, 0x65F6, 0x64AD, 0x653E, 0x52A8, 0x753B)
+    Check 'the hover option sits second' ($renderPolicy.Items[1].ToString() -eq $hoverLabel) ("item1=" + $renderPolicy.Items[1])
     $savedPolicy = [string](Read-Settings $generalWindow).RenderPolicy
     $expectedIndex = 0
-    if ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused) { $expectedIndex = 1 }
-    elseif ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen) { $expectedIndex = 2 }
+    if ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyHover) { $expectedIndex = 1 }
+    elseif ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused) { $expectedIndex = 2 }
+    elseif ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen) { $expectedIndex = 3 }
     Check 'the render policy reflects the saved choice' ($renderPolicy.SelectedIndex -eq $expectedIndex) ("index=" + $renderPolicy.SelectedIndex + " saved=" + $savedPolicy)
     Check 'the render policy has a label' ($null -ne (Find-ById $generalRoot 'GeneralRenderPolicyLabel')) ''
 
@@ -201,11 +204,12 @@ if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batter
     $before = [bool](Read-Settings $generalWindow).StartAgentWithWindows
     $beforeBattery = (Read-Settings $generalWindow).PauseAnimationsOnBattery -ne $false
     $beforePolicy = [string](Read-Settings $generalWindow).RenderPolicy
+    # Use unfocused as the save target: hover would leak HoverOnlyCards into the next suite.
+    $targetPolicy = 'unfocused'
     $targetIndex = 2
-    $targetPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
-    if ($beforePolicy -eq $targetPolicy) {
-        $targetIndex = 1
-        $targetPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+    if ($beforePolicy -eq 'unfocused') {
+        $targetPolicy = 'fullscreen'
+        $targetIndex = 3
     }
 try {
     $autoStart.IsChecked = -not $before
@@ -218,13 +222,13 @@ try {
     Pump 200
     Check 'saving applies the draft' ([bool](Read-Settings $generalWindow).StartAgentWithWindows -eq (-not $before)) ''
     Check 'saving applies the battery preference' ((Read-Settings $generalWindow).PauseAnimationsOnBattery -eq (-not $beforeBattery)) ''
-    Check 'saving applies the render policy' ([string](Read-Settings $generalWindow).RenderPolicy -eq $targetPolicy) ''
+    Check 'saving applies the render policy' ([string](Read-Settings $generalWindow).RenderPolicy -eq $targetPolicy) ("got=" + (Read-Settings $generalWindow).RenderPolicy + " want=" + $targetPolicy + " idx=" + $renderPolicy.SelectedIndex)
     # Other settings windows in this process have their own 1 Hz policy tick and share the same
     # process-wide environment; apply this window's just-saved value right before reading it.
     $windowType.GetMethod('ApplyRenderPolicy', $flags).Invoke($generalWindow, @()) | Out-Null
     $envType = $uiAsm.GetType('QuadVitals.UI.RenderEnvironment')
     Check 'saving applies the fullscreen gate' (([bool]$envType.GetProperty('PauseInFullscreen').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen)) ''
-    Check 'saving applies the unfocused gate' (([bool]$envType.GetProperty('PauseWhenUnfocused').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused)) ''
+    Check 'saving applies the unfocused gate' (([bool]$envType.GetProperty('PauseWhenUnfocused').GetValue($null)) -eq ($targetPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyUnfocused)) ("paused=" + [bool]$envType.GetProperty('PauseWhenUnfocused').GetValue($null) + " want=" + $targetPolicy)
     Check 'saving closes the panel' (-not [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($generalWindow)) ''
 } finally {
     # 还原这次写入的设置：即使断言中途抛异常也要还原——留着改过的 renderPolicy 会让后面的

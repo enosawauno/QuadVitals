@@ -1020,9 +1020,13 @@ namespace QuadVitals.Settings
                 StringComparison.OrdinalIgnoreCase);
             bool pauseInFullscreen = string.Equals(policy, AppSettings.RenderPolicyFullscreen,
                 StringComparison.OrdinalIgnoreCase);
+            // 悬停档只把风扇/功耗卡的门控交给 hover；其余动画仍按“全局重绘”继续。
+            bool hoverOnlyCards = string.Equals(policy, AppSettings.RenderPolicyHover,
+                StringComparison.OrdinalIgnoreCase);
             // ConfigureRenderPolicy refreshes the environment itself (including the fullscreen
             // probe), so the 1 Hz policy tick never needs a second call.
             RenderEnvironment.ConfigureRenderPolicy(pauseWhenUnfocused, pauseInFullscreen);
+            RenderEnvironment.ConfigureHoverOnlyCards(hoverOnlyCards);
         }
 
         public AppSettings CurrentSettings { get { return _settings; } }
