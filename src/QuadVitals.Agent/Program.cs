@@ -268,6 +268,9 @@ namespace QuadVitals.Agent
                 Console.WriteLine("  power    : " + (snapshot.Has(MetricFlags.CpuPowerValid) && snapshot.CpuPowerWatts > 0
                     ? snapshot.CpuPowerWatts.ToString("0.0") + " W"
                     : MetricFormat.Invalid));
+                Console.WriteLine("  cpuTdp   : " + (snapshot.CpuTdpWatts > 0
+                    ? snapshot.CpuTdpWatts + " W（固件 MSR）"
+                    : MetricFormat.Invalid));
                 Console.WriteLine("  gpu      : " + (snapshot.Has(MetricFlags.GpuValid)
                     ? MetricFormat.PercentDetailed(snapshot.GpuLoadPercent) + "  显存 " + MetricFormat.PercentDetailed(snapshot.GpuMemoryPercent)
                     : MetricFormat.Invalid));

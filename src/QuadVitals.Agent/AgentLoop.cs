@@ -23,6 +23,7 @@ namespace QuadVitals.Agent
         private readonly DiskSampler _disk = new DiskSampler();
         private readonly DiskIoSampler _diskIo = new DiskIoSampler();
         private readonly VolumeIoSampler _volumeIo = new VolumeIoSampler();
+        private readonly CpuPowerLimitSource _cpuTdp = new CpuPowerLimitSource();
         private readonly Stopwatch _stage = new Stopwatch();
         private readonly bool _elevated;
         private Settings _settings;
@@ -140,6 +141,10 @@ namespace QuadVitals.Agent
                 snapshot.CpuPowerWatts = (float)Math.Round(watts, 1);
                 snapshot.Flags |= MetricFlags.CpuPowerValid;
             }
+
+            // TDP 走固件 MSR（Intel 0x614，失败再试 0x610）；读不到就写 0，界面退回型号表并标估算。
+            double cpuTdp = _cpuTdp.Read(nowUtc);
+            snapshot.CpuTdpWatts = cpuTdp > 0 ? (ushort)Math.Round(cpuTdp) : (ushort)0;
 
             MetricsSnapshot.FanReading[] fans;
             if (_temperature.TryGetFans(nowUtc, TimeSpan.FromSeconds(12), out fans))

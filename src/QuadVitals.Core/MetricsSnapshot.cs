@@ -64,7 +64,7 @@ namespace QuadVitals.Core
     ///   160 float   cpuUserPercent    (reserved area, see note below)
     ///   164 float   cpuSystemPercent  (reserved area)
     ///   168 uint16  coreCount         0 = agent did not sample per-core
-    ///   170 uint16  reserved
+    ///   170 uint16  cpuTdpWatts (v4 内复用保留槽；0 = 未报告)
     ///   172 uint8[32] corePercent      busy per logical processor, 0-100
     ///   204 uint8[32] coreSystemPercent kernel share per logical processor (user = busy - this)
     ///   236 float   gpuLoadPercent     GPU utilisation (0 = not sampled)
@@ -142,6 +142,12 @@ namespace QuadVitals.Core
         public const int VolumeCountOffset = 264;
         /// <summary>CPU package power in deciwatts; this slot was reserved in v3 and is still inside the 364-byte payload.</summary>
         public const int CpuPowerOffset = 266;
+        /// <summary>
+        /// CPU TDP reported by the firmware (MSR 0x614, whole watts; 0 = not reported). Reuses the
+        /// 2-byte reserved slot between coreCount and the per-core table, so the v4 layout and size
+        /// do not change and an old agent simply leaves it zero.
+        /// </summary>
+        public const int CpuTdpOffset = 170;
         /// <summary>GPU package power in deciwatts (appended after the v3 payload).</summary>
         public const int GpuPowerOffset = 364;
         /// <summary>GPU graphics clock in MHz (appended after the v3 payload).</summary>
@@ -217,6 +223,13 @@ namespace QuadVitals.Core
         /// payload stays 364 bytes and the taskbar band does not have to be rebuilt.
         /// </summary>
         public float CpuPowerWatts { get; set; }
+
+        /// <summary>
+        /// CPU TDP the firmware reports through MSR 0x614, in whole watts. Zero when the agent
+        /// could not read it (non-Intel, no driver access, or an old agent), in which case the UI
+        /// falls back to its model table and marks the value as an estimate.
+        /// </summary>
+        public ushort CpuTdpWatts { get; set; }
 
         /// <summary>GPU package power in watts (appended field, 0 = not sampled).</summary>
         public float GpuPowerWatts { get; set; }
@@ -345,6 +358,7 @@ namespace QuadVitals.Core
             int cores = CorePercents == null ? 0 : CorePercents.Length;
             if (cores > MaxCores) cores = MaxCores;
             WriteUInt16(buffer, CoreCountOffset, (ushort)cores);
+            WriteUInt16(buffer, CpuTdpOffset, CpuTdpWatts);
             for (int i = 0; i < cores; i++)
             {
                 buffer[CorePercentsOffset + i] = CorePercents[i];
@@ -451,6 +465,7 @@ namespace QuadVitals.Core
                 DiskPercent = ReadSingle(buffer, DiskPercentOffset),
                 DiskUsedGb = ReadUInt16(buffer, DiskCapacityOffset),
                 DiskTotalGb = ReadUInt16(buffer, DiskCapacityOffset + 2),
+                CpuTdpWatts = ReadUInt16(buffer, CpuTdpOffset),
                 CpuPowerWatts = ReadUInt16(buffer, CpuPowerOffset) / 10f,
                 GpuPowerWatts = buffer.Length >= GpuTailSizeBytes ? ReadUInt16(buffer, GpuPowerOffset) / 10f : 0f,
                 GpuClockMhz = buffer.Length >= GpuTailSizeBytes ? ReadUInt16(buffer, GpuClockOffset) : 0f,

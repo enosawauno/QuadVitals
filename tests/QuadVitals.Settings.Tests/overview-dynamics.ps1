@@ -267,6 +267,205 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         }
         Check 'the fan card sets a minimum height, not a fixed one' ([double]::IsNaN($freshCard.Height) -and $freshCard.MinHeight -gt 0) ("height=" + $freshCard.Height + " min=" + $freshCard.MinHeight)
 
+        "== power card =="
+        $powerCard = (Find-ByTypeName $ovRoot 'PowerCard' | Select-Object -First 1)
+        Check 'the power card sits on the overview' ($null -ne $powerCard) ''
+        if ($null -ne $powerCard) {
+            $powerSnap = [Activator]::CreateInstance($snapType)
+            $powerSnap.TimestampUtc = [DateTime]::UtcNow
+            $powerSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid, GpuPowerValid')
+            $powerSnap.CpuPowerWatts = 112.6
+            $powerSnap.GpuPowerWatts = 46.5
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+
+            $powerTotalText = Find-ById $ovRoot 'PowerTotal'
+            $powerCpuText = Find-ById $ovRoot 'PowerCpu'
+            $powerGpuText = Find-ById $ovRoot 'PowerGpu'
+            $powerCpuUnit = Find-ById $ovRoot 'PowerCpuUnit'
+            $powerGpuUnit = Find-ById $ovRoot 'PowerGpuUnit'
+            Check 'the power total adds CPU and GPU' ($powerTotalText.Text -eq '159.1') ("total=" + $powerTotalText.Text)
+            Check 'the power total carries its unit' ((Find-ById $ovRoot 'PowerUnit').Text -eq 'W') ''
+            Check 'the power total is the hero readout' (([double]$powerTotalText.FontSize -eq 40) -and ($null -ne (Find-ById $ovRoot 'PowerTotalLabel'))) ("size=" + $powerTotalText.FontSize)
+            Check 'the CPU power is shown on its own line' ($powerCpuText.Text -eq '112.6') ("cpu=" + $powerCpuText.Text)
+            Check 'the GPU power is shown on its own line' ($powerGpuText.Text -eq '46.5') ("gpu=" + $powerGpuText.Text)
+            Check 'each wattage carries its own unit' (($powerCpuUnit.Text -eq 'W') -and ($powerGpuUnit.Text -eq 'W')) ''
+            Check 'the component wattages step down from the total' (([double]$powerCpuText.FontSize -eq 18) -and ([double]$powerGpuText.FontSize -eq 18) -and ([double]$powerCpuText.FontSize -lt [double]$powerTotalText.FontSize)) ''
+            Check 'the power scope says CPU + GPU' ((Find-ById $ovRoot 'PowerScope').Text -eq 'CPU + GPU') ''
+            Check 'the GPU row is labelled GPU' ((Find-ById $ovRoot 'PowerGpuLabel').Text -eq 'GPU') ''
+            $powerCpuY = $powerCpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
+            $powerGpuY = $powerGpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
+            Check 'CPU and GPU power rows are stacked vertically' ($powerGpuY -gt ($powerCpuY + 6)) ("cpuY=" + [Math]::Round($powerCpuY, 1) + " gpuY=" + [Math]::Round($powerGpuY, 1))
+            $powerCpuBar = Find-ById $ovRoot 'PowerCpuBar'
+            $powerGpuBar = Find-ById $ovRoot 'PowerGpuBar'
+            $powerCpuX = $powerCpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
+            $powerGpuX = $powerGpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
+            $powerCpuBarX = $powerCpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
+            $powerGpuBarX = $powerGpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
+            Check 'each bar sits to the right of its label and value' (($powerCpuBarX -gt ($powerCpuX + 80)) -and ($powerGpuBarX -gt ($powerGpuX + 80))) ("cpuBar=" + [Math]::Round($powerCpuBarX, 1) + " cpuText=" + [Math]::Round($powerCpuX, 1))
+            $powerCpuBarY = $powerCpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
+            $powerGpuBarY = $powerGpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
+            Check 'each bar rides on its value row' (([Math]::Abs(($powerCpuY + $powerCpuText.ActualHeight / 2) - ($powerCpuBarY + $powerCpuBar.ActualHeight / 2)) -lt 6) -and ([Math]::Abs(($powerGpuY + $powerGpuText.ActualHeight / 2) - ($powerGpuBarY + $powerGpuBar.ActualHeight / 2)) -lt 6)) ''
+            Check 'the segmented bars keep the device card segment size' (($powerCpuBar.ActualWidth -ge 200) -and ($powerCpuBar.ActualWidth -le 240) -and ($powerGpuBar.ActualWidth -ge 200) -and ($powerGpuBar.ActualWidth -le 240)) ("width=" + [Math]::Round($powerCpuBar.ActualWidth, 1))
+            $powerCpuTdpText = (Find-ById $ovRoot 'PowerCpuTdp').Text
+            $powerGpuTdpText = (Find-ById $ovRoot 'PowerGpuTdp').Text
+            Check 'the bar scale is visible as a TDP caption' (($powerCpuTdpText -eq 'TDP 125 W') -and ($powerGpuTdpText -match '^TDP [0-9]+ W$')) ("cpu=" + $powerCpuTdpText + " gpu=" + $powerGpuTdpText)
+
+            # 固件通过 MSR 报回的 TDP 优先于型号表；没有报告时才用表。
+            $powerSnap.CpuTdpWatts = 95
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Check 'a firmware-reported TDP wins over the model table' ((Find-ById $ovRoot 'PowerCpuTdp').Text -eq 'TDP 95 W') ("tdp=" + (Find-ById $ovRoot 'PowerCpuTdp').Text)
+            $powerSnap.CpuTdpWatts = 0
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Check 'without a reported TDP the table still applies' ((Find-ById $ovRoot 'PowerCpuTdp').Text -eq 'TDP 125 W') ("tdp=" + (Find-ById $ovRoot 'PowerCpuTdp').Text)
+            $powerIcon = Find-ById $ovRoot 'PowerIcon'
+            Check 'the power card has a drawn energy icon on the left' (($null -ne $powerIcon) -and ($powerIcon -is [System.Windows.Controls.Canvas]) -and ([double]$powerIcon.Width -eq 96) -and ([double]$powerIcon.Height -eq 128)) ''
+            $powerIconX = -1
+            if ($null -ne $powerIcon) { $powerIconX = $powerIcon.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X }
+            Check 'the energy icon sits left of the readouts' (($powerIconX -ge 0) -and ($powerIconX -lt $powerCpuX)) ("iconX=" + [Math]::Round($powerIconX, 1) + " valueX=" + [Math]::Round($powerCpuX, 1))
+            $iconRings = @($powerIcon.Children | Where-Object { ($_ -is [System.Windows.Shapes.Ellipse]) -and ($null -ne $_.Stroke) })
+            $iconSparks = @($powerIcon.Children | Where-Object { $_ -is [System.Windows.Shapes.Path] })
+            Check 'the energy icon has no circle around it' ($iconRings.Count -eq 0) ("rings=" + $iconRings.Count)
+            Check 'the energy icon carries a bolt and sparks' ($iconSparks.Count -ge 4) ("paths=" + $iconSparks.Count)
+            Check 'the scope note stays visible' ((Find-ById $ovRoot 'PowerNote').Text.Length -gt 0) ''
+            $powerNoteX = (Find-ById $ovRoot 'PowerNote').TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
+            $powerCpuLabelX = (Find-ById $ovRoot 'PowerCpuLabel').TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
+            Check 'the scope note shares the text left edge' ([Math]::Abs($powerNoteX - $powerCpuLabelX) -le 1) ("noteX=" + [Math]::Round($powerNoteX, 1) + " labelX=" + [Math]::Round($powerCpuLabelX, 1)) ''
+
+            # 随机闪烁：等 1–10 秒来一次，单次 0.30–0.75 秒，里面必须有真正的暗台阶。
+            $flickerNext = [double](Read-Field $powerCard '_nextFlickerIn' $flags)
+            Check 'the flicker waits a random 1-10 seconds' (($flickerNext -ge 1.0) -and ($flickerNext -le 10.0)) ("next=" + [Math]::Round($flickerNext, 1))
+            Call-Private $powerCard 'BeginFlicker' @() | Out-Null
+            $flickerLeft = [double](Read-Field $powerCard '_flickerLeft' $flags)
+            $flickerLength = [double](Read-Field $powerCard '_flickerLength' $flags)
+            $flickerSteps = [int](Read-Field $powerCard '_flickerSteps' $flags)
+            $flickerLevels = Read-Field $powerCard '_flickerLevels' $flags
+            $dropouts = 0
+            for ($fi = 0; $fi -lt $flickerSteps; $fi++) { if ([double]$flickerLevels[$fi] -lt 0.5) { $dropouts++ } }
+            Check 'a flicker burst is short and has real dropouts' (($flickerLeft -gt 0) -and ($flickerLength -ge 0.30) -and ($flickerLength -le 0.75) -and ($dropouts -ge 1)) ("left=" + [Math]::Round($flickerLeft, 2) + " length=" + [Math]::Round($flickerLength, 2) + " steps=" + $flickerSteps + " dropouts=" + $dropouts)
+
+            # 分档颜色与动效：高负载转红，空闲回绿；指针停在卡上才逐帧。
+            $powerTone = $powerCard.GetType().GetProperty('Tone')
+            $highSnap = [Activator]::CreateInstance($snapType)
+            $highSnap.TimestampUtc = [DateTime]::UtcNow
+            $highSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid, GpuPowerValid')
+            $highSnap.CpuPowerWatts = 120.0
+            $highSnap.GpuPowerWatts = 300.0
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($highSnap, $true)) | Out-Null
+            Check 'a near-limit frame turns the energy icon red' ($powerTone.GetValue($powerCard, $null).ToString() -eq 'Danger') ("tone=" + $powerTone.GetValue($powerCard, $null))
+            $powerSnap.CpuPowerWatts = 30.0
+            $powerSnap.GpuPowerWatts = 40.0
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Check 'an idle frame keeps the energy icon green' ($powerTone.GetValue($powerCard, $null).ToString() -eq 'Normal') ("tone=" + $powerTone.GetValue($powerCard, $null))
+
+            # 回到基准帧：后面的条比例与缺失态断言都用这一组数。
+            $powerSnap.CpuPowerWatts = 112.6
+            $powerSnap.GpuPowerWatts = 46.5
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+
+            $cpuBar = Find-ById $ovRoot 'PowerCpuBar'
+            $gpuBar = Find-ById $ovRoot 'PowerGpuBar'
+            Check 'the CPU and GPU have separate bars' (($null -ne $cpuBar) -and ($null -ne $gpuBar) -and -not [object]::ReferenceEquals($cpuBar, $gpuBar)) ''
+            Check 'the CPU bar uses the shared 16-segment style' (($null -ne $cpuBar) -and ($cpuBar.BarStyle.ToString() -eq 'Segments') -and ([double]$cpuBar.Height -eq 22)) ''
+            Check 'the GPU bar uses the shared 16-segment style' (($null -ne $gpuBar) -and ($gpuBar.BarStyle.ToString() -eq 'Segments') -and ([double]$gpuBar.Height -eq 22)) ''
+            $cpuFraction = [double](Read-Field $cpuBar '_value' $flags)
+            $gpuFraction = [double](Read-Field $gpuBar '_value' $flags)
+            Check 'the CPU bar is scaled to its TDP' ([Math]::Abs($cpuFraction - (112.6 / 125.0)) -lt 0.001) ("cpu=" + $cpuFraction)
+            Check 'the GPU bar is scaled to its TDP' ([Math]::Abs($gpuFraction - (46.5 / 320.0)) -lt 0.001) ("gpu=" + $gpuFraction)
+            Check 'the bars use the 125 W / 320 W TDP denominators' (($cpuBar.ToolTip -like '*125*') -and ($gpuBar.ToolTip -like '*320*')) ''
+
+            $networkWidth = [double](Find-ById $ovRoot 'NetworkCard').ActualWidth
+            $powerWidth = [double]$powerCard.ActualWidth
+            Check 'the power card matches the network card width' (($networkWidth -gt 0) -and ([Math]::Abs(($powerWidth / $networkWidth) - 1.0) -lt 0.04)) ("power=" + [Math]::Round($powerWidth, 1) + " network=" + [Math]::Round($networkWidth, 1))
+            $networkBottom = (Find-ById $ovRoot 'NetworkCard').TranslatePoint((New-Object System.Windows.Point(0, (Find-ById $ovRoot 'NetworkCard').ActualHeight)), $ovRoot).Y
+            $powerTop = $powerCard.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).Y
+            Check 'the power card sits below the network card' ($powerTop -gt $networkBottom) ("powerTop=" + [Math]::Round($powerTop, 1) + " networkBottom=" + [Math]::Round($networkBottom, 1))
+
+            # One missing feed must not be turned into a half total.
+            $powerSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid')
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Check 'a missing GPU feed removes the total' ((Find-ById $ovRoot 'PowerTotal').Text -eq '--') ("total=" + (Find-ById $ovRoot 'PowerTotal').Text)
+            Check 'the valid CPU feed stays readable' ((Find-ById $ovRoot 'PowerCpu').Text -eq '112.6') ''
+            Check 'the missing GPU feed reads --' ((Find-ById $ovRoot 'PowerGpu').Text -eq '--') ''
+            Check 'the missing feed is explained' ((Find-ById $ovRoot 'PowerNote').Visibility -eq [System.Windows.Visibility]::Visible) ''
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($null, $false)) | Out-Null
+            Check 'an offline power card shows a dash' ((Find-ById $ovRoot 'PowerTotal').Text -eq '--') ''
+            Check 'an offline power card explains itself' ((Find-ById $ovRoot 'PowerNote').Text.Length -gt 0) ''
+
+            # 回到一帧完整数据：错误说明行会在卡片里占一行，量高度前得先让它藏起来。
+            $powerSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid, GpuPowerValid')
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            $ovRoot.UpdateLayout()
+
+            # Narrow window: the fan moves to its own row, the power card follows underneath.
+            $ovWindow.Width = 980
+            $ovRoot.Measure((New-Object System.Windows.Size(980, 620)))
+            $ovRoot.Arrange((New-Object System.Windows.Rect(0, 0, 980, 620)))
+            $ovRoot.UpdateLayout()
+            Pump 120
+            $narrowNetwork = Find-ById $ovRoot 'NetworkCard'
+            $narrowPower = (Find-ByTypeName $ovRoot 'PowerCard' | Select-Object -First 1)
+            $narrowPowerTop = $narrowPower.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).Y
+            $narrowNetworkBottom = $narrowNetwork.TranslatePoint((New-Object System.Windows.Point(0, $narrowNetwork.ActualHeight)), $ovRoot).Y
+            Check 'the narrow layout keeps the power card below the network card' ($narrowPowerTop -gt $narrowNetworkBottom) ("powerTop=" + [Math]::Round($narrowPowerTop, 1) + " networkBottom=" + [Math]::Round($narrowNetworkBottom, 1))
+            Check 'the narrow layout keeps the same width relationship' (([double]$narrowNetwork.ActualWidth -gt 0) -and ([Math]::Abs(([double]$narrowPower.ActualWidth / [double]$narrowNetwork.ActualWidth) - 1.0) -lt 0.06)) ("power=" + [Math]::Round($narrowPower.ActualWidth, 1) + " network=" + [Math]::Round($narrowNetwork.ActualWidth, 1))
+            $ovWindow.Width = 1280
+            $ovRoot.Measure((New-Object System.Windows.Size(1280, 853)))
+            $ovRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
+            $ovRoot.UpdateLayout()
+            Pump 120
+        }
+
+        "== metric typography =="
+        $metricType = $uiAsm.GetType('QuadVitals.UI.MetricTypography')
+        $metricValueSize = if ($null -ne $metricType) { [double]$metricType.GetField('ValueSize').GetValue($null) } else { 0 }
+        $metricUnitSize = if ($null -ne $metricType) { [double]$metricType.GetField('UnitSize').GetValue($null) } else { 0 }
+        $metricLineHeight = if ($null -ne $metricType) { [double]$metricType.GetField('LineHeight').GetValue($null) } else { 0 }
+        $metricDigits = if ($null -ne $metricType) { [System.Windows.Media.FontFamily]$metricType.GetField('Digits').GetValue($null) } else { $null }
+        Check 'the shared metric typography matches the FOOps card' (($null -ne $metricType) -and ($metricValueSize -eq 40) -and ($metricUnitSize -eq 17) -and ($metricLineHeight -eq 44) -and ($metricDigits.Source -eq 'Arial Black')) ''
+        $isMetricValue = { param($tb) ($null -ne $tb) -and ([double]$tb.FontSize -eq 40) -and ($tb.FontFamily.Source -eq 'Arial Black') -and ($tb.FontWeight -eq [System.Windows.FontWeights]::Black) -and ([double]$tb.LineHeight -eq 44) }
+        $isMetricUnit = { param($tb) ($null -ne $tb) -and ([double]$tb.FontSize -eq 17) -and ($tb.FontFamily.Source -eq 'Arial Black') -and ($tb.FontWeight -eq [System.Windows.FontWeights]::Black) }
+
+        $cpuTile = Read-Field $ovPage '_cpuTile' $flags
+        $cpuValue = Read-Field $cpuTile '_value' $flags
+        $cpuUnit = Read-Field $cpuTile '_unit' $flags
+        Check 'the device value uses the shared 40 px Black type' (& $isMetricValue $cpuValue) ''
+        Check 'the device unit uses the shared 17 px type' (& $isMetricUnit $cpuUnit) ''
+        $fanValue = Read-Field $freshCard '_value' $flags
+        $fanUnit = Read-Field $freshCard '_unit' $flags
+        Check 'the fan value uses the shared 40 px Black type' (& $isMetricValue $fanValue) ''
+        Check 'the fan unit uses the shared 17 px type' (& $isMetricUnit $fanUnit) ''
+        # 层级：合计用 40 px 主数值排版，两个分量退到 18 px。
+        $powerTotalValue = Find-ById $ovRoot 'PowerTotal'
+        $powerUnit = Find-ById $ovRoot 'PowerUnit'
+        $powerCpuValue = Find-ById $ovRoot 'PowerCpu'
+        $powerGpuValue = Find-ById $ovRoot 'PowerGpu'
+        $powerCpuUnit = Find-ById $ovRoot 'PowerCpuUnit'
+        Check 'the power total uses the shared 40 px Black type' (& $isMetricValue $powerTotalValue) ''
+        Check 'the power total unit uses the shared 17 px type' (& $isMetricUnit $powerUnit) ''
+        Check 'the power components use the 18 px semibold readout' (([double]$powerCpuValue.FontSize -eq 18) -and ($powerCpuValue.FontWeight -eq [System.Windows.FontWeights]::SemiBold) -and ([double]$powerGpuValue.FontSize -eq 18)) ''
+        Check 'the power component unit is smaller than the total unit' ([double]$powerCpuUnit.FontSize -lt [double]$powerUnit.FontSize) ''
+
+        # 网速上下行是唯一保留旧字号的地方：18 px SemiBold，避免把曲线挤掉。
+        $upValue = Read-Field $ovPage '_upValue' $flags
+        $downValue = Read-Field $ovPage '_downValue' $flags
+        Check 'the network up value keeps 18 px SemiBold' (($null -ne $upValue) -and ([double]$upValue.FontSize -eq 18) -and ($upValue.FontWeight -eq [System.Windows.FontWeights]::SemiBold)) ''
+        Check 'the network down value keeps 18 px SemiBold' (($null -ne $downValue) -and ([double]$downValue.FontSize -eq 18) -and ($downValue.FontWeight -eq [System.Windows.FontWeights]::SemiBold)) ''
+
+        $fanBar = Read-Field $freshCard '_bar' $flags
+        $powerCpuBar = Find-ById $ovRoot 'PowerCpuBar'
+        $powerGpuBar = Find-ById $ovRoot 'PowerGpuBar'
+        Check 'the fan bar uses the shared 16-segment style' (($null -ne $fanBar) -and ($fanBar.BarStyle.ToString() -eq 'Segments')) ''
+        Check 'the fan bar keeps 10 px; the power bars match the device tiles at 22 px' (($null -ne $fanBar) -and ($null -ne $powerCpuBar) -and ($null -ne $powerGpuBar) -and ([double]$fanBar.Height -eq 10) -and ([double]$powerCpuBar.Height -eq 22) -and ([double]$powerGpuBar.Height -eq 22)) ("fan=" + $(if($null -ne $fanBar){$fanBar.Height}else{'none'}) + " cpu=" + $(if($null -ne $powerCpuBar){$powerCpuBar.Height}else{'none'}) + " gpu=" + $(if($null -ne $powerGpuBar){$powerGpuBar.Height}else{'none'}))
+
+        $deviceCard = Find-ById $ovRoot 'DeviceCard'
+        # 设备、网速、风扇三张卡必须同高；功耗卡扛着三行读数，允许高十几像素，但不能变成另一档卡片。
+        $coreHeights = @([double]$deviceCard.ActualHeight, [double]$networkCard.ActualHeight, [double]$freshCard.ActualHeight)
+        $coreMin = ($coreHeights | Measure-Object -Minimum).Minimum
+        $coreMax = ($coreHeights | Measure-Object -Maximum).Maximum
+        Check 'device, network and fan cards share one height' (($coreMax - $coreMin) -le 1.0) ("heights=" + (($coreHeights | ForEach-Object { [Math]::Round($_, 1) }) -join ','))
+        $powerHeight = [double]$powerCard.ActualHeight
+        Check 'the power card stays within a compact band' (($powerHeight -ge 204) -and ($powerHeight -le 240)) ("power=" + [Math]::Round($powerHeight, 1))
+
         # IP 枚举是后台活儿：把 5 秒缓存打旧后调一次 Refresh，界面线程只应把活儿排出去，
         # 否则每 5 秒就会在 1 Hz 刷新里卡掉一两帧。
         $lanStamp = $ovPage.GetType().GetField('_lanCheckedUtc', $flags)
@@ -370,6 +569,21 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Pump 200
             Check 'the fan card goes still when the pointer leaves it' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
 
+            # 功耗卡的闪电只在看得见的窗口里才跑帧，所以放在这个已显示的窗口里验。
+            $animPower = $ovType.GetField('_powerCard', $flags).GetValue($animPage)
+            $animPower.GetType().GetMethod('Update').Invoke($animPower, @($powerSnap, $true)) | Out-Null
+            $powerIsAnimating = $animPower.GetType().GetProperty('IsAnimating')
+            $powerEnter = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+            $powerEnter.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
+            $animPower.RaiseEvent($powerEnter)
+            Pump 300
+            Check 'the power icon animates while the pointer is on the card' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+            $powerLeave = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+            $powerLeave.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
+            $animPower.RaiseEvent($powerLeave)
+            Pump 200
+            Check 'the power icon goes still when the pointer leaves' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
             # 常驻档不依赖指针：设置里选「常驻动画」后，指针不在卡上也必须转。
             $animCard.SetAlwaysAnimate($true)
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
@@ -381,6 +595,8 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'always-on delivers frames without hover' ($frames -gt 0) "frames=$frames"
             # 保存一次静默设置（同内容）不能把当前概览页 Dispose 掉，否则风扇会从这一秒起永久停转。
             $animWindow.SaveSettingsQuietly($animWindow.CurrentSettings.Clone())
+            # 保存会重配渲染环境并重启帧循环，给一次完整的 1 Hz 刷新再接断言。
+            Pump 300
             Check 'a quiet save keeps the visible overview alive' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
             $animCard.SetAlwaysAnimate($false)
             Pump 200

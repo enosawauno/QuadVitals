@@ -38,6 +38,7 @@ namespace QuadVitals.Settings
         private readonly MetricTile _gpuTile = new MetricTile("显卡 · 占用", Theme.AccentGreen);
         private readonly MetricTile _diskTile = new MetricTile("磁盘 · 占用", Theme.AccentGreen);
         private readonly FanCard _fanCard = new FanCard();
+        private readonly PowerCard _powerCard = new PowerCard();
 
         private readonly TextBlock _downValue = new TextBlock();
         private readonly TextBlock _upValue = new TextBlock();
@@ -255,6 +256,7 @@ namespace QuadVitals.Settings
         public void ApplyAnimationMode()
         {
             _fanCard.SetAlwaysAnimate(AnimationsAlways);
+            _powerCard.SetAlwaysAnimate(AnimationsAlways);
             Refresh();
         }
 
@@ -284,6 +286,8 @@ namespace QuadVitals.Settings
             Card device = new Card("设备状态", "\uE7F4");
             device.HeaderRight.Content = BuildDeviceHeader();
             AutomationProperties.SetAutomationId(device, "DeviceCard");
+            // 四张卡统一高度：内容较少的设备卡补到与网速/风扇/功耗卡同一底边。
+            device.MinHeight = 204;
             HoverReveal.Attach(device, _deviceSettingsButton);
             Grid strip = new Grid();
             MetricTile[] tiles = { _cpuTile, _gpuTile, _memoryTile, _diskTile };
@@ -302,6 +306,7 @@ namespace QuadVitals.Settings
             lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Theme.CardGap) });
             lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             // 窄窗口时风扇卡换到第二行，不叠在网络卡上。
+            lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -355,6 +360,15 @@ namespace QuadVitals.Settings
             Grid.SetColumn(_fanCard, 2);
             lower.Children.Add(_fanCard);
 
+            // 功耗卡与网速卡同宽：直接占左下那一列，不再对半切——
+            // 半宽会把 16 段条压成小点，读数也挤成两行小字。
+            _powerCard.Margin = new Thickness(0, Theme.CardGap, 0, 0);
+            _powerCard.SetBinding(FrameworkElement.MinHeightProperty,
+                new System.Windows.Data.Binding(nameof(FrameworkElement.ActualHeight)) { Source = network });
+            Grid.SetRow(_powerCard, 1);
+            Grid.SetColumn(_powerCard, 0);
+            lower.Children.Add(_powerCard);
+
             // 标题 + IP 一行需要固定宽度；窗口变窄时让网络卡占满整行，风扇卡换到下一行，
             // 避免两张卡叠在一起。
             lower.SizeChanged += (sender, e) =>
@@ -362,11 +376,16 @@ namespace QuadVitals.Settings
                 bool narrow = lower.ActualWidth < 920;
                 int span = narrow ? 3 : 1;
                 if (Grid.GetColumnSpan(network) != span) Grid.SetColumnSpan(network, span);
-                int fanRow = narrow ? 1 : 0;
+                // 窄窗口也让功耗卡紧跟网速卡，宽度与网速卡一致，风扇排到功耗卡之后。
+                int fanRow = narrow ? 2 : 0;
                 if (Grid.GetRow(_fanCard) != fanRow) Grid.SetRow(_fanCard, fanRow);
                 if (Grid.GetColumnSpan(_fanCard) != span) Grid.SetColumnSpan(_fanCard, span);
                 Thickness margin = narrow ? new Thickness(0, Theme.CardGap, 0, 0) : new Thickness(0);
                 if (_fanCard.Margin != margin) _fanCard.Margin = margin;
+
+                if (Grid.GetRow(_powerCard) != 1) Grid.SetRow(_powerCard, 1);
+                int powerSpan = narrow ? 3 : 1;
+                if (Grid.GetColumnSpan(_powerCard) != powerSpan) Grid.SetColumnSpan(_powerCard, powerSpan);
             };
 
             // ScrollViewer 会把唯一子元素拉满视口高度，包一层 StackPanel 让它按内容高度收。
@@ -833,6 +852,7 @@ namespace QuadVitals.Settings
                 _downValue.Text = MetricFormat.Invalid;
                 _upValue.Text = MetricFormat.Invalid;
                 _fanCard.Update(snapshot, false);
+                _powerCard.Update(snapshot, false);
                 FitCaptionFont();
                 return;
             }
@@ -851,6 +871,8 @@ namespace QuadVitals.Settings
             _fanCard.PreferredChannel = _window.CurrentSettings.FanChannel;
             _fanCard.SetAlwaysAnimate(AnimationsAlways);
             _fanCard.Update(snapshot, true);
+            _powerCard.SetAlwaysAnimate(AnimationsAlways);
+            _powerCard.Update(snapshot, true);
 
             bool netValid = snapshot.Has(MetricFlags.NetworkValid);
             _downValue.Text = netValid ? MetricFormat.Rate(snapshot.NetDownBytesPerSec) : MetricFormat.Invalid;
@@ -1082,6 +1104,7 @@ namespace QuadVitals.Settings
             _ipTimer.Stop();
             UnhookHostWindow();
             _fanCard.Dispose();
+            _powerCard.Dispose();
             if (_reader != null)
             {
                 _reader.Dispose();

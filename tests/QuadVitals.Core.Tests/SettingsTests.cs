@@ -77,6 +77,28 @@ namespace QuadVitals.Core.Tests
             Equal(MetricTone.Normal, TemperatureZones.For(null, 85), "空指标名不分档");
         }
 
+        private static void PowerLimitBehaviour()
+        {
+            Equal(125.0, PowerLimits.CpuTdp("Intel Core i9-13900K"), "13900K 的 TDP 是 125 W");
+            Equal(125.0, PowerLimits.CpuTdp("Intel Core i7-13700K"), "13700K 的 TDP 是 125 W");
+            Equal(125.0, PowerLimits.CpuTdp(null), "未知 CPU 回落到 125 W");
+            Equal(253.0, PowerLimits.CpuMaxPower("Intel Core i9-13900K"), "13900K 的上限是 253 W");
+            Equal(241.0, PowerLimits.CpuMaxPower("Intel Core i9-12900K"), "12900K 的上限是 241 W");
+            Equal(320.0, PowerLimits.GpuTdp("NVIDIA GeForce RTX 4080"), "4080 的 TDP 是 320 W");
+            Equal(450.0, PowerLimits.GpuTdp("NVIDIA GeForce RTX 4090"), "4090 的 TDP 是 450 W");
+            Equal(320.0, PowerLimits.GpuTdp(null), "未知 GPU 回落到 320 W");
+            Equal(true, PowerLimits.CpuTdpKnown("Intel Core i9-13900K"), "13900K 在表里");
+            Equal(false, PowerLimits.CpuTdpKnown("Intel Core i7-9999X"), "未登记型号不算已知");
+            Equal(false, PowerLimits.CpuTdpKnown(null), "空型号不算已知");
+            Equal(105.0, PowerLimits.CpuTdp("AMD Ryzen 7 5800X"), "5800X 是 105 W");
+            Equal(65.0, PowerLimits.CpuTdp("AMD Ryzen 5 5600X"), "5600X 是 65 W");
+            Equal(120.0, PowerLimits.CpuTdp("AMD Ryzen 7 7800X3D"), "7800X3D 是 120 W");
+            Equal(125.0, PowerLimits.DecodePackageWatts(125 * 8, 0), "MSR 低 15 位 125 W");
+            Equal(253.0, PowerLimits.DecodePackageWatts(253 * 8, 0), "MSR 低 15 位 253 W");
+            Equal(0.0, PowerLimits.DecodePackageWatts(0, 0), "全 0 视为未报告");
+            Equal(0.0, PowerLimits.DecodePackageWatts(0x7FFF, 0), "0x7FFF 无限档视为无效");
+        }
+
         private static void FanZoneThresholds()
         {
             Equal(2000, FanZones.NominalMaxRpm, "满量程 2000 RPM");

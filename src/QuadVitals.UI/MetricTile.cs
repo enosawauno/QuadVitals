@@ -32,15 +32,14 @@ namespace QuadVitals.UI
 
             StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
             _value.Text = "--";
-            _value.FontSize = 34;
-            _value.FontWeight = FontWeights.SemiBold;
+            MetricTypography.ApplyValue(_value);
             _value.Foreground = Theme.TextPrimaryBrush;
             row.Children.Add(_value);
 
-            _unit.FontSize = 14;
+            MetricTypography.ApplyUnit(_unit);
             _unit.Foreground = Theme.TextSecondaryBrush;
             _unit.VerticalAlignment = VerticalAlignment.Bottom;
-            _unit.Margin = new Thickness(5, 0, 0, 6);
+            _unit.Margin = new Thickness(4, 0, 0, 4);
             row.Children.Add(_unit);
             Children.Add(row);
 

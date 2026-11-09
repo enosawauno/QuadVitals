@@ -42,6 +42,7 @@ namespace QuadVitals.Core.Tests
             Suite("MetricTone 阈值", ToneThresholds);
             Suite("MetricTone 温度分档", TemperatureZoneThresholds);
             Suite("FanZones 风扇分档", FanZoneThresholds);
+            Suite("PowerLimits 硬件 TDP", PowerLimitBehaviour);
             Suite("FanLabels 风扇命名", FanLabelBehaviour);
             Suite("FanDiagnosis 风扇空态归因", FanDiagnosisBehaviour);
             Suite("FanToneLatch 复位", FanToneLatchReset);
@@ -106,7 +107,8 @@ namespace QuadVitals.Core.Tests
                 NetDownBytesPerSec = 29696.0,
                 AdapterName = "Intel(R) Ethernet Converged Network Adapter X550-T2",
                 MemoryUsedBytes = 34359738368L,
-                MemoryTotalBytes = 68719476736L
+                MemoryTotalBytes = 68719476736L,
+                CpuTdpWatts = 125
             };
 
             byte[] bytes = original.ToBytes();
@@ -127,6 +129,8 @@ namespace QuadVitals.Core.Tests
             Equal(original.MemoryTotalBytes, parsed.MemoryTotalBytes, "总内存往返");
             Equal(original.TimestampUtc, parsed.TimestampUtc, "时间戳往返");
             Equal(original.Flags, parsed.Flags, "flags 往返");
+            Equal(original.CpuTdpWatts, parsed.CpuTdpWatts, "CPU TDP 往返");
+            Equal((ushort)125, MetricsSnapshot.ReadUInt16(bytes, MetricsSnapshot.CpuTdpOffset), "TDP 落在 170 保留槽");
             True(parsed.Has(MetricFlags.TemperatureValid), "温度有效位");
             Equal((MetricFlags)0, MetricFlags.None, "None 位为 0");
         }

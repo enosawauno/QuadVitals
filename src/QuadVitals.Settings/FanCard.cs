@@ -225,16 +225,15 @@ namespace QuadVitals.Settings
             _scene.Children.Add(blades);
 
             _value.Text = "--";
-            _value.FontSize = 34;
-            _value.FontWeight = FontWeights.SemiBold;
+            MetricTypography.ApplyValue(_value);
             _value.Foreground = _valueBrush;
             AutomationProperties.SetAutomationId(_value, "FanValue");
 
             _unit.Text = "RPM";
-            _unit.FontSize = 14;
+            MetricTypography.ApplyUnit(_unit);
             _unit.Foreground = Theme.TextSecondaryBrush;
             _unit.VerticalAlignment = VerticalAlignment.Bottom;
-            _unit.Margin = new Thickness(5, 0, 0, 6);
+            _unit.Margin = new Thickness(4, 0, 0, 4);
 
             _caption.FontSize = 11.5;
             _caption.Foreground = Theme.TextSecondaryBrush;
@@ -249,7 +248,7 @@ namespace QuadVitals.Settings
             _others.FontSize = 11;
             _others.Foreground = Theme.TextSecondaryBrush;
             _others.TextWrapping = TextWrapping.Wrap;
-            _others.Margin = new Thickness(0, 10, 0, 0);
+            _others.Margin = new Thickness(0, 6, 0, 0);
             AutomationProperties.SetAutomationId(_others, "FanOthers");
 
             _empty.Text = string.Empty;
@@ -258,7 +257,7 @@ namespace QuadVitals.Settings
             _empty.FontSize = 11.5;
             _empty.Foreground = Theme.AccentOrangeBrush;
             _empty.TextWrapping = TextWrapping.NoWrap;
-            _empty.Margin = new Thickness(0, 6, 0, 0);
+            _empty.Margin = new Thickness(0, 4, 0, 0);
             AutomationProperties.SetAutomationId(_empty, "FanEmpty");
 
             Grid body = new Grid();
