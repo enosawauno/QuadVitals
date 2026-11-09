@@ -46,7 +46,7 @@ namespace QuadVitals.Core.Tests
             Suite("FanLabels 风扇命名", FanLabelBehaviour);
             Suite("FanDiagnosis 风扇空态归因", FanDiagnosisBehaviour);
             Suite("FanToneLatch 复位", FanToneLatchReset);
-            Suite("animationMode 动效模式", AnimationModeBehaviour);
+            Suite("animationMode 已删除", LegacyAnimationModeBehaviour);
             Suite("renderPolicy 渲染策略", RenderPolicyBehaviour);
             Suite("FanToneLatch 档位防抖", FanToneLatchBehaviour);
             Suite("Settings 柱状几何写死", BarGeometryIsFixed);

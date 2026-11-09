@@ -307,12 +307,6 @@ namespace QuadVitals.Core
         public const string IndicatorCapsule = "capsule";
         public const string IndicatorSegments = "segments";
 
-        /// <summary>动效只在指针停在元素上时跑（默认）：静止时不重绘。</summary>
-        public const string AnimationHover = "hover";
-
-        /// <summary>动效常驻：观感最好，代价是仪表盘一直在重绘（实测 GPU 8–10%、CPU 20–30%）。</summary>
-        public const string AnimationAlways = "always";
-
         /// <summary>渲染时机：失焦也继续渲染（默认）。</summary>
         public const string RenderPolicyAlways = "always";
 
@@ -391,13 +385,6 @@ namespace QuadVitals.Core
         public string IndicatorStyle { get; set; }
 
         /// <summary>
-        /// 动效模式：<c>hover</c>（默认，指针停在元素上才动）或 <c>always</c>（常驻动画）。
-        /// 常驻动画在分层窗口里是整窗逐帧重推，代价明确写在设置弹窗的确认提示里。
-        /// </summary>
-        [DataMember(Name = "animationMode")]
-        public string AnimationMode { get; set; }
-
-        /// <summary>
         /// Pause all dashboard animations while on battery. Default true; the user can turn it off
         /// and then the battery state no longer caps animations (RDP/tier 0 still do).
         /// </summary>
@@ -452,7 +439,6 @@ namespace QuadVitals.Core
                 NetworkAdapter = "auto",
                 CurveStyle = CurveSmooth,
                 IndicatorStyle = IndicatorSegments,
-                AnimationMode = AnimationHover,
                 PauseAnimationsOnBattery = true,
                 RenderPolicy = RenderPolicyAlways,
                 DeviceMetrics = new DeviceMetricChoices(),
@@ -578,13 +564,6 @@ namespace QuadVitals.Core
                 || string.Equals(value, CurvePolyline, StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Unknown / empty values fall back to hover-only motion.</summary>
-        public static bool IsKnownAnimationMode(string value)
-        {
-            return string.Equals(value, AnimationHover, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value, AnimationAlways, StringComparison.OrdinalIgnoreCase);
-        }
-
         /// <summary>Unknown / empty values fall back to "always render".</summary>
         public static bool IsKnownRenderPolicy(string value)
         {
@@ -663,11 +642,6 @@ namespace QuadVitals.Core
                 CurveStyle = CurveSmooth;
             }
 
-            if (!IsKnownAnimationMode(AnimationMode))
-            {
-                if (!string.IsNullOrEmpty(AnimationMode)) warnings.Add("animationMode 非法，已恢复为悬停才动");
-                AnimationMode = AnimationHover;
-            }
             if (!PauseAnimationsOnBattery.HasValue) PauseAnimationsOnBattery = true;
 
             if (!IsKnownRenderPolicy(RenderPolicy))

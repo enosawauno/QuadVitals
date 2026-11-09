@@ -154,33 +154,42 @@ namespace QuadVitals.Core.Tests
             Equal(FanKinds.Unknown, FanLabels.KindForBoard(null, 2), "空板型不编名字");
         }
 
-        private static void AnimationModeBehaviour()
+        private static void LegacyAnimationModeBehaviour()
         {
+            // 动画现在只跟 renderPolicy；旧的 animationMode 字段删掉，旧文件仍要能读。
+            True(typeof(Settings).GetProperty("AnimationMode") == null, "Settings 不再有 AnimationMode");
+            True(typeof(Settings).GetField("AnimationHover") == null && typeof(Settings).GetField("AnimationAlways") == null, "不再有独立的动效常量");
+
             Settings fresh = Settings.CreateDefault();
-            Equal(Settings.AnimationHover, fresh.AnimationMode, "默认静止时不动");
-            True(Settings.IsKnownAnimationMode(Settings.AnimationHover), "hover 合法");
-            True(Settings.IsKnownAnimationMode("ALWAYS"), "大小写不敏感");
-            True(!Settings.IsKnownAnimationMode("sometimes"), "乱写的值不合法");
-            True(!Settings.IsKnownAnimationMode(null), "空值不合法");
-
-            Settings odd = Settings.CreateDefault();
-            odd.AnimationMode = "sometimes";
-            odd.Normalize();
-            Equal(Settings.AnimationHover, odd.AnimationMode, "非法值回退为悬停才动");
-
-            Settings kept = Settings.CreateDefault();
-            kept.AnimationMode = Settings.AnimationAlways;
-            kept.Normalize();
-            Equal(Settings.AnimationAlways, kept.AnimationMode, "常驻模式不会被 Normalize 改掉");
-
-            Settings battery = Settings.CreateDefault();
-            Equal(true, battery.PauseAnimationsOnBattery, "电池模式默认暂停动画");
+            Equal(Settings.RenderPolicyAlways, fresh.RenderPolicy, "默认全局重绘");
+            Equal(true, fresh.PauseAnimationsOnBattery, "电池模式默认暂停动画");
             Settings old = new Settings();
             old.Normalize();
             Equal(true, old.PauseAnimationsOnBattery, "旧配置缺字段时按暂停处理");
+            Settings battery = Settings.CreateDefault();
             battery.PauseAnimationsOnBattery = false;
             battery.Normalize();
             Equal(false, battery.PauseAnimationsOnBattery, "用户关闭电池暂停后保持关闭");
+
+            string path = Path.Combine(Path.GetTempPath(), "quadvitals-legacy-animation.json");
+            File.WriteAllText(path, "{\"version\":2,\"renderPolicy\":\"unfocused\",\"animationMode\":\"always\"}");
+            List<string> warnings;
+            Settings legacy = Settings.Load(path, out warnings);
+            True(legacy != null, "旧文件仍可加载");
+            Equal(Settings.RenderPolicyUnfocused, legacy.RenderPolicy, "旧 animationMode 不覆盖 renderPolicy");
+            True(warnings.Find(delegate(string warning) { return warning.Contains("animationMode"); }) == null, "旧 animationMode 不产生告警");
+
+            File.WriteAllText(path, "{\"version\":2,\"animationMode\":\"sometimes\"}");
+            Settings bad = Settings.Load(path, out warnings);
+            True(warnings.Find(delegate(string warning) { return warning.Contains("animationMode"); }) == null, "非法 animationMode 也不再告警");
+            Equal(Settings.RenderPolicyAlways, bad.RenderPolicy, "非法 animationMode 不影响默认渲染策略");
+
+            Settings saved = Settings.CreateDefault();
+            saved.Save(path);
+            True(!File.ReadAllText(path).Contains("animationMode"), "新文件不再写 animationMode");
+            legacy.Save(path);
+            True(!File.ReadAllText(path).Contains("animationMode"), "读旧文件再保存也会清掉 animationMode");
+            File.Delete(path);
         }
 
         private static void RenderPolicyBehaviour()
@@ -795,7 +804,6 @@ namespace QuadVitals.Core.Tests
             original.NetworkAdapter = "Intel(R) Ethernet Converged Network Adapter X550-T2";
             original.CurveStyle = Settings.CurvePolyline;
             original.IndicatorStyle = Settings.IndicatorCapsule;
-            original.AnimationMode = Settings.AnimationAlways;
             original.PauseAnimationsOnBattery = false;
             original.RenderPolicy = Settings.RenderPolicyFullscreen;
             original.Items[1].Lines[0].Color = "#FF00CC6A";
@@ -807,7 +815,7 @@ namespace QuadVitals.Core.Tests
             True(json.Contains("netUp"), "JSON 含指标 key");
             True(json.Contains("\"curveStyle\""), "JSON 含 curveStyle");
             True(json.Contains("\"indicatorStyle\""), "JSON 含 indicatorStyle");
-            True(json.Contains("\"animationMode\""), "JSON 含 animationMode");
+            True(!json.Contains("\"animationMode\""), "JSON 不再写 animationMode");
             True(json.Contains("\"pauseAnimationsOnBattery\""), "JSON 含 pauseAnimationsOnBattery");
             True(json.Contains("\"renderPolicy\""), "JSON 含 renderPolicy");
             True(!json.Contains("\"fill2\""), "JSON 不再写 fill2");
@@ -824,7 +832,6 @@ namespace QuadVitals.Core.Tests
             Equal(original.NetworkAdapter, loaded.NetworkAdapter, "网卡名保持");
             Equal(Settings.CurvePolyline, loaded.CurveStyle, "曲线样式保持");
             Equal(Settings.IndicatorCapsule, loaded.IndicatorStyle, "指示器样式保持");
-            Equal(Settings.AnimationAlways, loaded.AnimationMode, "动效模式保持");
             Equal(false, loaded.PauseAnimationsOnBattery, "电池暂停偏好保持");
             Equal(Settings.RenderPolicyFullscreen, loaded.RenderPolicy, "渲染策略保持");
             Equal("#FF00CC6A", loaded.Items[1].Lines[0].Color, "行颜色保持");

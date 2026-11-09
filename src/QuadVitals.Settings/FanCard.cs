@@ -58,21 +58,11 @@ namespace QuadVitals.Settings
         private double _flowPendingSeconds;
         private double _pumpTime;
         private bool _disposed;
-        private bool _hover;
         private bool _pumpBreathing;
         private bool _heat;
         private int _lastKind = -1;
         private Color _accent = Theme.AccentGreen;
 
-        /// <summary>true = 常驻动画（设置里的「常驻」档）；false = 指针停在卡上才动。</summary>
-        public bool AlwaysAnimate { get; private set; }
-
-        /// <summary>切换动效模式；立刻生效，不重建卡片。</summary>
-        public void SetAlwaysAnimate(bool value)
-        {
-            AlwaysAnimate = value;
-            if (value) StartIfAllowed(); else if (!_hover) Stop();
-        }
         private MetricTone _tone = MetricTone.Normal;
         private readonly FanToneLatch _toneLatch = new FanToneLatch();
         private readonly SolidColorBrush _ringBrush = new SolidColorBrush(Theme.AccentGreen);
@@ -284,10 +274,6 @@ namespace QuadVitals.Settings
             Loaded += (sender, e) => StartIfAllowed();
             Unloaded += (sender, e) => Stop();
             IsVisibleChanged += (sender, e) => { if ((bool)e.NewValue) StartIfAllowed(); else Stop(); };
-            // 动效只在指针停在卡上时跑：这是整个仪表盘最贵的动画（分层窗口每帧都要重推），
-            // 让它常态空转等于给一个监控工具常驻几成 GPU，为的只是“看起来在转”。
-            MouseEnter += (sender, e) => { _hover = true; StartIfAllowed(); };
-            MouseLeave += (sender, e) => { _hover = false; Stop(); };
         }
 
         /// <summary>Live read-out for the card. Called from the overview tick (about once per second).</summary>
@@ -566,10 +552,10 @@ namespace QuadVitals.Settings
         private void StartIfAllowed()
         {
             if (_disposed) return;
-            if (!SystemParameters.ClientAreaAnimation || (!_hover && !AlwaysAnimate))
+            if (!SystemParameters.ClientAreaAnimation)
             {
-                // 静止态：气流按当前状态画一帧就不动了，扇叶停在上一次的角度；
-                // 水泵的青色光晕在这里是固定的，不靠常驻动画呼吸。
+                // 系统关了动画：气流按当前状态画一帧就不动了，扇叶停在上一次的角度；
+                // 水泵的青色光晕在这里是固定的，不靠逐帧动画呼吸。
                 _flow.Tick(0);
                 ApplyStaticPumpGlow();
                 return;
@@ -577,6 +563,9 @@ namespace QuadVitals.Settings
             // Start() 仍要调用：RDP/Tier 0 下它只登记意愿、不挂钩；环境恢复时
             // FrameLoop 会通过 RenderEnvironment.Changed 自己续上。
             _loop.Start();
+            // 首帧到达前先把水泵光晕落到一个可见的静止值，否则 Update 之后、下一帧之前的
+            // 一瞬是透明度 0（读屏/断言/截图都可能落在这个窗口里）。
+            ApplyStaticPumpGlow();
             if (RenderEnvironment.AnimationsDisabled)
             {
                 _flow.Tick(0);

@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Documents;
-using System.Windows.Shapes;
 using System.Windows.Media;
 using QuadVitals.Core;
 using QuadVitals.UI;
@@ -29,7 +27,6 @@ namespace QuadVitals.Settings
 
         private readonly SettingsWindow _window;
         private readonly FanCard _card;
-        private bool _updatingMotion;
 
         public FanSettingsDialog(SettingsWindow window, FanCard card)
         {
@@ -89,29 +86,6 @@ namespace QuadVitals.Settings
             }
             channelBox.SelectedIndex = selected;
             fields.Children.Add(channelBox);
-
-            // 风扇动效：只控制这张卡的「常驻动画 / 悬停播放」。磁盘 I/O 的走马是读数的一部分，
-            // 一直是常驻的，不在这里。
-            TextBlock motionLabel = new TextBlock
-            {
-                Text = "风扇动效",
-                FontSize = 12,
-                Foreground = Theme.TextTertiaryBrush,
-                Margin = new Thickness(0, 24, 0, 8)
-            };
-            fields.Children.Add(motionLabel);
-
-            DarkComboBox motionBox = new DarkComboBox();
-            AutomationProperties.SetAutomationId(motionBox, "FanAnimationMode");
-            AutomationProperties.SetName(motionBox, "风扇动效");
-            motionBox.HorizontalAlignment = HorizontalAlignment.Stretch;
-            motionBox.Items.Add("悬停播放（默认）");
-            motionBox.Items.Add("常驻动画");
-            bool always = string.Equals(settings.AnimationMode, AppSettings.AnimationAlways, StringComparison.OrdinalIgnoreCase);
-            motionBox.SelectedIndex = always ? 1 : 0;
-            motionBox.SelectionChanged += (sender, e) => OnMotionChanged(motionBox);
-            fields.Children.Add(motionBox);
-
 
 
             Grid.SetRow(fields, 1);
@@ -187,158 +161,6 @@ namespace QuadVitals.Settings
                 }
             }
             return options;
-        }
-
-        /// <summary>
-        /// 切到「常驻动画」前先确认：这不是偏好题，是明确的资源代价，切换前必须提示。
-        /// 取消则把下拉拨回原档，且不写盘。
-        /// </summary>
-        private void OnMotionChanged(DarkComboBox box)
-        {
-            if (_updatingMotion) return;
-            AppSettings latest = _window.CurrentSettings.Clone();
-            bool wasAlways = string.Equals(latest.AnimationMode, AppSettings.AnimationAlways, StringComparison.OrdinalIgnoreCase);
-            bool wantAlways = box.SelectedIndex == 1;
-            if (wantAlways == wasAlways) return;
-
-            if (!wantAlways)
-            {
-                ApplyMotion(false);
-                return;
-            }
-
-            // 下拉先停在新档位（看得见自己选了什么），**取消时才拨回**：
-            // 在 SelectionChanged 里直接改 SelectedIndex 会被 ComboBox 自己覆盖，取消回调是唯一可靠时机。
-            Action rollback = delegate
-            {
-                _updatingMotion = true;
-                box.SelectedIndex = 0;
-                _updatingMotion = false;
-            };
-
-            // 文案按确认过的版本照用；排版按 ui-design 分三层：
-            // 结论（Body 白）→ 实测数据（小标题 Caption 11 三级灰 + 带项目符号的数据行，悬挂缩进、
-            // 表格数字）→ 问句（Body 白，单独一段）。全都同字号同颜色堆在一起就是一段散文。
-            _window.ShowConfirmContent(
-                "开启常驻动画",
-                BuildMotionCostBody(),
-                "开启",
-                delegate { ApplyMotion(true); },
-                // 红色只留给“删除”这类不可逆操作；改一个动效开关不该像按格式化。
-                false,
-                rollback,
-                BuildMotionCostHint());
-        }
-
-        /// <summary>确认框正文：结论 + 实测数据（小标题 + 三行数据）+ 问句。</summary>
-        private static FrameworkElement BuildMotionCostBody()
-        {
-            StackPanel body = new StackPanel();
-
-            // 结论是陈述句；“？”属于标题行右侧的说明入口，不是句末标点。
-            body.Children.Add(ConfirmDialog.BodyText("开启后将导致仪表盘持续渲染"));
-            body.Children.Add(new TextBlock { Height = 12 });
-
-            // 每行 = 标签 + 数值 run：数值加粗（表格数字），省电的那个数值再带一点绿，
-            // 扫一眼就能分出“贵 / 便宜”。项目符号用自绘小圆点，不靠字体里手打的点。
-            // 数字按确认过的版本；CPU 成本很小（同进程 A/B 落在噪声里），代价主要在 GPU。
-            body.Children.Add(CostRow(0, "GPU 占用约 ", "2–7%", false));
-            body.Children.Add(CostRow(1, "CPU 单核占用约 ", "1–2%", false));
-            body.Children.Add(CostRow(2, "默认「悬停播放」模式，资源占用 ", "0.7%", true, " 左右"));
-
-            TextBlock question = ConfirmDialog.BodyText("是否确认开启？");
-            question.Foreground = Theme.TextPrimaryBrush;
-            question.Margin = new Thickness(0, 8, 0, 0);
-            body.Children.Add(question);
-
-            return body;
-        }
-
-        /// <summary>
-        /// 标题行右侧的「?」入口：悬停显示实测机型与来源。它不是按钮，不触发任何动作，
-        /// 只把“这些数字从哪来”从正文里拿出来，避免结论句被误读成问句。
-        /// </summary>
-        private static FrameworkElement BuildMotionCostHint()
-        {
-            Border badge = new Border
-            {
-                Width = 16,
-                Height = 16,
-                CornerRadius = new CornerRadius(8),
-                Background = Theme.SurfaceRaisedBrush,
-                BorderBrush = Theme.BorderStrongBrush,
-                BorderThickness = new Thickness(1),
-                VerticalAlignment = VerticalAlignment.Center,
-                Cursor = System.Windows.Input.Cursors.Help,
-                ToolTip = "基于 4080FE/13900K 实测",
-                Child = new TextBlock
-                {
-                    Text = "?",
-                    FontSize = 10,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = Theme.TextSecondaryBrush,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                }
-            };
-            ToolTipService.SetInitialShowDelay(badge, 200);
-            ToolTipService.SetShowDuration(badge, 60000);
-            AutomationProperties.SetAutomationId(badge, "MotionCostHint");
-            AutomationProperties.SetName(badge, "实测数据说明");
-            return badge;
-        }
-
-        /// <summary>一行“项目符号 + 标签 + 加粗数值”。符号列固定宽，文字悬挂对齐。</summary>
-        private static Grid CostRow(int index, string label, string value, bool cheap, string suffix = null)
-        {
-            // 行间 4（间距阶）；最后一行也只留 4，问句再补 8 → 数据块与问句之间 12。
-            Grid row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            Ellipse dot = new Ellipse
-            {
-                Width = 3,
-                Height = 3,
-                Fill = Theme.TextTertiaryBrush,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(1, 9, 0, 0)
-            };
-            AutomationProperties.SetAutomationId(dot, "MotionCostDot");
-            row.Children.Add(dot);
-
-            TextBlock text = new TextBlock
-            {
-                FontSize = 12.5,
-                LineHeight = 20,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xD8, 0xD8, 0xD8)),
-                TextWrapping = TextWrapping.NoWrap
-            };
-            text.Inlines.Add(new Run(label));
-            Run number = new Run(value)
-            {
-                FontWeight = FontWeights.SemiBold,
-                // 省电的那个数带绿：颜色的含义与全产品一致（绿 = 正常/便宜）。
-                Foreground = cheap ? Theme.AccentGreenSoftBrush : Theme.TextPrimaryBrush
-            };
-            text.Inlines.Add(number);
-            if (!string.IsNullOrEmpty(suffix)) text.Inlines.Add(new Run(suffix));
-            System.Windows.Documents.Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
-            AutomationProperties.SetAutomationId(text, "MotionCostRow" + index);
-            Grid.SetColumn(text, 1);
-            row.Children.Add(text);
-
-            return row;
-        }
-
-        private void ApplyMotion(bool always)
-        {
-            AppSettings latest = _window.CurrentSettings.Clone();
-            latest.AnimationMode = always ? AppSettings.AnimationAlways : AppSettings.AnimationHover;
-            latest.Normalize();
-            _window.SaveSettingsQuietly(latest);
-            _window.ApplyAnimationMode();
         }
 
         private void Save(DarkComboBox box, List<KeyValuePair<int, string>> options)

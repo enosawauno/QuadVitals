@@ -1558,9 +1558,8 @@ if ($null -ne $ovPage) {
         $windowType.GetMethod('ShowFanSettings').Invoke($fmWindow, @()) | Out-Null
         Pump 250
         $motionBox = Find-ById $fmRoot 'FanAnimationMode'
-        Check 'fan settings offers the motion switch' ($null -ne $motionBox) ''
-        if ($null -ne $motionBox) {
-            Check 'the fan motion switch has the two modes' ($motionBox.Items.Count -eq 2) ("items=" + $motionBox.Items.Count)
+        Check 'fan settings no longer offers the motion switch' ($null -eq $motionBox) ''
+        if ($true) {
             # 气流右侧不许再切出硬边：场景不再裁剪，靠流线自己羽化。
             $scene = Find-ById $ovRoot 'FanScene'
             Check 'the fan scene does not clip the airflow' (($null -ne $scene) -and (-not $scene.ClipToBounds)) ''
@@ -1606,128 +1605,6 @@ if ($null -ne $ovPage) {
             }
             $fbWindow.Close()
 
-            # 下拉项叫法统一成「悬停播放 / 常驻动画」
-            Check 'the first motion option is hover playback' ($motionBox.Items[0].ToString() -like '*悬停播放*') ("item0=" + $motionBox.Items[0])
-            Check 'the second motion option is always-on' ($motionBox.Items[1].ToString() -like '*常驻动画*') ("item1=" + $motionBox.Items[1])
-
-            $expectedIndex = 0
-            if ($fmWindow.CurrentSettings.AnimationMode -eq 'always') { $expectedIndex = 1 }
-            Check 'the fan motion switch reflects the stored mode' ($motionBox.SelectedIndex -eq $expectedIndex) ("idx=" + $motionBox.SelectedIndex + " mode=" + $fmWindow.CurrentSettings.AnimationMode)
-
-            # 排版（ui-design §3/§4）：字段名 12 三级灰 → 控件（8）→ 说明 Caption 11 单行（8）；
-            # 两组之间 24；三者左缘同一条线。
-            function FmTop($e) { return $e.TransformToAncestor($fmRoot).Transform((New-Object System.Windows.Point(0, 0))).Y }
-            function FmLeft($e) { return $e.TransformToAncestor($fmRoot).Transform((New-Object System.Windows.Point(0, 0))).X }
-            $channelBox = Find-ById $fmRoot 'FanChannel'
-            $motionLabel = $null
-            foreach ($block in (Find-ByTypeName $fmRoot 'TextBlock')) {
-                if ($block.Text -eq ([string][char]0x98CE + [string][char]0x6247 + [string][char]0x52A8 + [string][char]0x6548)) { $motionLabel = $block }
-            }
-            Check 'the fan motion row has a field label' ($null -ne $motionLabel) ''
-            # 说明行已按反馈删掉：这一组只剩“字段名 + 控件”，不要再冒出一行小字。
-            $strayHint = $null
-            foreach ($block in (Find-ByTypeName $fmRoot 'TextBlock')) {
-                if ($block.Text -like '*8*10%*') { $strayHint = $block.Text }
-            }
-            Check 'the motion row carries no hint line any more' ($null -eq $strayHint) ("hint=" + $strayHint)
-            if (($null -ne $motionLabel) -and ($null -ne $channelBox)) {
-                $spread = (FmLeft $motionLabel) - (FmLeft $motionBox)
-                Check 'label and control share one left edge' ([Math]::Abs($spread) -lt 1.5) ("delta=" + $spread)
-                $groupGap = (FmTop $motionLabel) - (FmTop $channelBox) - $channelBox.ActualHeight
-                Check 'the motion group is spaced 24 from the channel row' ([Math]::Abs($groupGap - 24) -le 1) ("gap=" + $groupGap)
-                $labelGap = (FmTop $motionBox) - (FmTop $motionLabel) - $motionLabel.ActualHeight
-                Check 'the fan motion label sits 8 above its control' ([Math]::Abs($labelGap - 8) -le 1) ("gap=" + $labelGap)
-            }
-
-            # 归一化到默认档：开发机上这个开关可能已经被点成「持续重绘」，
-            # 那样“切到持续要确认”根本不会触发（wantAlways == wasAlways）。
-            if ($fmWindow.CurrentSettings.AnimationMode -eq 'always') {
-                $motionBox.SelectedIndex = 0
-                Pump 250
-            }
-            # 切「持续重绘」必须先确认；取消则保持原档
-            $beforeMode = $fmWindow.CurrentSettings.AnimationMode
-            $motionBox.SelectedIndex = 1
-            Pump 250
-            $confirmOpen = [bool]$windowType.GetProperty('IsOverlayOpen').GetValue($fmWindow)
-            # 下拉先停在新档位（看得见自己选了什么），取消时才回滚。
-            Check 'choosing always-on asks first' ($confirmOpen -and ($motionBox.SelectedIndex -eq 1)) ("overlay=" + $confirmOpen + " idx=" + $motionBox.SelectedIndex)
-            if ($null -eq $confirmBody) { $confirmBody = '' }
-            if ($true) {
-                # 确认框排版：标题 → 结论（16）→ 小标题（16）→ 数据行（8，行间 4）→ 问句（12）→ 按钮（24）；
-            # 数据行带项目符号、悬挂缩进、表格数字；小标题 Caption 11 三级灰；问句是主文字色。
-            $costRows = @()
-            for ($k = 0; $k -lt 3; $k++) {
-                $r = Find-ById $fmRoot ('MotionCostRow' + $k)
-                if ($null -ne $r) { $costRows += $r }
-            }
-            Check 'the confirm lists three cost rows' ($costRows.Count -eq 3) ("rows=" + $costRows.Count)
-            $costQuestion = $null
-            foreach ($block in (Find-ByTypeName $fmRoot 'TextBlock')) {
-                if ($block.Text -like '*是否确认开启*') { $costQuestion = $block }
-            }
-            # 标题行右侧的「?」是 tooltip 入口，不是结论句的问号标点。
-            Check 'the confirm carries no warning icon' ($null -eq (Find-ById $fmRoot 'MotionCostSource')) ''
-            $hintBadge = Find-ById $fmRoot 'MotionCostHint'
-            Check 'the title row carries a hint badge' ($null -ne $hintBadge) ''
-            Check 'the hint badge explains the measurement source' (($null -ne $hintBadge) -and ($hintBadge.ToolTip -eq '基于 4080FE/13900K 实测')) ("tip=" + $(if ($null -eq $hintBadge) { 'none' } else { $hintBadge.ToolTip }))
-            $conclusion = $null
-            foreach ($block in (Find-ByTypeName $fmRoot 'TextBlock')) {
-                if ($block.Text -like '*仪表盘持续渲染*') { $conclusion = $block }
-            }
-            Check 'the conclusion is a statement' (($null -ne $conclusion) -and (-not $conclusion.Text.EndsWith([string][char]0xFF1F))) ("text=" + $(if ($null -eq $conclusion) { 'none' } else { $conclusion.Text }))
-            Check 'the question is its own paragraph in the primary colour' (($null -ne $costQuestion) -and ($costQuestion.Foreground -eq [QuadVitals.UI.Theme]::TextPrimaryBrush)) ''
-            if (($costRows.Count -eq 3) -and ($null -ne $costTitle) -and ($null -ne $costQuestion)) {
-                function CfTop($e) { return $e.TransformToAncestor($fmRoot).Transform((New-Object System.Windows.Point(0, 0))).Y }
-                function CfLeft($e) { return $e.TransformToAncestor($fmRoot).Transform((New-Object System.Windows.Point(0, 0))).X }
-                $firstRow = $costRows[0]
-                $lastRow = $costRows[2]
-                $rowGap = (CfTop $costRows[1]) - (CfTop $costRows[0]) - $costRows[0].ActualHeight
-                Check 'the data rows are 4 apart' ([Math]::Abs($rowGap - 4) -le 1) ("gap=" + $rowGap)
-                $conclusion = $null
-                foreach ($block in (Find-ByTypeName $fmRoot 'TextBlock')) {
-                    if ($block.Text -like '*仪表盘持续渲染*') { $conclusion = $block }
-                }
-                if ($null -ne $conclusion) {
-                    $gapBlock = (CfTop $firstRow) - (CfTop $conclusion) - $conclusion.ActualHeight
-                    Check 'the data block starts 24 under the conclusion' ([Math]::Abs($gapBlock - 24) -le 1) ("gap=" + $gapBlock)
-                }
-                $gapQuestion = (CfTop $costQuestion) - (CfTop $lastRow) - $lastRow.ActualHeight
-                Check 'the question is 12 under the data block' ([Math]::Abs($gapQuestion - 12) -le 1) ("gap=" + $gapQuestion)
-                $lefts = @()
-                foreach ($row in $costRows) { $lefts += (CfLeft $row) }
-                $spread = ($lefts | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum) - ($lefts | Measure-Object -Minimum | Select-Object -ExpandProperty Minimum)
-                Check 'the data rows hang from one left edge' ($spread -lt 1.5) ("lefts=" + ($lefts -join ','))
-                $noWrap = $true
-                foreach ($row in $costRows) { if ($row.TextWrapping -ne [System.Windows.TextWrapping]::NoWrap) { $noWrap = $false } }
-                Check 'the data rows stay on one line each' $noWrap ''
-            # 主按钮用主题绿（红色只留给删除这类不可逆操作）；省电的那个数值加粗带绿。
-            $okButton = Find-ById $fmRoot 'ConfirmOk'
-            Check 'the confirm primary button is the theme green, not danger red' (($null -ne $okButton) -and ($okButton.Background -eq [QuadVitals.UI.Theme]::AccentGreenBrush)) ("bg=" + $(if ($null -eq $okButton) { 'none' } else { $okButton.Background }))
-            $cheapRun = $null
-            $boldRuns = 0
-            foreach ($block in (Find-ByTypeName $fmRoot 'TextBlock')) {
-                foreach ($inline in $block.Inlines) {
-                    if ($inline -isnot [System.Windows.Documents.Run]) { continue }
-                    if ($inline.FontWeight.ToOpenTypeWeight() -ge 600) { $boldRuns++ }
-                    if ($inline.Text -like '*0.7%*') { $cheapRun = $inline }
-                }
-            }
-            Check 'the cost numbers are emphasised' ($boldRuns -ge 3) ("bold=" + $boldRuns)
-            Check 'the cheap number carries the green tint' (($null -ne $cheapRun) -and ($cheapRun.Foreground -eq [QuadVitals.UI.Theme]::AccentGreenSoftBrush)) ("fg=" + $(if ($null -eq $cheapRun) { 'none' } else { $cheapRun.Foreground }))
-            $dotCount = @(Find-ByTypeName $fmRoot 'Ellipse').Count
-            Check 'the bullets are drawn, not typed' ($dotCount -ge 3) ("dots=" + $dotCount)
-
-            }
-
-            }
-            $cancelConfirm = Find-ById $fmRoot 'ConfirmCancel'
-            if ($null -ne $cancelConfirm) {
-                $cancelConfirm.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
-                Pump 200
-                Check 'cancelling keeps the quiet mode' ($fmWindow.CurrentSettings.AnimationMode -eq $beforeMode) ("mode=" + $fmWindow.CurrentSettings.AnimationMode)
-                Check 'cancelling puts the dropdown back' ($motionBox.SelectedIndex -eq 0) ("idx=" + $motionBox.SelectedIndex)
-            }
         }
     }
     $fmWindow.Close()

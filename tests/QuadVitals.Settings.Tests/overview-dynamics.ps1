@@ -560,55 +560,38 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $animCard = $ovType.GetField('_fanCard', $flags).GetValue($animPage)
             $animLoop = $animCard.GetType().GetField('_loop', $flags).GetValue($animCard)
             $isAnimating = $animCard.GetType().GetProperty('IsAnimating')
-            # 动效现在只在指针停在卡上时才跑（常驻动画在分层窗口里太贵），
-            # 所以先投一次 MouseEnter 再断言“在动”。
-            $hoverOn = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
-            $hoverOn.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
-            $animCard.RaiseEvent($hoverOn)
+            # 动画只跟 renderPolicy：没有悬停、常驻这些卡片级开关。
+            # 指针离开卡面也必须继续跑（MouseLeave 不再停循环）。
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
             Pump 300
-            Check 'the fan card animates while the pointer is on it' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+            Check 'the fan card animates without hover' ([bool]$isAnimating.GetValue($animCard, $null)) ''
             $hoverOff = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
             $hoverOff.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
             $animCard.RaiseEvent($hoverOff)
             Pump 200
-            Check 'the fan card goes still when the pointer leaves it' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+            Check 'the fan card keeps running after the pointer leaves' ([bool]$isAnimating.GetValue($animCard, $null)) ''
 
             # 功耗卡的闪电只在看得见的窗口里才跑帧，所以放在这个已显示的窗口里验。
             $animPower = $ovType.GetField('_powerCard', $flags).GetValue($animPage)
             $animPower.GetType().GetMethod('Update').Invoke($animPower, @($powerSnap, $true)) | Out-Null
             $powerIsAnimating = $animPower.GetType().GetProperty('IsAnimating')
-            $powerEnter = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
-            $powerEnter.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
-            $animPower.RaiseEvent($powerEnter)
             Pump 300
-            Check 'the power icon animates while the pointer is on the card' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+            Check 'the power icon animates without hover' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
             $powerLeave = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
             $powerLeave.RoutedEvent = [System.Windows.Input.Mouse]::MouseLeaveEvent
             $animPower.RaiseEvent($powerLeave)
             Pump 200
-            Check 'the power icon goes still when the pointer leaves' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+            Check 'the power icon keeps running after the pointer leaves' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
 
-            # 常驻档不依赖指针：设置里选「常驻动画」后，指针不在卡上也必须转。
-            $animCard.SetAlwaysAnimate($true)
-            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
-            Pump 300
-            Check 'always-on animates without hover' ([bool]$isAnimating.GetValue($animCard, $null)) ''
             $before = [long]$animLoop.FramesDelivered
             Pump 1000
             $frames = [long]$animLoop.FramesDelivered - $before
-            Check 'always-on delivers frames without hover' ($frames -gt 0) "frames=$frames"
+            Check 'the overview keeps delivering frames without hover' ($frames -gt 0) "frames=$frames"
             # 保存一次静默设置（同内容）不能把当前概览页 Dispose 掉，否则风扇会从这一秒起永久停转。
             $animWindow.SaveSettingsQuietly($animWindow.CurrentSettings.Clone())
             # 保存会重配渲染环境并重启帧循环，给一次完整的 1 Hz 刷新再接断言。
             Pump 300
             Check 'a quiet save keeps the visible overview alive' (Wait-Until { [bool]$isAnimating.GetValue($animCard, $null) }) ''
-            $animCard.SetAlwaysAnimate($false)
-            Pump 200
-            Check 'always-off stops without hover' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
-
-            $animCard.RaiseEvent($hoverOn)
-            Pump 200''
 
             $before = [long]$animLoop.FramesDelivered
             Pump 1000
@@ -693,7 +676,6 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             # The other open settings window shares the same process-wide policy; pin it too.
             $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
             $configurePolicy.Invoke($null, @($false, $false)) | Out-Null
-            $animCard.SetAlwaysAnimate($true)
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
             $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
             Pump 250
@@ -733,7 +715,6 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
                 $configurePolicy.Invoke($null, @($true, $false)) | Out-Null
                 $setFullscreen.Invoke($null, @($null)) | Out-Null
-                $animCard.SetAlwaysAnimate($false)
                 Pump 150
             }
 
@@ -742,7 +723,6 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($null, $false)) | Out-Null
             Pump 150
             Check 'a card with no reading stops the loop' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
-            $animCard.RaiseEvent($hoverOn)
             $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
             $activatedHandler.Invoke($animLoop, [EventArgs]::Empty) | Out-Null
             Pump 250
@@ -815,6 +795,105 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 $configureBattery.Invoke($null, @($true)) | Out-Null
             }
         }
+        # 所有逐帧动画只由 renderPolicy 控制：风扇与功耗卡不再有悬停/常驻开关。
+        "== render policy drives every animation =="
+        $powerLoop = Read-Field $animPower '_loop' $flags
+        $fanAct = Read-Field $animLoop '_activatedHandler' $flags
+        $fanDeact = Read-Field $animLoop '_deactivatedHandler' $flags
+        $powAct = Read-Field $powerLoop '_activatedHandler' $flags
+        $powDeact = Read-Field $powerLoop '_deactivatedHandler' $flags
+        $rewake = {
+            $animCard.GetType().GetMethod('Update').Invoke($animCard, @($snap, $true)) | Out-Null
+            $animPower.GetType().GetMethod('Update').Invoke($animPower, @($powerSnap, $true)) | Out-Null
+            $fanAct.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+            $powAct.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+            Pump 250
+        }
+
+        # 全局重绘：没有悬停也必须跑，失焦也不停。
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+        $configurePolicy.Invoke($null, @($false, $false)) | Out-Null
+        & $rewake
+        Check 'always runs the fan without hover' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'always runs the power card without hover' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $fanDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        $powDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        Pump 250
+        Check 'always keeps the fan after focus loss' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'always keeps the power card after focus loss' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
+        # 失焦停止：两张卡都停；回前台都恢复，且停着时不再出帧。
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+        $configurePolicy.Invoke($null, @($true, $false)) | Out-Null
+        & $rewake
+        Check 'unfocused starts both cards while focused' (([bool]$isAnimating.GetValue($animCard, $null)) -and ([bool]$powerIsAnimating.GetValue($animPower, $null))) ''
+        $fanDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        $powDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        Pump 250
+        Check 'unfocused stops the fan after focus loss' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'unfocused stops the power card after focus loss' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $fanBefore = [long]$animLoop.FramesDelivered
+        $powBefore = [long]$powerLoop.FramesDelivered
+        Pump 500
+        Check 'unfocused delivers no fan frames' (([long]$animLoop.FramesDelivered - $fanBefore) -eq 0) ''
+        Check 'unfocused delivers no power frames' (([long]$powerLoop.FramesDelivered - $powBefore) -eq 0) ''
+        & $rewake
+        Check 're-focus resumes the fan' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 're-focus resumes the power card' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
+        # 全屏停止：全屏时两张卡都停，离开全屏都恢复。
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
+        $configurePolicy.Invoke($null, @($false, $true)) | Out-Null
+        & $rewake
+        Check 'fullscreen policy runs both cards while not fullscreen' (([bool]$isAnimating.GetValue($animCard, $null)) -and ([bool]$powerIsAnimating.GetValue($animPower, $null))) ''
+        $setFullscreen.Invoke($null, @($true)) | Out-Null
+        Pump 300
+        Check 'fullscreen stops the fan' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'fullscreen stops the power card' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $setFullscreen.Invoke($null, @($false)) | Out-Null
+        & $rewake
+        Check 'leaving fullscreen resumes the fan' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'leaving fullscreen resumes the power card' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
+        # 策略在后台切换要立刻生效：先失焦，再分别切到「失焦停止 / 全局重绘」。
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+        $configurePolicy.Invoke($null, @($false, $false)) | Out-Null
+        & $rewake
+        $fanDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        $powDeact.Invoke($animWindow, [EventArgs]::Empty) | Out-Null
+        Pump 200
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyUnfocused
+        $configurePolicy.Invoke($null, @($true, $false)) | Out-Null
+        Pump 250
+        Check 'switching to unfocused stops the fan while backgrounded' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'switching to unfocused stops the power card while backgrounded' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+        $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyAlways
+        $configurePolicy.Invoke($null, @($false, $false)) | Out-Null
+        Pump 250
+        Check 'switching back to always resumes the fan while backgrounded' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'switching back to always resumes the power card while backgrounded' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
+        # 最小化：两张卡都停；还原后都恢复。
+        $animWindow.WindowState = [System.Windows.WindowState]::Minimized
+        Pump 300
+        Check 'minimizing stops the fan' (-not [bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'minimizing stops the power card' (-not [bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+        $animWindow.WindowState = [System.Windows.WindowState]::Normal
+        & $rewake
+        Check 'restoring resumes the fan' ([bool]$isAnimating.GetValue($animCard, $null)) ''
+        Check 'restoring resumes the power card' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
+
+        # 卡片级开关已经删除，不能再有 "常驻动画" 这类独立属性/方法。
+        Check 'the fan card has no card-level animation switch' (($null -eq $animCard.GetType().GetProperty('AlwaysAnimate')) -and ($null -eq $animCard.GetType().GetMethod('SetAlwaysAnimate'))) ''
+        Check 'the power card has no card-level animation switch' (($null -eq $animPower.GetType().GetProperty('AlwaysAnimate')) -and ($null -eq $animPower.GetType().GetMethod('SetAlwaysAnimate'))) ''
+
+        $setFullscreen.Invoke($null, @($null)) | Out-Null
         $animWindow.Close()
 
         # Edit-mode jiggle. It used to be two RepeatBehavior.Forever animations per tile: fifteen

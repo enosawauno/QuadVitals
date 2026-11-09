@@ -72,26 +72,15 @@ namespace QuadVitals.Settings
         private double _flickerLeft;
         private double _flickerLength;
         private int _flickerSteps;
-        private bool _hover;
         private bool _disposed;
         private Color _sceneColour = Theme.AccentGreen;
         private MetricTone _tone = MetricTone.Normal;
-
-        /// <summary>true = 常驻动画（设置里的「常驻」档）；false = 指针停在卡上才动。</summary>
-        public bool AlwaysAnimate { get; private set; }
 
         /// <summary>当前分档，供断言与测试读取。</summary>
         public MetricTone Tone { get { return _tone; } }
 
         /// <summary>True while the frame loop is actually running; read by the UI suite.</summary>
         public bool IsAnimating { get { return _loop.IsRunning; } }
-
-        /// <summary>切换动效模式；立刻生效，不重建卡片。</summary>
-        public void SetAlwaysAnimate(bool value)
-        {
-            AlwaysAnimate = value;
-            if (value) StartIfAllowed(); else if (!_hover) Stop();
-        }
 
         public PowerCard()
         {
@@ -124,8 +113,6 @@ namespace QuadVitals.Settings
             Loaded += (sender, e) => StartIfAllowed();
             Unloaded += (sender, e) => Stop();
             IsVisibleChanged += (sender, e) => { if ((bool)e.NewValue) StartIfAllowed(); else Stop(); };
-            MouseEnter += (sender, e) => { _hover = true; StartIfAllowed(); };
-            MouseLeave += (sender, e) => { _hover = false; Stop(); };
         }
 
         /// <summary>Called from the overview tick (about once per second).</summary>
@@ -183,7 +170,7 @@ namespace QuadVitals.Settings
                 _note.Foreground = Theme.AccentOrangeBrush;
             }
 
-            if (!IsAnimating && !_hover && !AlwaysAnimate) RenderStatic();
+            StartIfAllowed();
         }
 
         private void RefreshLimits(MetricsSnapshot snapshot)
@@ -246,7 +233,7 @@ namespace QuadVitals.Settings
             ApplySceneTone(Theme.TextSecondary);
             _note.Text = reason;
             _note.Foreground = Theme.AccentOrangeBrush;
-            if (!IsAnimating && !_hover && !AlwaysAnimate) RenderStatic();
+            Stop();
         }
 
         /// <summary>底部一行：正常时写统计范围（或 CPU TDP 是估算的提醒），缺数据时写原因。</summary>
@@ -565,7 +552,7 @@ namespace QuadVitals.Settings
         private void StartIfAllowed()
         {
             if (_disposed) return;
-            if (!SystemParameters.ClientAreaAnimation || (!_hover && !AlwaysAnimate))
+            if (!SystemParameters.ClientAreaAnimation)
             {
                 RenderStatic();
                 return;

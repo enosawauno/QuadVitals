@@ -242,24 +242,6 @@ namespace QuadVitals.Settings
         /// 设置弹窗里改完直接调这里，不重建页面 —— 重建会把正在开着的弹窗一起拆掉。
         /// 返回当前生效的样式，供断言直接用。
         /// </summary>
-        /// <summary>设置里的动效模式：常驻 or 只在悬停时动。</summary>
-        private bool AnimationsAlways
-        {
-            get
-            {
-                return string.Equals(_window.CurrentSettings.AnimationMode, QuadVitals.Core.Settings.AnimationAlways,
-                                      StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        /// <summary>风扇动效模式改了：就地生效，不重建页面（与指示器样式同一条路）。</summary>
-        public void ApplyAnimationMode()
-        {
-            _fanCard.SetAlwaysAnimate(AnimationsAlways);
-            _powerCard.SetAlwaysAnimate(AnimationsAlways);
-            Refresh();
-        }
-
         public MetricBarStyle ApplyIndicatorStyle()
         {
             MetricBarStyle style = string.Equals(_window.CurrentSettings.IndicatorStyle,
@@ -869,9 +851,7 @@ namespace QuadVitals.Settings
             RenderGpuTile(snapshot);
             RenderDiskTile(snapshot);
             _fanCard.PreferredChannel = _window.CurrentSettings.FanChannel;
-            _fanCard.SetAlwaysAnimate(AnimationsAlways);
             _fanCard.Update(snapshot, true);
-            _powerCard.SetAlwaysAnimate(AnimationsAlways);
             _powerCard.Update(snapshot, true);
 
             bool netValid = snapshot.Has(MetricFlags.NetworkValid);

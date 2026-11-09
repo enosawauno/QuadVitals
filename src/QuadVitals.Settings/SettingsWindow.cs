@@ -391,12 +391,6 @@ namespace QuadVitals.Settings
                                                                  onCancel, titleExtra));
         }
 
-        /// <summary>动效模式改了：就地通知概览页，不重建页面。</summary>
-        public void ApplyAnimationMode()
-        {
-            if (_overviewPage != null) _overviewPage.ApplyAnimationMode();
-        }
-
         /// <summary>
         /// Title-bar bubble: opens the feedback form as a panel over the window. The form keeps its own
         /// draft, attachment and preview logic; the panel only supplies the frame and a close button.
