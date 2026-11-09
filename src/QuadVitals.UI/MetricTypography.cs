@@ -21,6 +21,9 @@ namespace QuadVitals.UI
         public static void ApplyValue(TextBlock text)
         {
             if (text == null) return;
+            // Display 模式按 GDI 方式把字形对齐到整像素；40 px 的重字在圆弧和斜边上会出现台阶。
+            // 大号数字改用 Ideal（分数步进 + 灰度 AA），小号文字仍继承窗口的 Display。
+            TextOptions.SetTextFormattingMode(text, TextFormattingMode.Ideal);
             text.FontFamily = Digits;
             text.FontSize = ValueSize;
             text.FontWeight = ValueWeight;

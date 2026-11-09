@@ -442,6 +442,11 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         $powerCpuUnit = Find-ById $ovRoot 'PowerCpuUnit'
         Check 'the power total uses the shared 40 px Black type' (& $isMetricValue $powerTotalValue) ''
         Check 'the power total unit uses the shared 17 px type' (& $isMetricUnit $powerUnit) ''
+        # 大号数字走 Ideal（分数步进），小号单位继续继承窗口的 Display；窗口用 Auto + ClearTypeHint
+        # 让 WPF 选高质量光栅化，分层窗口下仍输出灰度、不产生彩色边缘。
+        Check 'the hero digits use ideal glyph metrics' ([System.Windows.Media.TextOptions]::GetTextFormattingMode($powerTotalValue) -eq [System.Windows.Media.TextFormattingMode]::Ideal) ''
+        Check 'the unit keeps the display metrics' ([System.Windows.Media.TextOptions]::GetTextFormattingMode($powerUnit) -eq [System.Windows.Media.TextFormattingMode]::Display) ''
+        Check 'the window lets WPF pick high-quality text rendering' (([System.Windows.Media.TextOptions]::GetTextRenderingMode($ovWindow) -eq [System.Windows.Media.TextRenderingMode]::Auto) -and ([System.Windows.Media.RenderOptions]::GetClearTypeHint($ovWindow) -eq [System.Windows.Media.ClearTypeHint]::Enabled)) ''
         Check 'the power components use the 18 px semibold readout' (([double]$powerCpuValue.FontSize -eq 18) -and ($powerCpuValue.FontWeight -eq [System.Windows.FontWeights]::SemiBold) -and ([double]$powerGpuValue.FontSize -eq 18)) ''
         Check 'the power component unit is smaller than the total unit' ([double]$powerCpuUnit.FontSize -lt [double]$powerUnit.FontSize) ''
 

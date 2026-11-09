@@ -104,8 +104,11 @@ namespace QuadVitals.Settings
             Resources[SystemColors.WindowTextBrushKey] = Theme.TextPrimaryBrush;
 
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
-            TextOptions.SetTextRenderingMode(this, TextRenderingMode.Grayscale);
-            RenderOptions.SetClearTypeHint(this, ClearTypeHint.Auto);
+            // Auto + ClearTypeHint: let WPF use subpixel AA on the opaque card surfaces even though
+            // the window itself is layered for the rounded corners. If the driver refuses, WPF
+            // falls back to grayscale on its own.
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.Auto);
+            RenderOptions.SetClearTypeHint(this, ClearTypeHint.Enabled);
 
             WindowChrome chrome = new WindowChrome
             {
