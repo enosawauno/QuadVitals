@@ -16,6 +16,6 @@ namespace QuadVitals.Core
     public static class ProductVersion
     {
         /// <summary>Readable version, also what the feedback upload reports as <c>appVersion</c>.</summary>
-        public const string SemVer = "0.9.8";
+        public const string SemVer = "0.9.9";
     }
 }
