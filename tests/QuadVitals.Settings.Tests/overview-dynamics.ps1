@@ -460,9 +460,29 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         $powerCpuBar = Find-ById $ovRoot 'PowerCpuBar'
         $powerGpuBar = Find-ById $ovRoot 'PowerGpuBar'
         Check 'the fan bar uses the shared 16-segment style' (($null -ne $fanBar) -and ($fanBar.BarStyle.ToString() -eq 'Segments')) ''
-        Check 'the fan bar keeps 10 px; the power bars match the device tiles at 22 px' (($null -ne $fanBar) -and ($null -ne $powerCpuBar) -and ($null -ne $powerGpuBar) -and ([double]$fanBar.Height -eq 10) -and ([double]$powerCpuBar.Height -eq 22) -and ([double]$powerGpuBar.Height -eq 22)) ("fan=" + $(if($null -ne $fanBar){$fanBar.Height}else{'none'}) + " cpu=" + $(if($null -ne $powerCpuBar){$powerCpuBar.Height}else{'none'}) + " gpu=" + $(if($null -ne $powerGpuBar){$powerGpuBar.Height}else{'none'}))
+        Check 'the fan bar matches the power bars at 22 px / 200 px' (($null -ne $fanBar) -and ($null -ne $powerCpuBar) -and ($null -ne $powerGpuBar) -and ([double]$fanBar.Height -eq 22) -and ([double]$fanBar.Width -eq 200) -and ([double]$powerCpuBar.Height -eq 22) -and ([double]$powerGpuBar.Height -eq 22)) ("fan=" + $(if($null -ne $fanBar){$fanBar.Height}else{'none'}) + "x" + $(if($null -ne $fanBar){$fanBar.Width}else{'none'}) + " cpu=" + $(if($null -ne $powerCpuBar){$powerCpuBar.Height}else{'none'}) + " gpu=" + $(if($null -ne $powerGpuBar){$powerGpuBar.Height}else{'none'}))
 
         $deviceCard = Find-ById $ovRoot 'DeviceCard'
+        # 卡片左边到导航胶囊右边的距离 = 卡片右边到窗口右边的距离。
+        $navGlider = Find-ById $ovRoot 'NavGlider'
+        if (($null -ne $navGlider) -and ($null -ne $deviceCard)) {
+            $navPoint = $navGlider.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0)))
+            $cardPoint = $deviceCard.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0)))
+            $leftGap = $cardPoint.X - ($navPoint.X + $navGlider.ActualWidth)
+            $rightGap = $ovRoot.ActualWidth - ($cardPoint.X + $deviceCard.ActualWidth)
+            Check 'the page leaves equal gaps to the nav and the window edge' ([math]::Abs($leftGap - $rightGap) -le 1) ("left=" + [math]::Round($leftGap, 1) + " right=" + [math]::Round($rightGap, 1))
+        }
+        # 功耗卡图标列与读数之间留 16 px。
+        $powerCard = Find-ById $ovRoot 'PowerCard'
+        $powerBody = $null
+        foreach ($candidate in (Find-ByTypeName $powerCard 'Grid')) {
+            if (($candidate.ColumnDefinitions.Count -eq 3) -and ([double]$candidate.ColumnDefinitions[1].Width.Value -eq 16)) { $powerBody = $candidate; break }
+        }
+        Check 'the power icon column leaves a 16 px gap' ($null -ne $powerBody) ''
+        # 网速标题行：IP 值与操作图标之间留 16 px，两组不再挤成一串。
+        $lanValue = Find-ById $ovRoot 'LanIpValue'
+        $ipGrid = if ($null -eq $lanValue) { $null } else { $lanValue.Parent }
+        Check 'the IP group and action icons are two groups' (($null -ne $ipGrid) -and ($ipGrid.ColumnDefinitions.Count -ge 6) -and ([double]$ipGrid.ColumnDefinitions[5].Width.Value -eq 16)) ''
         # 设备、网速、风扇三张卡必须同高；功耗卡扛着三行读数，允许高十几像素，但不能变成另一档卡片。
         $coreHeights = @([double]$deviceCard.ActualHeight, [double]$networkCard.ActualHeight, [double]$freshCard.ActualHeight)
         $coreMin = ($coreHeights | Measure-Object -Minimum).Minimum

@@ -165,6 +165,7 @@ namespace QuadVitals.Settings
             _text.TextChanged += (sender, e) =>
             {
                 UpdatePlaceholder();
+                UpdateClearVisibility();
                 ScheduleDraft();
             };
             _kind.SelectionChanged += (sender, e) => ScheduleDraft();
@@ -295,7 +296,8 @@ namespace QuadVitals.Settings
             // 这样提示与输入文字的换行宽度一致，同一段话不会两处折行不同。
             _placeholder.Text = "截图直接 Ctrl+V 粘贴，也可以把文件拖进这里。最多 8 个，单个 ≤ 50 MB。";
             _placeholder.FontSize = 13;
-            _placeholder.Foreground = Theme.TextTertiaryBrush;
+            // 占位提示是“没有内容时”的提示，可以最弱；真正的说明文字已经走 TextTertiary。
+            _placeholder.Foreground = Theme.TextFaintBrush;
             _placeholder.TextWrapping = TextWrapping.Wrap;
             _placeholder.Margin = new Thickness(
                 _text.BorderThickness.Left + _text.Padding.Left * 2 + HintCaretInset,
@@ -481,6 +483,7 @@ namespace QuadVitals.Settings
 
             _clear = new FlatButton("清空");
             _clear.Margin = new Thickness(0, 0, 8, 0);
+            _clear.Visibility = Visibility.Collapsed;
             AutomationProperties.SetAutomationId(_clear, "FeedbackClear");
             _clear.Click += (sender, e) => ClearForm();
             actions.Children.Add(_clear);
@@ -546,7 +549,7 @@ namespace QuadVitals.Settings
             _resultBody.Visibility = Visibility.Collapsed;
             _formBody.Visibility = Visibility.Visible;
             if (_logBlock != null) _logBlock.Visibility = Visibility.Visible;
-            if (_clear != null) _clear.Visibility = Visibility.Visible;
+            UpdateClearVisibility();
             _addFiles.Visibility = Visibility.Visible;
             _submit.Visibility = Visibility.Visible;
             if (_closeResult != null)
@@ -588,6 +591,14 @@ namespace QuadVitals.Settings
                 : Visibility.Collapsed;
         }
 
+        /// <summary>「清空」只在真的有东西可清时出现；空表单上留一个灰按钮等于噪声。</summary>
+        private void UpdateClearVisibility()
+        {
+            if (_clear == null) return;
+            bool hasContent = !string.IsNullOrEmpty(_text.Text) || _attachments.Count > 0;
+            _clear.Visibility = hasContent ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         // ---- draft --------------------------------------------------------------------
 
         private void LoadDraft()
@@ -614,6 +625,7 @@ namespace QuadVitals.Settings
             // 草稿恢复出文字之后必须重算占位提示：原来只在 TextChanged 里算，
             // 而恢复时是直接赋 Text（还压着 _filling），占位提示就留在了输入文字上面。
             UpdatePlaceholder();
+            UpdateClearVisibility();
 
             if (warnings.Count > 0) ShowStatus(string.Join(" ", warnings.ToArray()), false);
         }
@@ -906,6 +918,7 @@ namespace QuadVitals.Settings
             _attachmentHint.Visibility = _attachments.Count == 0
                 ? Visibility.Collapsed
                 : Visibility.Visible;
+            UpdateClearVisibility();
 
             foreach (FeedbackDraftAttachment attachment in _attachments)
             {

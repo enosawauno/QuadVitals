@@ -261,9 +261,11 @@ namespace QuadVitals.Settings
             body.Children.Add(sidebar);
 
             _host.VerticalContentAlignment = VerticalAlignment.Top;
-            // 内容左右各留 24（页面自身 PagePadding 也是 24，合计 48），设备卡右边缘与窗口右边缘
-            // 同样是 48。顶部不再额外下移：页头文字的墨迹上边缘要和侧栏第一个导航项的顶边对齐。
-            _host.Margin = new Thickness(24, 0, 24, 0);
+            // 卡片的左右留白要对齐：左边 = 卡片左边缘到导航胶囊右边缘，右边 = 卡片右边缘到窗口右边缘。
+            // 侧栏 196 + host 左 6 + 页面内边距 24 = 卡片左 226；导航胶囊右 160 → 左留白 66。
+            // host 右 42 + 页面内边距 24 = 右留白 66。顶部不再额外下移：页头文字的墨迹上边缘
+            // 要和侧栏第一个导航项的顶边对齐。
+            _host.Margin = new Thickness(6, 0, 42, 0);
             Grid.SetColumn(_host, 1);
             body.Children.Add(_host);
 
@@ -669,9 +671,9 @@ namespace QuadVitals.Settings
             {
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center,
-                // 右上角三个要素的右边缘对齐内容区右边缘：减掉的 36 是 36 px 按钮里 ✕ 的
-                // 右侧留白，对齐的是看得见的线条边缘。
-                Margin = new Thickness(0, 0, 36, 0),
+                // 右上角三个要素的右边缘对齐卡片右边缘：卡片右移至 1214 后，36 px 按钮的
+                // 右侧留白从 36 调到 54，对齐的仍是看得见的线条边缘。
+                Margin = new Thickness(0, 0, 54, 0),
                 RenderTransform = new TranslateTransform(0, 10)
             };
 
@@ -1146,6 +1148,7 @@ namespace QuadVitals.Settings
             DisposeCachedPages(true);
             _cache.Clear();
             ApplyRenderPolicy();
+            ApplyIndicatorStyle();
         }
 
         public void SaveSettings(AppSettings edited, int widthBefore)

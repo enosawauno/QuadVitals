@@ -113,6 +113,17 @@ namespace QuadVitals.UI
         private const double NearSpread = 6;
         private const double FieldGap = 4;
 
+        /// <summary>Popup 的水平偏移；外层阴影容器的左右内边距是 14，默认抵回去。</summary>
+        public static readonly DependencyProperty PopupOffsetProperty = DependencyProperty.Register(
+            "PopupOffset", typeof(double), typeof(DarkComboBox),
+            new PropertyMetadata(-(ShadowSpread + NearSpread)));
+
+        public double PopupOffset
+        {
+            get { return (double)GetValue(PopupOffsetProperty); }
+            set { SetValue(PopupOffsetProperty, value); }
+        }
+
         public DarkComboBox()
         {
             Background = Theme.SurfaceHoverBrush;
@@ -284,7 +295,10 @@ namespace QuadVitals.UI
             popup.SetValue(Popup.AllowsTransparencyProperty, true);
             // 外面两层阴影容器的内边距会把卡片往右下推，用偏移抵回去，
             // 否则弹层不跟字段左对齐（就是“弹窗错位”）。
-            popup.SetValue(Popup.HorizontalOffsetProperty, -(ShadowSpread + NearSpread));
+            popup.SetBinding(Popup.HorizontalOffsetProperty, new Binding("PopupOffset")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
             popup.SetValue(Popup.VerticalOffsetProperty, 0.0);
             // 内建的 Slide 是整窗生硬位移，不能扣缓动；展开动画在 DarkComboBox.OnDropDownOpened
             // 里自己对列表内容做（缩放 + 淡入，带轻微过冲）。

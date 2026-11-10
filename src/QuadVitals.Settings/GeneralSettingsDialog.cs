@@ -34,6 +34,16 @@ namespace QuadVitals.Settings
             AppSettings.RenderPolicyUnfocused, AppSettings.RenderPolicyFullscreen
         };
 
+        private static readonly string[] IndicatorStyleLabels =
+        {
+            "分段条", "胶囊条"
+        };
+
+        private static readonly string[] IndicatorStyleKeys =
+        {
+            AppSettings.IndicatorSegments, AppSettings.IndicatorCapsule
+        };
+
         private readonly SettingsWindow _window;
 
         public GeneralSettingsDialog(SettingsWindow window)
@@ -124,6 +134,27 @@ namespace QuadVitals.Settings
             renderPolicy.SelectedIndex = selectedPolicy;
             body.Children.Add(FieldRow("渲染策略", renderPolicy, "GeneralRenderPolicyLabel"));
 
+            // 进度样式从设备卡弹窗挪过来：它是四格共用的一条设置，放在通用设置里才不会让人
+            // 以为只影响刚打开的那张卡。
+            DarkComboBox indicatorStyle = new DarkComboBox
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            AutomationProperties.SetAutomationId(indicatorStyle, "GeneralIndicatorStyle");
+            AutomationProperties.SetName(indicatorStyle, "进度样式");
+            int selectedStyle = 0;
+            for (int i = 0; i < IndicatorStyleLabels.Length; i++)
+            {
+                indicatorStyle.Items.Add(IndicatorStyleLabels[i]);
+                if (string.Equals(IndicatorStyleKeys[i], settings.IndicatorStyle,
+                                  StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedStyle = i;
+                }
+            }
+            indicatorStyle.SelectedIndex = selectedStyle;
+            body.Children.Add(FieldRow("进度样式", indicatorStyle, "GeneralIndicatorStyleLabel"));
+
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
 
@@ -141,7 +172,7 @@ namespace QuadVitals.Settings
 
             FlatButton save = new FlatButton("保存", true);
             AutomationProperties.SetAutomationId(save, "GeneralSave");
-            save.Click += (sender, e) => SavePanel(autostart, battery, renderPolicy);
+            save.Click += (sender, e) => SavePanel(autostart, battery, renderPolicy, indicatorStyle);
             buttons.Children.Add(save);
             Grid.SetRow(buttons, 2);
             grid.Children.Add(buttons);
@@ -251,33 +282,45 @@ namespace QuadVitals.Settings
                 Text = label,
                 FontSize = 13,
                 Foreground = Theme.TextPrimaryBrush,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                // 20 px 的字段间距放在标签的右边距里，而不是控件的左边距：ComboBox 的弹层
+                // 按控件所在格定位，控件带左外边距时弹层会跟着偏到格子左边（错位 20 px）。
+                Margin = new Thickness(0, 0, 20, 0)
             };
             AutomationProperties.SetAutomationId(caption, labelAutomationId);
             Grid.SetColumn(caption, 1);
             row.Children.Add(caption);
 
             control.VerticalAlignment = VerticalAlignment.Center;
-            control.Margin = new Thickness(20, 0, 0, 0);
+            // FieldRow 的控件列比可见字段左缘多出 28 px（标签右间距 20 + 单元格留白），
+            // 模板默认的 -14 会让弹层停在字段左边 28 px；这里按实际列位改到 +14。
+            DarkComboBox combo = control as DarkComboBox;
+            if (combo != null) combo.PopupOffset = 14;
             Grid.SetColumn(control, 2);
             row.Children.Add(control);
             return row;
         }
 
         /// <summary>把面板里的草稿写回最新设置（别处可能已经改过网卡/刷新等字段）。</summary>
-        private void SavePanel(CheckBox autostart, CheckBox battery, DarkComboBox renderPolicy)
+        private void SavePanel(CheckBox autostart, CheckBox battery, DarkComboBox renderPolicy, DarkComboBox indicatorStyle)
         {
             AppSettings latest = _window.CurrentSettings.Clone();
             bool wantedAutostart = autostart.IsChecked == true;
             bool wantedBatteryPause = battery.IsChecked == true;
             string wantedPolicy = RenderPolicyKeyAt(renderPolicy.SelectedIndex);
+            int styleIndex = indicatorStyle.SelectedIndex;
+            string wantedStyle = styleIndex >= 0 && styleIndex < IndicatorStyleKeys.Length
+                ? IndicatorStyleKeys[styleIndex]
+                : AppSettings.IndicatorSegments;
             _window.CloseOverlay();
             if (latest.StartAgentWithWindows == wantedAutostart &&
                 latest.PauseAnimationsOnBattery == wantedBatteryPause &&
-                string.Equals(latest.RenderPolicy, wantedPolicy, StringComparison.OrdinalIgnoreCase)) return;
+                string.Equals(latest.RenderPolicy, wantedPolicy, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(latest.IndicatorStyle, wantedStyle, StringComparison.OrdinalIgnoreCase)) return;
             latest.StartAgentWithWindows = wantedAutostart;
             latest.PauseAnimationsOnBattery = wantedBatteryPause;
             latest.RenderPolicy = wantedPolicy;
+            latest.IndicatorStyle = wantedStyle;
             latest.Normalize();
             _window.SaveSettingsQuietly(latest);
         }

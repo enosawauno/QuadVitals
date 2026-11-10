@@ -77,36 +77,8 @@ if ($null -ne $devicePanel) {
     }
     Check 'the panel is titled device settings' ($null -ne $panelTitle) ''
 
-    # First field: the indicator style dropdown. Its name is four characters everywhere (dialog,
-    # assertion, docs, screenshot).
-    $indicator = Find-InPanel $devicePanel 'DeviceSettingsIndicator'
-    Check 'the panel has the indicator style dropdown' ($null -ne $indicator) ''
-    if ($null -ne $indicator) {
-        $label = [System.Windows.Automation.AutomationProperties]::GetName($indicator)
-        $expectedLabel = U @(0x8FDB, 0x5EA6, 0x6837, 0x5F0F)
-        Check 'the dropdown is named with four characters' (($label -eq $expectedLabel) -and ($label.Length -eq 4)) "name=$label"
-        Check 'the dropdown offers two indicator styles' ($indicator.Items.Count -eq 2) "items=$($indicator.Items.Count)"
-        $segWord = U @(0x5206, 0x6BB5, 0x6761)
-        $capsuleWord = U @(0x80F6, 0x56CA, 0x6761)
-        $options = @($indicator.Items | ForEach-Object { [string]$_ })
-        Check 'the options are segmented and capsule' (($options -contains $segWord) -and ($options -contains $capsuleWord)) "options=$($options -join ',')"
-
-        # Same dropdown width as the network dialog: no fixed width, the field column stretches it.
-        Call $ovWindow 'CloseOverlay' @() | Out-Null
-        Pump 250
-        Call $ovWindow 'ShowNetworkSettings' @() | Out-Null
-        Pump 350
-        $networkPanel = Read-OverlayPanel $ovWindow 'Border'
-        $networkCombo = Find-InPanel $networkPanel 'NetworkAdapterSelect'
-        Check 'the network dialog still has its adapter dropdown' ($null -ne $networkCombo) ''
-        if (($null -ne $networkCombo) -and ($null -ne $indicator)) {
-            Check 'both dialogs use the same dropdown width' ([math]::Abs($networkCombo.ActualWidth - $indicator.ActualWidth) -le 1.0) "network=$([math]::Round($networkCombo.ActualWidth,1)) device=$([math]::Round($indicator.ActualWidth,1))"
-        }
-        Call $ovWindow 'CloseOverlay' @() | Out-Null
-        Pump 250
-        Call $ovWindow 'ShowDeviceSettings' @() | Out-Null
-        Pump 350
-    }
+    # 进度样式已经移到通用设置：设备弹窗里只剩四个指标下拉。
+    Check 'the device dialog no longer carries the indicator style' ($null -eq (Find-InPanel $devicePanel 'DeviceSettingsIndicator')) ''
 
     "== indicator style switch =="
     # Switching only changes the settings object and repaints; the page must not be rebuilt (a

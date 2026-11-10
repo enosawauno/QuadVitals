@@ -13,23 +13,14 @@ namespace QuadVitals.Settings
     /// <summary>
     /// 设备状态卡的设置弹窗（入口是那张卡标题行右侧的齿轮）。
     ///
-    /// 第一项是指示器样式：「进度样式」下拉在 16 段小分段与连成一体的胶囊条之间切换；
-    /// 与网速卡的「网络设置」弹窗一致：**只改草稿，点「保存」才写入并生效**，点「取消」丢弃。
+    /// 四个硬件各一个下拉，决定每个格子显示哪个指标；与网速卡的「网络设置」弹窗一致：
+    /// **只改草稿，点「保存」才写入并生效**，点「取消」丢弃。
     /// </summary>
     internal sealed class DeviceSettingsDialog
     {
         /// <summary>与网速卡弹窗同尺寸，三个弹窗并排看不会一个大一个小。</summary>
         public const double DialogWidth = NetworkSettingsDialog.DialogWidth;
         public const double DialogHeight = NetworkSettingsDialog.DialogHeight;
-
-        /// <summary>下拉的名字：弹窗、断言、文档、截图统一用这四个字。</summary>
-        public const string IndicatorLabel = "进度样式";
-
-        private static readonly KeyValuePair<string, string>[] Styles =
-        {
-            new KeyValuePair<string, string>(AppSettings.IndicatorSegments, "分段条"),
-            new KeyValuePair<string, string>(AppSettings.IndicatorCapsule, "胶囊条")
-        };
 
         private readonly SettingsWindow _window;
 
@@ -70,29 +61,6 @@ namespace QuadVitals.Settings
             grid.Children.Add(title);
 
             StackPanel fields = new StackPanel { Margin = new Thickness(0, 16, 0, 0), VerticalAlignment = VerticalAlignment.Top };
-            fields.Children.Add(new TextBlock
-            {
-                Text = IndicatorLabel,
-                FontSize = 12,
-                Foreground = Theme.TextTertiaryBrush,
-                Margin = new Thickness(0, 0, 0, 8)
-            });
-
-            DarkComboBox styleBox = new DarkComboBox();
-            AutomationProperties.SetAutomationId(styleBox, "DeviceSettingsIndicator");
-            AutomationProperties.SetName(styleBox, IndicatorLabel);
-            // 不给固定宽度：和网速弹窗的网卡 / 刷新间隔下拉一样铺满字段列（弹窗内宽），
-            // 两个弹窗的下拉框看着才是同一个宽。
-            styleBox.HorizontalAlignment = HorizontalAlignment.Stretch;
-            int selected = 0;
-            for (int i = 0; i < Styles.Length; i++)
-            {
-                styleBox.Items.Add(Styles[i].Value);
-                if (string.Equals(Styles[i].Key, settings.IndicatorStyle, StringComparison.OrdinalIgnoreCase)) selected = i;
-            }
-            styleBox.SelectedIndex = selected;
-            fields.Children.Add(styleBox);
-
             // 四个硬件各一个下拉：每个格子显示哪个指标。两列排，免得弹窗被拉长。
             Grid metrics = new Grid { Margin = new Thickness(0, 16, 0, 0) };
             metrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -126,7 +94,7 @@ namespace QuadVitals.Settings
 
             FlatButton save = new FlatButton("保存", true);
             AutomationProperties.SetAutomationId(save, "DeviceSettingsSave");
-            save.Click += (sender, e) => Save(styleBox, cpuBox, memoryBox, gpuBox, diskBox);
+            save.Click += (sender, e) => Save(cpuBox, memoryBox, gpuBox, diskBox);
             buttons.Children.Add(save);
             Grid.SetRow(buttons, 2);
             grid.Children.Add(buttons);
@@ -174,13 +142,10 @@ namespace QuadVitals.Settings
         /// 保存：从当前 live 设置克隆一份（期间可能改了别的页），只覆盖本弹窗的字段，
         /// 再走与网速弹窗同一条保存路径；取消 / 关遮罩都不写文件。
         /// </summary>
-        private void Save(DarkComboBox styleBox, DarkComboBox cpuBox, DarkComboBox memoryBox,
+        private void Save(DarkComboBox cpuBox, DarkComboBox memoryBox,
                           DarkComboBox gpuBox, DarkComboBox diskBox)
         {
             AppSettings edited = _window.CurrentSettings.Clone();
-
-            int styleIndex = styleBox.SelectedIndex;
-            if (styleIndex >= 0 && styleIndex < Styles.Length) edited.IndicatorStyle = Styles[styleIndex].Key;
 
             DeviceMetricChoices metrics = new DeviceMetricChoices
             {

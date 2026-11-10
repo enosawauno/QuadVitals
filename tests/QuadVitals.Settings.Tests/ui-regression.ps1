@@ -970,16 +970,23 @@ if ($null -ne $feedbackPage) {
     Check 'the hint wraps at the typed text width' ([math]::Abs($hintWrap - $textWrap) -le 1) "hint=$([math]::Round($hintWrap,1)) text=$([math]::Round($textWrap,1))"
 }
 
-# The three actions are right-aligned, in the order the owner asked for: clear / attach / submit.
+# The form actions are right-aligned. Clear is conditional: an empty form has nothing to clear.
 $clearButton = Find-ById $feedbackRoot 'FeedbackClear'
 $attachButton = Find-ById $feedbackRoot 'FeedbackAddFiles'
 $submitButton = Find-ById $feedbackRoot 'FeedbackSubmit'
 if (($null -ne $clearButton) -and ($null -ne $attachButton) -and ($null -ne $submitButton)) {
+    Check 'the clear action hides on an empty form' ($clearButton.Visibility -eq [System.Windows.Visibility]::Collapsed) ''
+    $textBox.Text = '需要清空'
+    Pump 150
+    Check 'the clear action appears once there is text' ($clearButton.Visibility -eq [System.Windows.Visibility]::Visible) ''
     $cx = Screen-X $clearButton
     $ax = Screen-X $attachButton
     $sx = Screen-X $submitButton
     Check 'the three actions sit right of the diagnostics row' ($cx -gt 500) ("clear x=" + [math]::Round($cx))
     Check 'the actions run clear / attach / submit' (($cx -lt $ax) -and ($ax -lt $sx)) ("x=" + [math]::Round($cx) + "/" + [math]::Round($ax) + "/" + [math]::Round($sx))
+    $textBox.Text = ''
+    Pump 150
+    Check 'the clear action hides again after clearing' ($clearButton.Visibility -eq [System.Windows.Visibility]::Collapsed) ''
 } else { Check 'the three actions are present' $false '' }
 
 # Submitted state: the form actions step aside for a single close; the panel keeps the same board

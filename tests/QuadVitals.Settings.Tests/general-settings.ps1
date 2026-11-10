@@ -120,6 +120,14 @@ if ($null -ne $renderPolicy) {
     elseif ($savedPolicy -eq [QuadVitals.Core.Settings]::RenderPolicyFullscreen) { $expectedIndex = 3 }
     Check 'the render policy reflects the saved choice' ($renderPolicy.SelectedIndex -eq $expectedIndex) ("index=" + $renderPolicy.SelectedIndex + " saved=" + $savedPolicy)
     Check 'the render policy has a label' ($null -ne (Find-ById $generalRoot 'GeneralRenderPolicyLabel')) ''
+}
+
+$indicatorStyle = Find-ById $generalRoot 'GeneralIndicatorStyle'
+Check 'the panel carries the indicator style dropdown' ($null -ne $indicatorStyle) ''
+if ($null -ne $indicatorStyle) {
+    Check 'the indicator style offers two choices' ($indicatorStyle.Items.Count -eq 2) ("items=" + $indicatorStyle.Items.Count)
+    Check 'the indicator style has a label' ($null -ne (Find-ById $generalRoot 'GeneralIndicatorStyleLabel')) ''
+}
 
 # Settings are grouped: a four-character group title, then one line per row with the label on the
 # left and the control right next to it; the battery switch belongs to the performance group.
@@ -138,9 +146,22 @@ function Row-Centre($element) {
 $autostartLabel = Find-ById $generalRoot 'GeneralAutostartLabel'
 $batteryLabel = Find-ById $generalRoot 'GeneralBatteryAnimationsLabel'
 $policyLabel = Find-ById $generalRoot 'GeneralRenderPolicyLabel'
-$labelLengths = @($autostartLabel, $batteryLabel, $policyLabel) | ForEach-Object { if ($null -eq $_) { -1 } else { $_.Text.Length } }
-Check 'every row label is four characters' (($labelLengths -join ',') -eq '4,4,4') ("lengths=" + ($labelLengths -join ','))
-$rowPairs = @(@($autostartLabel, $autoStart), @($batteryLabel, $batterySwitch), @($policyLabel, $renderPolicy))
+$indicatorLabel = Find-ById $generalRoot 'GeneralIndicatorStyleLabel'
+Check 'the dropdown sits on its cell, not shifted by a margin' (($null -ne $renderPolicy) -and ($renderPolicy.Margin.Left -eq 0)) ("margin=" + $(if ($null -eq $renderPolicy) { 'none' } else { $renderPolicy.Margin.Left }))
+Check 'the label carries the field gap' (($null -ne $policyLabel) -and ($policyLabel.Margin.Right -eq 20)) ("gap=" + $(if ($null -eq $policyLabel) { 'none' } else { $policyLabel.Margin.Right }))
+if ($null -ne $renderPolicy) {
+    $renderPolicy.IsDropDownOpen = $true
+    Pump 250
+    $policyPopup = $renderPolicy.Template.FindName('PART_Popup', $renderPolicy)
+    Check 'the popup aligns with the field' (($null -ne $policyPopup) -and ($policyPopup.HorizontalOffset -eq 14)) ("offset=" + $(if ($null -eq $policyPopup) { 'none' } else { $policyPopup.HorizontalOffset }))
+    $renderPolicy.IsDropDownOpen = $false
+    Pump 100
+}
+Check 'the tertiary text meets the readable floor' ([QuadVitals.UI.Theme]::TextTertiary.R -ge 0x9A) ("r=" + [QuadVitals.UI.Theme]::TextTertiary.R)
+Check 'the faint text is reserved for ignored information' ([QuadVitals.UI.Theme]::TextFaint.R -eq 0x6E) ("r=" + [QuadVitals.UI.Theme]::TextFaint.R)
+$labelLengths = @($autostartLabel, $batteryLabel, $policyLabel, $indicatorLabel) | ForEach-Object { if ($null -eq $_) { -1 } else { $_.Text.Length } }
+Check 'every row label is four characters' (($labelLengths -join ',') -eq '4,4,4,4') ("lengths=" + ($labelLengths -join ','))
+$rowPairs = @(@($autostartLabel, $autoStart), @($batteryLabel, $batterySwitch), @($policyLabel, $renderPolicy), @($indicatorLabel, $indicatorStyle))
 $oneLine = $true
 foreach ($pair in $rowPairs) {
     $c1 = Row-Centre $pair[0]
@@ -182,7 +203,6 @@ if (($null -ne $renderPolicy) -and ($null -ne $generalPanel)) {
 $panelRight = $generalPanel.ActualWidth - $generalPanel.Padding.Right
 Check 'the dropdown fills the rest of its row' ([math]::Abs($policyRight - $panelRight) -le 1) ("right=$policyRight panel=$panelRight")
 Check 'the rows sit close to each other' (([math]::Abs(($yPerf - $yAuto)) -le 44) -and ([math]::Abs(($yBattery - $yPerf)) -le 44)) ("auto=$yAuto perf=$yPerf battery=$yBattery")
-}
 Check 'the panel no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
 # 面板是“取消 / 保存”：勾选只是草稿，点保存才写盘。
 # The first walk over a freshly shown overlay sometimes returns nothing: retry like the other suites.
@@ -196,14 +216,15 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {
 }
 Check 'the panel has cancel and save buttons' (($null -ne $generalSave) -and ($null -ne $generalClose)) ''
 # The extra height is reserved for settings rows that are not written yet: the buttons stay at the
-# bottom, so there is room for at least two more 34 px rows between the last row and the buttons.
-$lastRowBottom = (Row-Centre $policyLabel) + 17
+# bottom, so there is room for at least one more 34 px row between the last row and the buttons.
+$lastRowBottom = (Row-Centre $indicatorLabel) + 17
 $buttonTop = $generalSave.TranslatePoint((New-Object System.Windows.Point(0, 0)), $generalPanel).Y
-Check 'the card keeps two rows of room for later settings' (($buttonTop - $lastRowBottom) -ge 72) ("room=" + [math]::Round($buttonTop - $lastRowBottom, 1))
-if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch) -and ($null -ne $renderPolicy)) {
+Check 'the card keeps one row of room for later settings' (($buttonTop - $lastRowBottom) -ge 34) ("room=" + [math]::Round($buttonTop - $lastRowBottom, 1))
+if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch) -and ($null -ne $renderPolicy) -and ($null -ne $indicatorStyle)) {
     $before = [bool](Read-Settings $generalWindow).StartAgentWithWindows
     $beforeBattery = (Read-Settings $generalWindow).PauseAnimationsOnBattery -ne $false
     $beforePolicy = [string](Read-Settings $generalWindow).RenderPolicy
+    $beforeStyle = [string](Read-Settings $generalWindow).IndicatorStyle
     # Use unfocused as the save target: hover would leak HoverOnlyCards into the next suite.
     $targetPolicy = 'unfocused'
     $targetIndex = 2
@@ -211,18 +232,27 @@ if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batter
         $targetPolicy = 'fullscreen'
         $targetIndex = 3
     }
+    $targetStyle = [QuadVitals.Core.Settings]::IndicatorSegments
+    $targetStyleIndex = 0
+    if ($beforeStyle -eq $targetStyle) {
+        $targetStyle = [QuadVitals.Core.Settings]::IndicatorCapsule
+        $targetStyleIndex = 1
+    }
 try {
     $autoStart.IsChecked = -not $before
     $batterySwitch.IsChecked = -not $beforeBattery
     $renderPolicy.SelectedIndex = $targetIndex
+    $indicatorStyle.SelectedIndex = $targetStyleIndex
     Pump 150
     Check 'toggling the switch alone changes nothing on disk' ([bool](Read-Settings $generalWindow).StartAgentWithWindows -eq $before) ''
     Check 'choosing a render policy alone changes nothing on disk' ([string](Read-Settings $generalWindow).RenderPolicy -eq $beforePolicy) ''
+    Check 'choosing an indicator style alone changes nothing on disk' ([string](Read-Settings $generalWindow).IndicatorStyle -eq $beforeStyle) ''
     $generalSave.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
     Pump 200
     Check 'saving applies the draft' ([bool](Read-Settings $generalWindow).StartAgentWithWindows -eq (-not $before)) ''
     Check 'saving applies the battery preference' ((Read-Settings $generalWindow).PauseAnimationsOnBattery -eq (-not $beforeBattery)) ''
     Check 'saving applies the render policy' ([string](Read-Settings $generalWindow).RenderPolicy -eq $targetPolicy) ("got=" + (Read-Settings $generalWindow).RenderPolicy + " want=" + $targetPolicy + " idx=" + $renderPolicy.SelectedIndex)
+    Check 'saving applies the indicator style' ([string](Read-Settings $generalWindow).IndicatorStyle -eq $targetStyle) ("got=" + (Read-Settings $generalWindow).IndicatorStyle + " want=" + $targetStyle)
     # Other settings windows in this process have their own 1 Hz policy tick and share the same
     # process-wide environment; apply this window's just-saved value right before reading it.
     $windowType.GetMethod('ApplyRenderPolicy', $flags).Invoke($generalWindow, @()) | Out-Null

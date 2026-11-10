@@ -481,7 +481,8 @@ namespace QuadVitals.Settings
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(17) }); // 分隔竖线
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 公网
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 公网 IP
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });  // 值 → 复制
+            // 值 → 图标留 16：IP 信息与操作图标分成两组，不再挤在同一串里。
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) }); // 值 → 图标组
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) }); // 复制
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) }); // 眼睛
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });

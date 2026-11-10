@@ -275,7 +275,8 @@ namespace QuadVitals.Settings
         {
             Grid body = new Grid();
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(IconWidth) });
-            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            // 图标列与读数之间留一格：4 px 在放大后的闪电旁看起来是粘住的。
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             body.Children.Add(_scene);
 

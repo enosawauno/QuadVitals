@@ -231,15 +231,17 @@ namespace QuadVitals.Settings
             AutomationProperties.SetAutomationId(_caption, "FanCaption");
 
             _bar = new MetricBar(Theme.AccentGreen, Theme.TrackGrey);
-            _bar.Height = 10;
-            _bar.Margin = new Thickness(0, 12, 0, 0);
+            // 与功耗卡、设备四格同几何：16 段、22 px 高、200 px 宽，不再用 10 px 小点。
+            _bar.Height = 22;
+            _bar.Width = 200;
+            _bar.Margin = new Thickness(0, 6, 0, 0);
             _bar.VerticalAlignment = VerticalAlignment.Center;
             AutomationProperties.SetAutomationId(_bar, "FanBar");
 
             _others.FontSize = 11;
             _others.Foreground = Theme.TextSecondaryBrush;
             _others.TextWrapping = TextWrapping.Wrap;
-            _others.Margin = new Thickness(0, 6, 0, 0);
+            _others.Margin = new Thickness(0, 0, 0, 0);
             AutomationProperties.SetAutomationId(_others, "FanOthers");
 
             _empty.Text = string.Empty;

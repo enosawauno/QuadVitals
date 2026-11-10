@@ -25,8 +25,11 @@ namespace QuadVitals.UI
 
         // text
         public static readonly Color TextPrimary = Color.FromRgb(0xFF, 0xFF, 0xFF);
-        public static readonly Color TextSecondary = Color.FromRgb(0x8F, 0x8F, 0x8F);
-        public static readonly Color TextTertiary = Color.FromRgb(0x6E, 0x6E, 0x6E);
+        // 深色卡片上的可读性：说明文字不再用 2.6:1 的 #6E6E6E。三级灰提到 #9A9A9A（约 4.6:1），
+        // 二级灰随之提亮一档；#6E6E6E 只留给占位/禁用这类可以忽略的信息。
+        public static readonly Color TextSecondary = Color.FromRgb(0xB0, 0xB0, 0xB0);
+        public static readonly Color TextTertiary = Color.FromRgb(0x9A, 0x9A, 0x9A);
+        public static readonly Color TextFaint = Color.FromRgb(0x6E, 0x6E, 0x6E);
 
         // accents (bars / indicators)
         public static readonly Color AccentGreen = Color.FromRgb(0x1D, 0xB9, 0x54);   // gauge fill
@@ -54,6 +57,7 @@ namespace QuadVitals.UI
         public static readonly Brush TextPrimaryBrush = Freeze(new SolidColorBrush(TextPrimary));
         public static readonly Brush TextSecondaryBrush = Freeze(new SolidColorBrush(TextSecondary));
         public static readonly Brush TextTertiaryBrush = Freeze(new SolidColorBrush(TextTertiary));
+        public static readonly Brush TextFaintBrush = Freeze(new SolidColorBrush(TextFaint));
         public static readonly Brush AccentGreenBrush = Freeze(new SolidColorBrush(AccentGreen));
         public static readonly Brush AccentGreenFillBrush = Freeze(new SolidColorBrush(AccentGreenFill));
         public static readonly Brush AccentGreenEdgeBrush = Freeze(new SolidColorBrush(AccentGreenEdge));
