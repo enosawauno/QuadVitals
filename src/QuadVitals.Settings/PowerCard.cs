@@ -441,7 +441,7 @@ namespace QuadVitals.Settings
                 FontSize = 11.5,
                 Foreground = Theme.TextSecondaryBrush,
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, 12, 7)
+                Margin = new Thickness(0, 0, 10, 8)
             };
             AutomationProperties.SetAutomationId(label, "PowerTotalLabel");
 
@@ -454,7 +454,7 @@ namespace QuadVitals.Settings
             MetricTypography.ApplyUnit(_totalUnit);
             _totalUnit.Foreground = Theme.TextSecondaryBrush;
             _totalUnit.VerticalAlignment = VerticalAlignment.Bottom;
-            _totalUnit.Margin = new Thickness(4, 0, 0, 4);
+            _totalUnit.Margin = new Thickness(3, 0, 0, 8);
             AutomationProperties.SetAutomationId(_totalUnit, "PowerUnit");
 
             StackPanel line = new StackPanel

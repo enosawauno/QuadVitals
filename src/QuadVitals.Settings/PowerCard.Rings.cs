@@ -140,7 +140,7 @@ namespace QuadVitals.Settings
             // 环样式下内容比卡片窄，整体居中才不会左边一堆、右边一片空。
             if (_body != null) _body.HorizontalAlignment = rings ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
             // 读数块宽度固定：居中布局里只要内容宽度变了，整组就会左右挪一下（每秒一次像抖动）。
-            if (_readout != null) _readout.Width = rings ? 236 : double.NaN;
+            if (_readout != null) _readout.Width = rings ? 196 : double.NaN;
             // 圆点只占位不变化：只改透明度，行宽不会跟着变。
             if (_cpuDot != null) _cpuDot.Opacity = rings ? 1 : 0;
             if (_gpuDot != null) _gpuDot.Opacity = rings ? 1 : 0;
