@@ -455,11 +455,12 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the ring style hides both bars' (((Find-ById $ovRoot 'PowerCpuBar').Visibility -eq [System.Windows.Visibility]::Collapsed) -and ((Find-ById $ovRoot 'PowerGpuBar').Visibility -eq [System.Windows.Visibility]::Collapsed)) ''
             $ringTotal = Find-ById $ovRoot 'PowerRingTotal'
             Check 'the ring centre carries the total' (($null -ne $ringTotal) -and ($ringTotal.Text -eq (Find-ById $ovRoot 'PowerTotal').Text)) ("ring=" + $(if ($null -eq $ringTotal) { 'none' } else { $ringTotal.Text }))
-            $ringCpu = $powerCard.GetType().GetField('_ringCpuPath', $flags).GetValue($powerCard)
-            $ringGpu = $powerCard.GetType().GetField('_ringGpuPath', $flags).GetValue($powerCard)
-            Check 'both arcs are drawn' (($null -ne $ringCpu.Data) -and ($null -ne $ringGpu.Data) -and (-not $ringCpu.Data.IsEmpty()) -and (-not $ringGpu.Data.IsEmpty())) ''
-            $ringCpuBounds = $ringCpu.Data.Bounds
-            Check 'the CPU arc stays inside the ring box' (($ringCpuBounds.Left -ge -1) -and ($ringCpuBounds.Right -le 129)) ("left=" + [math]::Round($ringCpuBounds.Left, 1) + " right=" + [math]::Round($ringCpuBounds.Right, 1))
+            $ringCpu = $powerCard.GetType().GetField('_ringCpu', $flags).GetValue($powerCard)
+            $ringGpu = $powerCard.GetType().GetField('_ringGpu', $flags).GetValue($powerCard)
+            Check 'both arcs carry their fraction' (($null -ne $ringCpu) -and ($null -ne $ringGpu) -and ([double]$ringCpu.Fraction -gt 0.3) -and ([double]$ringGpu.Fraction -gt 0.1)) ("cpu=" + [math]::Round([double]$ringCpu.Fraction, 3) + " gpu=" + [math]::Round([double]$ringGpu.Fraction, 3))
+            Check 'the CPU arc is scaled to its own limit' ([Math]::Abs([double]$ringCpu.Fraction - (112.6 / 253.0)) -lt 0.001) ("cpu=" + [double]$ringCpu.Fraction)
+            Check 'the GPU arc is scaled to its own limit' ([Math]::Abs([double]$ringGpu.Fraction - (46.5 / 320.0)) -lt 0.001) ("gpu=" + [double]$ringGpu.Fraction)
+            Check 'the ring arcs sit inside the ring box' (([double]$ringCpu.Width -le 128) -and ([double]$ringCpu.Height -le 128)) ("box=" + $ringCpu.Width + "x" + $ringCpu.Height)
             $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleBars
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 120

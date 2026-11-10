@@ -24,12 +24,10 @@ namespace QuadVitals.Settings
         private const double OuterRadius = 56;
         private const double InnerRadius = 40;
 
-        private readonly Path _ringCpuPath = new Path();
-        private readonly Path _ringGpuPath = new Path();
+        private readonly RingArc _ringCpu = new RingArc(OuterRadius);
+        private readonly RingArc _ringGpu = new RingArc(InnerRadius);
         private readonly TextBlock _ringTotal = new TextBlock();
         private readonly TextBlock _ringUnit = new TextBlock();
-        private readonly SolidColorBrush _ringCpuBrush = new SolidColorBrush(Theme.AccentGreen);
-        private readonly SolidColorBrush _ringGpuBrush = new SolidColorBrush(Theme.AccentGreenSoft);
         private ColumnDefinition _ringColumn;
         private ColumnDefinition _ringGap;
         private ColumnDefinition _cpuBarColumn;
@@ -57,17 +55,10 @@ namespace QuadVitals.Settings
             Canvas canvas = new Canvas { Width = RingSize, Height = RingSize };
             canvas.Children.Add(BuildRingTrack(OuterRadius));
             canvas.Children.Add(BuildRingTrack(InnerRadius));
-
-            _ringCpuPath.Stroke = _ringCpuBrush;
-            _ringGpuPath.Stroke = _ringGpuBrush;
-            Path[] arcs = { _ringCpuPath, _ringGpuPath };
-            foreach (Path arc in arcs)
-            {
-                arc.StrokeThickness = RingThickness;
-                arc.StrokeStartLineCap = PenLineCap.Round;
-                arc.StrokeEndLineCap = PenLineCap.Round;
-                canvas.Children.Add(arc);
-            }
+            // 弧自己在 OnRender 里按 12 点起顺时针画，不经过 Shape 的 Stretch/包围盒逻辑，
+            // 所以不会出现「弧跑出轨道」这种尺寸推算问题。
+            canvas.Children.Add(_ringCpu);
+            canvas.Children.Add(_ringGpu);
             host.Children.Add(canvas);
 
             // 环心放合计：条形样式里这一行在左边，环样式里它进圆心，不重复出现。
@@ -111,44 +102,15 @@ namespace QuadVitals.Settings
             return track;
         }
 
-        /// <summary>
-        /// 从 12 点顺时针画一段弧；一整圈拆成两段半圆，避免起终点重合时 ArcTo 退化。
-        /// 0° 在 12 点，顺时针为正。
-        /// </summary>
-        private static Geometry RingGeometry(double radius, double fraction)
-        {
-            double sweep = 360.0 * (fraction < 0 ? 0 : (fraction > 1 ? 1 : fraction));
-            StreamGeometry geometry = new StreamGeometry();
-            if (sweep <= 0.01) return geometry;
-
-            using (StreamGeometryContext context = geometry.Open())
-            {
-                context.BeginFigure(PointOnRing(radius, 0), false, false);
-                context.ArcTo(PointOnRing(radius, sweep / 2), new Size(radius, radius), 0,
-                    false, SweepDirection.Clockwise, true, false);
-                context.ArcTo(PointOnRing(radius, sweep), new Size(radius, radius), 0,
-                    false, SweepDirection.Clockwise, true, false);
-            }
-            geometry.Freeze();
-            return geometry;
-        }
-
-        private static Point PointOnRing(double radius, double degrees)
-        {
-            double radians = degrees * Math.PI / 180.0;
-            double center = RingSize / 2;
-            return new Point(center + radius * Math.Sin(radians), center - radius * Math.Cos(radians));
-        }
-
         private void UpdateRings(double cpuFraction, double gpuFraction, bool cpuValid, bool gpuValid,
                                  string totalText)
         {
             if (_ringHost == null) return;
 
-            _ringCpuPath.Data = RingGeometry(OuterRadius, cpuValid ? cpuFraction : 0);
-            _ringGpuPath.Data = RingGeometry(InnerRadius, gpuValid ? gpuFraction : 0);
-            _ringCpuBrush.Color = cpuValid ? ColourFor(_cpuTone) : Theme.TextSecondary;
-            _ringGpuBrush.Color = gpuValid ? ColourFor(_gpuTone) : Theme.TextSecondary;
+            _ringCpu.Fraction = cpuValid ? cpuFraction : 0;
+            _ringGpu.Fraction = gpuValid ? gpuFraction : 0;
+            _ringCpu.Colour = cpuValid ? ColourFor(_cpuTone) : Theme.TextSecondary;
+            _ringGpu.Colour = gpuValid ? ColourFor(_gpuTone) : Theme.TextSecondary;
             _ringTotal.Text = totalText;
             _ringUnit.Text = totalText == MetricFormat.Invalid ? string.Empty : "W";
         }
@@ -173,6 +135,84 @@ namespace QuadVitals.Settings
             _gpuBar.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             if (_cpuBarColumn != null) _cpuBarColumn.Width = new GridLength(rings ? 0 : BarWidth);
             if (_gpuBarColumn != null) _gpuBarColumn.Width = new GridLength(rings ? 0 : BarWidth);
+        }
+
+        /// <summary>
+        /// 一段圆弧：从 12 点顺时针走 fraction 圈，圆头端点，轨道由外层画。
+        /// 自己实现 OnRender 而不是用 Path，是因为 Shape 会按几何包围盒推算尺寸，
+        /// 弧的包围盒比整圆小，一不小心就被 Stretch 放大、看着比轨道粗一圈。
+        /// </summary>
+        internal sealed class RingArc : FrameworkElement
+        {
+            private readonly double _radius;
+            private double _fraction;
+            private Color _colour = Theme.AccentGreen;
+
+            public RingArc(double radius)
+            {
+                _radius = radius;
+                Width = RingSize;
+                Height = RingSize;
+                SnapsToDevicePixels = false;
+            }
+
+            public double Fraction
+            {
+                get { return _fraction; }
+                set
+                {
+                    double clamped = value < 0 ? 0 : (value > 1 ? 1 : value);
+                    if (Math.Abs(clamped - _fraction) < 0.0005) return;
+                    _fraction = clamped;
+                    InvalidateVisual();
+                }
+            }
+
+            public Color Colour
+            {
+                get { return _colour; }
+                set
+                {
+                    if (value == _colour) return;
+                    _colour = value;
+                    InvalidateVisual();
+                }
+            }
+
+            protected override void OnRender(DrawingContext drawing)
+            {
+                base.OnRender(drawing);
+                if (_fraction <= 0.002) return;
+
+                Point center = new Point(RenderSize.Width / 2, RenderSize.Height / 2);
+                double sweep = 360.0 * _fraction;
+                StreamGeometry geometry = new StreamGeometry();
+                using (StreamGeometryContext context = geometry.Open())
+                {
+                    // 一整圈拆两段半圆：起终点重合时单段 ArcTo 会退化成一笔。
+                    context.BeginFigure(PointOn(center, 0), false, false);
+                    context.ArcTo(PointOn(center, sweep / 2), new Size(_radius, _radius), 0,
+                        false, SweepDirection.Clockwise, true, false);
+                    context.ArcTo(PointOn(center, sweep), new Size(_radius, _radius), 0,
+                        false, SweepDirection.Clockwise, true, false);
+                }
+                geometry.Freeze();
+
+                Pen pen = new Pen(new SolidColorBrush(_colour), RingThickness)
+                {
+                    StartLineCap = PenLineCap.Round,
+                    EndLineCap = PenLineCap.Round
+                };
+                pen.Freeze();
+                drawing.DrawGeometry(null, pen, geometry);
+            }
+
+            /// <summary>0° 在 12 点，顺时针为正。</summary>
+            private Point PointOn(Point center, double degrees)
+            {
+                double radians = degrees * Math.PI / 180.0;
+                return new Point(center.X + _radius * Math.Sin(radians), center.Y - _radius * Math.Cos(radians));
+            }
         }
     }
 }

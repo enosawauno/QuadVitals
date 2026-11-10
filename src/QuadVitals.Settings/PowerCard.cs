@@ -299,8 +299,8 @@ namespace QuadVitals.Settings
             _note.Text = reason;
             _note.Foreground = Theme.AccentOrangeBrush;
             _note.Visibility = Visibility.Visible;
-            _ringCpuPath.Data = null;
-            _ringGpuPath.Data = null;
+            _ringCpu.Fraction = 0;
+            _ringGpu.Fraction = 0;
             _ringTotal.Text = MetricFormat.Invalid;
             _ringUnit.Text = string.Empty;
             Stop();
