@@ -419,6 +419,24 @@ namespace QuadVitals.Core
         [DataMember(Name = "fanChannel")]
         public int FanChannel { get; set; }
 
+        /// <summary>功耗卡上“CPU 功耗上限”显示哪一个：基础功耗（TDP/PBP）或最大睿频功耗（MTP）。</summary>
+        public const string CpuPowerTdp = "tdp";
+        public const string CpuPowerMtp = "mtp";
+
+        /// <summary>
+        /// 功耗卡的分段条分母与尾标：`tdp` 用处理器基础功耗（13900K 为 125 W），
+        /// `mtp` 用最大睿频功耗（同型号 253 W）。实测上限比基础功耗高很多，用 125 W
+        /// 做分母时 200 W 以上的读数会一直顶满，所以默认取 `mtp`。
+        /// </summary>
+        [DataMember(Name = "cpuPowerMode")]
+        public string CpuPowerMode { get; set; }
+
+        public static bool IsKnownCpuPowerMode(string mode)
+        {
+            return string.Equals(mode, CpuPowerTdp, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, CpuPowerMtp, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static Settings CreateDefault()
         {
             Settings settings = new Settings
@@ -427,6 +445,7 @@ namespace QuadVitals.Core
                 RefreshMs = DefaultRefreshMs,
                 AutoAddPreset = false,
                 FanChannel = -1,
+                CpuPowerMode = CpuPowerMtp,
                 Band = new BandSettings
                 {
                     Height = 40,
@@ -667,6 +686,12 @@ namespace QuadVitals.Core
             {
                 if (FanChannel != 0) warnings.Add("fanChannel 非法，已恢复自动");
                 FanChannel = -1;
+            }
+
+            if (!IsKnownCpuPowerMode(CpuPowerMode))
+            {
+                if (!string.IsNullOrEmpty(CpuPowerMode)) warnings.Add("cpuPowerMode 非法，已恢复 MTP");
+                CpuPowerMode = CpuPowerMtp;
             }
 
             if (Items == null || Items.Count == 0)

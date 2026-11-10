@@ -7,12 +7,14 @@ using QuadVitals.Core;
 namespace QuadVitals.Agent
 {
     /// <summary>
-    /// CPU TDP from the firmware: Intel's package power info MSR 0x614 (bits 14:0, 1/8 W).
-    /// Read through LibreHardwareMonitor's Ring0, i.e. the same kernel driver temperature already
-    /// needs, so the agent has to be elevated and the first read may have to wait until the
-    /// driver is open. 0x614 is Intel-specific, so AMD machines are skipped instead of probing an
-    /// undocumented MSR. Any failure keeps the value at 0, which makes the dashboard fall back to
-    /// its model table and mark the number as an estimate.
+    /// CPU power ceiling from the firmware: Intel's package power limit MSR 0x610 (PL1 in bits
+    /// 14:0, PL2 in bits 46:32) is the limit the board actually allows, while 0x614 only carries the
+    /// base TDP (a 13900K reports 125 W there and still draws over 200 W). Read through
+    /// LibreHardwareMonitor's Ring0, i.e. the same kernel driver temperature already needs, so the
+    /// agent has to be elevated and the first read may have to wait until the driver is open.
+    /// These are Intel-specific MSRs, so AMD machines are skipped instead of probing an undocumented
+    /// index. Any failure keeps the value at 0, which makes the dashboard fall back to its model
+    /// table and mark the number as an estimate.
     /// </summary>
     internal sealed class CpuPowerLimitSource
     {
@@ -22,12 +24,16 @@ namespace QuadVitals.Agent
         private const int MaxAttempts = 10;
 
         private double _watts;
+        private double _baseTdp;
         private string _detail = "未读取";
         private DateTime _nextAttemptUtc = DateTime.MinValue;
         private int _attempts;
         private bool _gaveUp;
 
         public double Watts { get { return _watts; } }
+
+        /// <summary>基础功耗（0x614 或型号表）；0 = 没读到，界面上回退型号表。</summary>
+        public double BaseTdpWatts { get { return _baseTdp; } }
 
         /// <summary>Where the value came from (or why it did not), for --status and logs.</summary>
         public string Detail { get { return _detail; } }
@@ -86,12 +92,16 @@ namespace QuadVitals.Agent
                     return;
                 }
 
-                double tdp = ReadWatts(read, PackagePowerInfoMsr);
-                if (tdp <= 0) tdp = ReadWatts(read, PackagePowerLimitMsr);
-                if (tdp > 0)
+                double pl1 = ReadWatts(read, PackagePowerLimitMsr, 0);
+                double pl2 = ReadWatts(read, PackagePowerLimitMsr, 32);
+                double info = ReadWatts(read, PackagePowerInfoMsr, 0);
+                string model = CpuModel();
+                _baseTdp = PowerLimits.CpuBaseTdp(info, model);
+                double limit = PowerLimits.CpuLimitWatts(info, pl1, pl2, model);
+                if (limit > 0 || _baseTdp > 0)
                 {
-                    _watts = tdp;
-                    _detail = "MSR";
+                    _watts = limit;
+                    _detail = (pl1 > 0 || pl2 > 0) ? "MSR 0x610" : (info > 0 ? "MSR 0x614" : "型号表");
                     return;
                 }
 
@@ -110,11 +120,28 @@ namespace QuadVitals.Agent
             if (_attempts >= MaxAttempts) _gaveUp = true;
         }
 
-        private static double ReadWatts(MethodInfo read, uint index)
+        private static double ReadWatts(MethodInfo read, uint index, int shift)
         {
             object[] args = new object[] { index, 0u, 0u };
             read.Invoke(null, args);
-            return PowerLimits.DecodePackageWatts((uint)args[1], (uint)args[2]);
+            return PowerLimits.DecodePackageWatts((uint)args[1], (uint)args[2], shift);
+        }
+
+        /// <summary>型号串来自注册表，与型号表同一套匹配规则；读不到时返回空串，由表兜底。</summary>
+        private static string CpuModel()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(
+                    @"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+                {
+                    return key == null ? null : key.GetValue("ProcessorNameString") as string;
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private static bool IsIntel()

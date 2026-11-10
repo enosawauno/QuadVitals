@@ -97,6 +97,17 @@ namespace QuadVitals.Core.Tests
             Equal(253.0, PowerLimits.DecodePackageWatts(253 * 8, 0), "MSR 低 15 位 253 W");
             Equal(0.0, PowerLimits.DecodePackageWatts(0, 0), "全 0 视为未报告");
             Equal(0.0, PowerLimits.DecodePackageWatts(0x7FFF, 0), "0x7FFF 无限档视为无效");
+            Equal(253.0, PowerLimits.DecodePackageWatts(0, 253 * 8, 32), "0x610 的 PL2 在 bits 46:32");
+            Equal(0.0, PowerLimits.DecodePackageWatts(0x7FFF, 0x7FFF, 32), "PL2 的无限档同样无效");
+            Equal(true, PowerLimits.CpuMaxPowerKnown("Intel Core i9-13900K"), "13900K 有最大加速功耗");
+            Equal(false, PowerLimits.CpuMaxPowerKnown("AMD Ryzen 5 5600X"), "5600X 没有登记最大加速功耗");
+            Equal(215.0, PowerLimits.CpuLimitWatts(125, 215, 215, "Intel Core i9-13900K"), "固件上限优先于 0x614 的 125 W");
+            Equal(253.0, PowerLimits.CpuLimitWatts(125, 0, 0, "Intel Core i9-13900K"), "上限读不到时用型号表的最大加速功耗");
+            Equal(125.0, PowerLimits.CpuLimitWatts(125, 0, 0, "Custom CPU"), "未登记型号回退 0x614 的 TDP");
+            Equal(0.0, PowerLimits.CpuLimitWatts(0, 0, 0, "Custom CPU"), "都没有值时返回 0 交给界面");
+            Equal(125.0, PowerLimits.CpuBaseTdp(125, "Intel Core i9-13900K"), "基础功耗用固件报告值");
+            Equal(125.0, PowerLimits.CpuBaseTdp(0, "Intel Core i9-13900K"), "读不到时用型号表的基础功耗");
+            Equal(0.0, PowerLimits.CpuBaseTdp(0, "Custom CPU"), "未登记型号返回 0");
         }
 
         private static void FanZoneThresholds()
@@ -399,6 +410,31 @@ namespace QuadVitals.Core.Tests
             Settings copy = Settings.CreateDefault();
             copy.FanChannel = 3;
             Equal(3, copy.Clone().FanChannel, "Clone 保留通道");
+        }
+
+        private static void CpuPowerModeSetting()
+        {
+            Settings settings = Settings.CreateDefault();
+            Equal(Settings.CpuPowerMtp, settings.CpuPowerMode, "默认按最大睿频功耗");
+
+            settings.CpuPowerMode = Settings.CpuPowerTdp;
+            settings.Normalize();
+            Equal(Settings.CpuPowerTdp, settings.CpuPowerMode, "合法模式保留");
+
+            settings.CpuPowerMode = "ppt";
+            settings.Normalize();
+            Equal(Settings.CpuPowerMtp, settings.CpuPowerMode, "未知模式恢复 MTP");
+
+            settings.CpuPowerMode = null;
+            settings.Normalize();
+            Equal(Settings.CpuPowerMtp, settings.CpuPowerMode, "缺字段按 MTP");
+
+            Equal(true, Settings.IsKnownCpuPowerMode("TDP"), "大小写不敏感");
+            Equal(false, Settings.IsKnownCpuPowerMode("ppl"), "未登记模式不算已知");
+
+            Settings copy = Settings.CreateDefault();
+            copy.CpuPowerMode = Settings.CpuPowerTdp;
+            Equal(Settings.CpuPowerTdp, copy.Clone().CpuPowerMode, "Clone 保留模式");
         }
 
         private static void DefaultSettings()

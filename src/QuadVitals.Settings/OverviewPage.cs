@@ -96,6 +96,7 @@ namespace QuadVitals.Settings
         {
             _window = window;
             _fanCard.OpenSettings = () => _window.ShowFanSettings();
+            _powerCard.OpenSettings = () => _window.ShowPowerSettings();
             // 面积填充：两张图分开画，不会互相遮盖；基线贴底后，面积自然就是
             // “从 0 到峰值的轮廓”。
             _upSpark.ShowArea = true;
@@ -870,6 +871,7 @@ namespace QuadVitals.Settings
             RenderDiskTile(snapshot);
             _fanCard.PreferredChannel = _window.CurrentSettings.FanChannel;
             _fanCard.Update(snapshot, true);
+            _powerCard.CpuPowerMode = _window.CurrentSettings.CpuPowerMode;
             _powerCard.Update(snapshot, true);
 
             bool netValid = snapshot.Has(MetricFlags.NetworkValid);
@@ -1095,6 +1097,9 @@ namespace QuadVitals.Settings
 
         /// <summary>Exposed so the fan settings dialog can read the live channel list.</summary>
         public FanCard FanCard { get { return _fanCard; } }
+
+        /// <summary>Exposed so the power settings dialog can reach the card it configures.</summary>
+        public PowerCard PowerCard { get { return _powerCard; } }
 
         public void Dispose()
         {

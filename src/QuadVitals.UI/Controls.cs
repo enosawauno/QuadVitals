@@ -104,6 +104,18 @@ namespace QuadVitals.UI
             _titleGroup.Children.Insert(0, icon);
         }
 
+        /// <summary>
+        /// 标题文字后面再补一个元素（提示徽标一类），与标题同一行居中。
+        /// 给“说明文字改成 tooltip”的入口用：徽标占位小，不挤标题行的右侧内容。
+        /// </summary>
+        public void AddTitleSuffix(FrameworkElement element)
+        {
+            if (element == null || _titleGroup == null) return;
+            element.VerticalAlignment = VerticalAlignment.Center;
+            element.Margin = new Thickness(6, 0, 0, 0);
+            _titleGroup.Children.Add(element);
+        }
+
         public string Title
         {
             get { return _title.Text; }

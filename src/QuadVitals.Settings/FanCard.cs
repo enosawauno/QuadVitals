@@ -234,14 +234,17 @@ namespace QuadVitals.Settings
             // 与功耗卡、设备四格同几何：16 段、22 px 高、200 px 宽，不再用 10 px 小点。
             _bar.Height = 22;
             _bar.Width = 200;
-            _bar.Margin = new Thickness(0, 6, 0, 0);
+            // 宽 200 在更宽的读数列里默认会居中，看着比上下两行缩进一截；固定靠左才是同一条左边缘。
+            _bar.HorizontalAlignment = HorizontalAlignment.Left;
+            _bar.Margin = new Thickness(0, 8, 0, 0);
             _bar.VerticalAlignment = VerticalAlignment.Center;
             AutomationProperties.SetAutomationId(_bar, "FanBar");
 
             _others.FontSize = 11;
             _others.Foreground = Theme.TextSecondaryBrush;
             _others.TextWrapping = TextWrapping.Wrap;
-            _others.Margin = new Thickness(0, 0, 0, 0);
+            _others.Margin = new Thickness(0, 8, 0, 0);
+            _others.Visibility = Visibility.Collapsed;
             AutomationProperties.SetAutomationId(_others, "FanOthers");
 
             _empty.Text = string.Empty;
@@ -250,7 +253,8 @@ namespace QuadVitals.Settings
             _empty.FontSize = 11.5;
             _empty.Foreground = Theme.AccentOrangeBrush;
             _empty.TextWrapping = TextWrapping.NoWrap;
-            _empty.Margin = new Thickness(0, 4, 0, 0);
+            _empty.Margin = new Thickness(0, 8, 0, 0);
+            _empty.Visibility = Visibility.Collapsed;
             AutomationProperties.SetAutomationId(_empty, "FanEmpty");
 
             Grid body = new Grid();
@@ -260,7 +264,7 @@ namespace QuadVitals.Settings
             body.Children.Add(_scene);
 
             StackPanel readout = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal };
+            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
             row.Children.Add(_value);
             row.Children.Add(_unit);
             readout.Children.Add(_caption);
@@ -353,6 +357,9 @@ namespace QuadVitals.Settings
                 _caption.Text = "通道 " + PreferredChannel;
                 _empty.Text = "所选通道未读数";
                 _empty.Foreground = Theme.AccentOrangeBrush;
+                _empty.Visibility = Visibility.Visible;
+                _others.Text = string.Empty;
+                _others.Visibility = Visibility.Collapsed;
                 _bar.SetValue(0);
                 _tone = MetricTone.Warning;
                 return;
@@ -375,6 +382,8 @@ namespace QuadVitals.Settings
             // 停转是告警，不是“正常但数字小”；空出的这一行正好用来写这两个字。
             _empty.Text = stopped ? "风扇停转" : string.Empty;
             _empty.Foreground = stopped ? Theme.AccentRedBrush : Theme.AccentOrangeBrush;
+            // 常态不占行：留一个空 TextBlock 会把整列抬高一行，三张卡就不同高了。
+            _empty.Visibility = stopped ? Visibility.Visible : Visibility.Collapsed;
             _bar.SetValue(FanZones.Fraction(rpm));
 
             MetricTone tone;
@@ -410,6 +419,9 @@ namespace QuadVitals.Settings
             }
             if (remaining > 0) extra.Add("等 " + (remaining + 1) + " 路");
             _others.Text = extra.Count == 0 ? string.Empty : "其余 · " + string.Join("    ", extra.ToArray());
+            // 空的“其余”行不能占高度：它和“停转/未读数”那一行是互斥的，
+            // 两行同时占位会让读数区比左边的风扇图形还高，三张卡就不同高了。
+            _others.Visibility = extra.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
 
             // 三档给三种明显不同的转速：绿 0.30–0.45、黄 0.65–0.80、红 1.00–1.25 转/秒。
             // 不追求与真实 RPM 等比例（真实 25 转/秒在屏幕上只会频闪），但档位之间必须一眼能看出来。
@@ -474,9 +486,11 @@ namespace QuadVitals.Settings
             _unit.Text = string.Empty;
             _empty.Text = reason;
             _others.Text = string.Empty;
+            _others.Visibility = Visibility.Collapsed;
             _bar.SetValue(0);
             _tone = MetricTone.Normal;
             _empty.Foreground = Theme.AccentOrangeBrush;
+            _empty.Visibility = Visibility.Visible;
             // 整套图形走灰：环、叶片、`--` 都换成能读的灰。
             // 绿着显示 `--`，空态看起来就像“正常但没数值”，只有换色才说得清区别。
             ApplyEmptyVisuals();

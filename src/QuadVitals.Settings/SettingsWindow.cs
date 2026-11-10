@@ -370,6 +370,13 @@ namespace QuadVitals.Settings
             ShowOverlay(new FanSettingsDialog(this, card).Build());
         }
 
+        /// <summary>功耗卡右上角齿轮：CPU 功耗用基础功耗还是最大睿频功耗做分母。</summary>
+        public void ShowPowerSettings()
+        {
+            if (IsOverlayOpen) return;
+            ShowOverlay(new PowerSettingsDialog(this).Build());
+        }
+
         /// <summary>Title-bar gear: the general settings live in a panel, not in a sidebar page.</summary>
         public void ShowGeneralSettings()
         {

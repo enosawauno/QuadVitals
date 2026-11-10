@@ -10,6 +10,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using QuadVitals.Core;
 using QuadVitals.UI;
+using AppSettings = QuadVitals.Core.Settings;
 
 namespace QuadVitals.Settings
 {
@@ -59,7 +60,6 @@ namespace QuadVitals.Settings
         private readonly FrameLoop _loop;
 
         private double _cpuTdp = PowerLimits.DefaultCpuTdpWatts;
-        private double _cpuMaxPower = PowerLimits.DefaultCpuMaxWatts;
         private double _gpuTdp = PowerLimits.DefaultGpuTdpWatts;
         private bool _cpuTdpKnown;
         private bool _cpuTdpFromMsr;
@@ -83,25 +83,23 @@ namespace QuadVitals.Settings
         /// <summary>True while the frame loop is actually running; read by the UI suite.</summary>
         public bool IsAnimating { get { return _loop.IsRunning; } }
 
+        /// <summary>标题行齿轮的入口，由概览页接到设置窗口。</summary>
+        public Action OpenSettings { get; set; }
+
+        /// <summary>CPU 功耗上限显示 TDP（基础功耗）还是 MTP（最大睿频功耗）。</summary>
+        public string CpuPowerMode { get; set; }
+
         public PowerCard()
         {
             _loop = new FrameLoop(this, OnFrame);
             _nextFlickerIn = NextFlickerDelay();
+            CpuPowerMode = AppSettings.CpuPowerMtp;
 
             _card = new Card("功耗", BuildBoltGlyph());
             AutomationProperties.SetAutomationId(_card, "PowerCard");
-
-            TextBlock scope = new TextBlock
-            {
-                Text = "CPU + GPU",
-                FontSize = 11.5,
-                Foreground = Theme.TextSecondaryBrush,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center,
-                ToolTip = "只统计 CPU 封装与 GPU 模块；不含主板、硬盘、风扇以及其他硬件数据和电源损耗。"
-            };
-            AutomationProperties.SetAutomationId(scope, "PowerScope");
-            _card.HeaderRight.Content = scope;
+            // 统计范围改成标题旁的提示徽标：徽标在标题行上，悬停展开那句话。
+            _card.AddTitleSuffix(BuildScopeHint());
+            _card.HeaderRight.Content = BuildHeaderRight();
 
             _cpuBar = BuildBar(Theme.AccentGreen, "PowerCpuBar");
             _gpuBar = BuildBar(Theme.AccentGreenSoft, "PowerGpuBar");
@@ -187,6 +185,7 @@ namespace QuadVitals.Settings
                     ? "CPU 与 GPU 功耗读取失败"
                     : "缺少 CPU 或 GPU 功耗";
                 _note.Foreground = Theme.AccentOrangeBrush;
+                _note.Visibility = Visibility.Visible;
             }
 
             StartIfAllowed();
@@ -195,15 +194,22 @@ namespace QuadVitals.Settings
         private void RefreshLimits(MetricsSnapshot snapshot)
         {
             string cpuModel = HardwareInfo.CpuSignature;
-            double cpuMax = PowerLimits.CpuMaxPower(cpuModel);
-            ushort reported = snapshot == null ? (ushort)0 : snapshot.CpuTdpWatts;
+            bool mtp = !string.Equals(CpuPowerMode, AppSettings.CpuPowerTdp, StringComparison.OrdinalIgnoreCase);
+            // 两个数各有一个固件槽：基础功耗在 170（0x614），配置上限在 370（0x610 PL1/PL2）。
+            ushort reported = snapshot == null
+                ? (ushort)0
+                : (mtp ? snapshot.CpuPowerLimitWatts : snapshot.CpuTdpWatts);
 
-            // CPU：优先用 Agent 从固件 MSR 读到的 TDP；读不到才查型号表，表里也没有就按默认值估算。
             _cpuTdpFromMsr = reported > 0;
             if (_cpuTdpFromMsr)
             {
                 _cpuTdp = reported;
                 _cpuTdpKnown = true;
+            }
+            else if (mtp)
+            {
+                _cpuTdp = PowerLimits.CpuMaxPower(cpuModel);
+                _cpuTdpKnown = PowerLimits.CpuMaxPowerKnown(cpuModel);
             }
             else
             {
@@ -211,26 +217,26 @@ namespace QuadVitals.Settings
                 if (cpuTdp > 0) _cpuTdp = cpuTdp;
                 _cpuTdpKnown = PowerLimits.CpuTdpKnown(cpuModel);
             }
-            if (cpuMax > 0) _cpuMaxPower = cpuMax;
 
             // GPU 上限先问驱动（enforced power limit 就是这块卡的 TDP），拿不到才退回型号表。
             double driverLimit = GpuPowerLimit.ReadWatts();
             double gpuTdp = driverLimit > 0 ? driverLimit : PowerLimits.GpuTdp(HardwareInfo.GpuName);
             if (gpuTdp > 0) _gpuTdp = gpuTdp;
 
-            _cpuTdpText.Text = "TDP " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W" + (_cpuTdpKnown ? string.Empty : "*");
+            _cpuTdpText.Text = (mtp ? "MTP " : "TDP ") + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W" + (_cpuTdpKnown ? string.Empty : "*");
             _cpuTdpText.ToolTip = _cpuTdpFromMsr
-                ? "处理器通过 MSR 0x614 报告的 TDP"
-                : (_cpuTdpKnown
-                    ? "处理器 TDP（型号表）"
-                    : "未登记该处理器型号，按 " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算；分段条只表示大致比例");
+                ? (mtp ? "最大睿频功耗，固件 MSR 0x610 的 PL1/PL2" : "处理器基础功耗，固件 MSR 0x614")
+                : (mtp
+                    ? "最大睿频功耗（型号表）"
+                    : (_cpuTdpKnown
+                        ? "处理器基础功耗（型号表）"
+                        : "未登记该处理器型号，按 " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算；分段条只表示大致比例"));
             _gpuTdpText.Text = "TDP " + _gpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W";
             _gpuTdpText.ToolTip = driverLimit > 0
                 ? "显卡驱动报告的功耗上限（" + GpuPowerLimit.Source + "）"
                 : "显卡型号表；驱动没有报告功耗上限";
 
-            _cpuBar.ToolTip = "CPU 功耗 / TDP " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) +
-                              " W（上限 " + _cpuMaxPower.ToString("0", CultureInfo.InvariantCulture) + " W）";
+            _cpuBar.ToolTip = "CPU 功耗 / 上限 " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W";
             _gpuBar.ToolTip = "GPU 功耗 / TDP " + _gpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W";
         }
 
@@ -252,16 +258,102 @@ namespace QuadVitals.Settings
             ApplySceneTone(Theme.TextSecondary);
             _note.Text = reason;
             _note.Foreground = Theme.AccentOrangeBrush;
+            _note.Visibility = Visibility.Visible;
             Stop();
         }
 
-        /// <summary>底部一行：正常时写统计范围（或 CPU TDP 是估算的提醒），缺数据时写原因。</summary>
+        private FrameworkElement BuildHeaderRight()
+        {
+            StackPanel row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            TextBlock scope = new TextBlock
+            {
+                Text = "CPU + GPU",
+                FontSize = 11.5,
+                Foreground = Theme.TextSecondaryBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0),
+                ToolTip = "只统计 CPU 封装与 GPU 模块；不含主板、硬盘、风扇以及其他硬件数据和电源损耗。"
+            };
+            AutomationProperties.SetAutomationId(scope, "PowerScope");
+            row.Children.Add(scope);
+
+            FlatButton gear = new FlatButton(string.Empty);
+            gear.Width = 22;
+            gear.Height = 22;
+            gear.Padding = new Thickness(0);
+            gear.Background = Brushes.Transparent;
+            gear.Foreground = Theme.TextSecondaryBrush;
+            gear.BorderThickness = new Thickness(0);
+            gear.Cursor = System.Windows.Input.Cursors.Hand;
+            gear.VerticalAlignment = VerticalAlignment.Center;
+            gear.ToolTip = "功耗设置";
+            TextBlock glyph = new TextBlock
+            {
+                Text = "\uE713",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            glyph.SetBinding(TextBlock.ForegroundProperty,
+                new System.Windows.Data.Binding("Foreground") { Source = gear });
+            gear.Content = glyph;
+            gear.MouseEnter += (sender, e) => gear.Foreground = Theme.TextPrimaryBrush;
+            gear.MouseLeave += (sender, e) => gear.Foreground = Theme.TextSecondaryBrush;
+            gear.Click += (sender, e) => { Action handler = OpenSettings; if (handler != null) handler(); };
+            AutomationProperties.SetAutomationId(gear, "PowerSettings");
+            AutomationProperties.SetName(gear, "功耗设置");
+            row.Children.Add(gear);
+            // 与其他卡片一致：平时不显示，指针进入卡片才淡入。
+            HoverReveal.Attach(_card, gear);
+            return row;
+        }
+
+        /// <summary>底部一行：正常状态不占行（统计范围在标题徽标的 tooltip 里），异常时写原因。</summary>
         private void ShowScopeNote()
         {
             _note.Foreground = Theme.TextSecondaryBrush;
             _note.Text = _cpuTdpKnown
-                ? "不含主板、硬盘、风扇以及其他硬件数据和电源损耗"
+                ? string.Empty
                 : "CPU 型号未登记，TDP 按 " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算";
+            _note.Visibility = _note.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>
+        /// 标题旁的提示徽标：统计范围从小字行改成 tooltip，入口放在标题后面，
+        /// 不再在卡片底部挤一行灰字。
+        /// </summary>
+        private static FrameworkElement BuildScopeHint()
+        {
+            TextBlock mark = new TextBlock
+            {
+                Text = "?",
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Theme.TextSecondaryBrush,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Border badge = new Border
+            {
+                Width = 15,
+                Height = 15,
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                BorderBrush = Theme.BorderStrongBrush,
+                Background = Brushes.Transparent,
+                Child = mark,
+                ToolTip = "只统计 CPU 封装与 GPU 模块；不含主板、硬盘、风扇以及其他硬件数据和电源损耗。"
+            };
+            AutomationProperties.SetAutomationId(badge, "PowerScopeHint");
+            AutomationProperties.SetName(badge, "功耗统计范围");
+            return badge;
         }
 
         private static string FormatWatts(double watts)

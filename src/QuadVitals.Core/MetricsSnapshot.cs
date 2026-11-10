@@ -81,7 +81,7 @@ namespace QuadVitals.Core
     ///   364 uint16  gpuPowerDeciwatts (appended; old readers map only the first 364 bytes)
     ///   366 uint16  gpuClockMhz      (appended)
     ///   368 uint16  fanCount        (v4; 0 = not sampled)
-    ///   370 uint16  reserved
+    ///   370 uint16  cpuPowerLimitWatts (v4 slot, 0 = not sampled)
     ///   372 8 x 4 B fan slots: uint8 kind, uint8 channel, uint16 rpm
     ///   404         end
     ///
@@ -113,6 +113,11 @@ namespace QuadVitals.Core
         /// <summary>Fan block (v4): uint16 count at 368, 8 slots of 4 bytes from 372.</summary>
         public const int FanCountOffset = 368;
         public const int FanTableOffset = 372;
+        /// <summary>
+        /// 固件配置的封装功耗上限（MSR 0x610 的 PL1/PL2 取大）。复用 v4 风扇块前的保留槽，
+        /// 载荷仍是 404 字节；旧读端不认这个槽，只是少一个数。
+        /// </summary>
+        public const int CpuPowerLimitOffset = 370;
         public const int FanSlotBytes = 4;
         public const int MaxFans = 8;
         // Little endian in memory, so the four bytes read "PULS" in a hex dump.
@@ -230,6 +235,12 @@ namespace QuadVitals.Core
         /// falls back to its model table and marks the value as an estimate.
         /// </summary>
         public ushort CpuTdpWatts { get; set; }
+
+        /// <summary>
+        /// 固件配置的封装功耗上限（PL1/PL2 取大），单位瓦。0 表示没读（非 Intel、没提权、旧 Agent），
+        /// 界面回退型号表的最大加速功耗；它与 <see cref="CpuTdpWatts"/> 一起供功耗卡切换 TDP / MTP。
+        /// </summary>
+        public ushort CpuPowerLimitWatts { get; set; }
 
         /// <summary>GPU package power in watts (appended field, 0 = not sampled).</summary>
         public float GpuPowerWatts { get; set; }
@@ -359,6 +370,7 @@ namespace QuadVitals.Core
             if (cores > MaxCores) cores = MaxCores;
             WriteUInt16(buffer, CoreCountOffset, (ushort)cores);
             WriteUInt16(buffer, CpuTdpOffset, CpuTdpWatts);
+            WriteUInt16(buffer, CpuPowerLimitOffset, CpuPowerLimitWatts);
             for (int i = 0; i < cores; i++)
             {
                 buffer[CorePercentsOffset + i] = CorePercents[i];
@@ -495,6 +507,7 @@ namespace QuadVitals.Core
 
             if (buffer.Length >= SizeBytes)
             {
+                parsed.CpuPowerLimitWatts = ReadUInt16(buffer, CpuPowerLimitOffset);
                 int fanCount = ReadUInt16(buffer, FanCountOffset);
                 if (fanCount > MaxFans) fanCount = MaxFans;
                 if (fanCount > 0)

@@ -39,6 +39,19 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         Check 'the fan card has a value readout' ($null -ne (Find-ById $ovRoot 'FanValue')) ''
         Check 'the fan card has a caption and a bar' (($null -ne (Find-ById $ovRoot 'FanCaption')) -and ($null -ne (Find-ById $ovRoot 'FanBar'))) ''
 
+        # 读数区四行同一条左边缘：条宽固定 200，默认对齐会把它居中、比上下两行缩进一截。
+        $fanBar = Find-ById $ovRoot 'FanBar'
+        $fanCaption = Find-ById $ovRoot 'FanCaption'
+        $fanOthers = Find-ById $ovRoot 'FanOthers'
+        if (($null -ne $fanBar) -and ($null -ne $fanCaption) -and ($null -ne $fanOthers)) {
+            $fanBarX = $fanBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            $fanCaptionX = $fanCaption.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            $fanOthersX = $fanOthers.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            Check 'the fan bar sits on the readout left edge' (($fanBar.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Left) -and ([Math]::Abs($fanBarX - $fanCaptionX) -le 1)) ("bar=" + [Math]::Round($fanBarX, 1) + " caption=" + [Math]::Round($fanCaptionX, 1))
+            Check 'the fan note shares that edge' ([Math]::Abs($fanOthersX - $fanCaptionX) -le 1) ("others=" + [Math]::Round($fanOthersX, 1) + " caption=" + [Math]::Round($fanCaptionX, 1))
+            Check 'the fan rows keep the 8 px rhythm' (([double]$fanBar.Margin.Top -eq 8) -and ([double]$fanOthers.Margin.Top -eq 8)) ("bar=" + $fanBar.Margin.Top + " others=" + $fanOthers.Margin.Top)
+        }
+
         # 标题图标是手绘叶轮，不再是 15 px 的系统字形：那个字形在这个尺寸只剩几根细线。
         $fanCardInner = Read-Field $fanCard '_card' $flags
         $fanTitleGroup = Read-Field $fanCardInner '_titleGroup' $flags
@@ -357,15 +370,32 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the segmented bars keep the device card segment size' (($powerCpuBar.ActualWidth -ge 200) -and ($powerCpuBar.ActualWidth -le 240) -and ($powerGpuBar.ActualWidth -ge 200) -and ($powerGpuBar.ActualWidth -le 240)) ("width=" + [Math]::Round($powerCpuBar.ActualWidth, 1))
             $powerCpuTdpText = (Find-ById $ovRoot 'PowerCpuTdp').Text
             $powerGpuTdpText = (Find-ById $ovRoot 'PowerGpuTdp').Text
-            Check 'the bar scale is visible as a TDP caption' (($powerCpuTdpText -eq 'TDP 125 W') -and ($powerGpuTdpText -match '^TDP [0-9]+ W$')) ("cpu=" + $powerCpuTdpText + " gpu=" + $powerGpuTdpText)
+            # 默认按最大睿频功耗：13900K 为 253 W，基础功耗（TDP）125 W 会过早顶满。
+            Check 'the bar scale is visible as a power caption' (($powerCpuTdpText -eq 'MTP 253 W') -and ($powerGpuTdpText -match '^TDP [0-9]+ W$')) ("cpu=" + $powerCpuTdpText + " gpu=" + $powerGpuTdpText)
 
-            # 固件通过 MSR 报回的 TDP 优先于型号表；没有报告时才用表。
+            # 切到 TDP 后分母用基础功耗：固件报回的 95 W 优先于型号表，没有报告时才用表。
+            $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerTdp
             $powerSnap.CpuTdpWatts = 95
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Check 'a firmware-reported TDP wins over the model table' ((Find-ById $ovRoot 'PowerCpuTdp').Text -eq 'TDP 95 W') ("tdp=" + (Find-ById $ovRoot 'PowerCpuTdp').Text)
             $powerSnap.CpuTdpWatts = 0
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Check 'without a reported TDP the table still applies' ((Find-ById $ovRoot 'PowerCpuTdp').Text -eq 'TDP 125 W') ("tdp=" + (Find-ById $ovRoot 'PowerCpuTdp').Text)
+            $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerMtp
+            # 固件限制（PL1/PL2 取大）优先于基础 TDP：13900K 报 125 W 但实跑 200 W 以上，
+            # 用 125 W 做分母会让条一直顶满。
+            $powerSnap.CpuPowerLimitWatts = 215
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 120
+            $limitText = Find-ById $ovRoot 'PowerCpuTdp'
+            Check 'a firmware power limit drives the MTP value' ($limitText.Text -eq 'MTP 215 W') ("tdp=" + $limitText.Text)
+            Check 'the MTP tooltip names the MSR it came from' ($limitText.ToolTip -like '*PL1/PL2*') ("tip=" + $limitText.ToolTip)
+            $limitBar = Find-ById $ovRoot 'PowerCpuBar'
+            $limitFraction = [double](Read-Field $limitBar '_value' $flags)
+            Check 'the CPU bar is scaled to the firmware limit' ([Math]::Abs($limitFraction - (112.6 / 215.0)) -lt 0.001) ("cpu=" + $limitFraction)
+            $powerSnap.CpuPowerLimitWatts = 0
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 80
             $powerIcon = Find-ById $ovRoot 'PowerIcon'
             Check 'the power card has a drawn energy icon on the left' (($null -ne $powerIcon) -and ($powerIcon -is [System.Windows.Controls.Canvas]) -and ([double]$powerIcon.Width -eq 96) -and ([double]$powerIcon.Height -eq 128)) ''
             $powerIconX = -1
@@ -375,10 +405,45 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $iconSparks = @($powerIcon.Children | Where-Object { $_ -is [System.Windows.Shapes.Path] })
             Check 'the energy icon has no circle around it' ($iconRings.Count -eq 0) ("rings=" + $iconRings.Count)
             Check 'the energy icon carries a bolt and sparks' ($iconSparks.Count -ge 4) ("paths=" + $iconSparks.Count)
-            Check 'the scope note stays visible' ((Find-ById $ovRoot 'PowerNote').Text.Length -gt 0) ''
-            $powerNoteX = (Find-ById $ovRoot 'PowerNote').TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
-            $powerCpuLabelX = (Find-ById $ovRoot 'PowerCpuLabel').TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
-            Check 'the scope note shares the text left edge' ([Math]::Abs($powerNoteX - $powerCpuLabelX) -le 1) ("noteX=" + [Math]::Round($powerNoteX, 1) + " labelX=" + [Math]::Round($powerCpuLabelX, 1)) ''
+            Check 'the scope note no longer takes a bottom line' ((Find-ById $ovRoot 'PowerNote').Text.Length -eq 0) ("text=" + (Find-ById $ovRoot 'PowerNote').Text)
+            # 统计范围改成标题旁的提示徽标：徽标要在标题行上，并且把整句话当成 tooltip。
+            $scopeHint = Find-ById $ovRoot 'PowerScopeHint'
+            Check 'the scope hint sits on the title row' (($null -ne $scopeHint) -and (($scopeHint.ToolTip -as [string]) -like '*主板*')) ("tip=" + $scopeHint.ToolTip)
+            if ($null -ne $scopeHint) {
+                $hintY = $scopeHint.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
+                $firstRowY = (Find-ById $ovRoot 'PowerCpuLabel').TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
+                Check 'the scope hint rides above the first readout' (($hintY -lt $firstRowY) -and ($hintY -ge 0)) ("hintY=" + [Math]::Round($hintY, 1) + " rowY=" + [Math]::Round($firstRowY, 1))
+            }
+
+            # 右上角齿轮：与其他卡片一致，悬停才显示；点开是功耗设置（TDP / MTP 两个选项）。
+            $powerGear = Find-ById $ovRoot 'PowerSettings'
+            Check 'the power card has a hover-revealed gear' (($null -ne $powerGear) -and ($powerGear.Opacity -lt 0.01)) ("opacity=" + $(if ($null -eq $powerGear) { 'none' } else { $powerGear.Opacity }))
+            if ($null -ne $powerGear) {
+                # 悬停要发生在卡片本体（内层 Card 上挂了 HoverReveal），不是外层的组件 Grid。
+                $powerSurface = Find-ById $ovRoot 'PowerCard'
+                $powerEnter = New-Object System.Windows.Input.MouseEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0)
+                $powerEnter.RoutedEvent = [System.Windows.Input.Mouse]::MouseEnterEvent
+                $powerSurface.RaiseEvent($powerEnter)
+                Pump 250
+                Check 'hovering the power card reveals its gear' ($powerGear.Opacity -gt 0.9) ("opacity=" + $powerGear.Opacity)
+
+                # 弹窗读的是当前设置，不是卡片字段：先改内存里的设置再打开。
+                $savedMode = $ovWindow.CurrentSettings.CpuPowerMode
+                $ovWindow.CurrentSettings.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerTdp
+                $ovWindow.ShowPowerSettings()
+                Pump 200
+                $modeBox = Find-ById $ovRoot 'CpuPowerMode'
+                Check 'the power settings dialog carries one mode dropdown' (($null -ne $modeBox) -and ($modeBox.Items.Count -eq 2)) ("items=" + $(if ($null -eq $modeBox) { 0 } else { $modeBox.Items.Count }))
+                if ($null -ne $modeBox) {
+                    Check 'the dropdown offers TDP and MTP' ((($modeBox.Items[0] -as [string]) -like 'TDP*') -and (($modeBox.Items[1] -as [string]) -like 'MTP*')) ("items=" + ($modeBox.Items -join ' / '))
+                    Check 'the dropdown preselects the current mode' ($modeBox.SelectedIndex -eq 0) ("index=" + $modeBox.SelectedIndex)
+                }
+                Check 'the dialog has cancel and save' (($null -ne (Find-ById $ovRoot 'PowerSettingsCancel')) -and ($null -ne (Find-ById $ovRoot 'PowerSettingsSave'))) ''
+                $ovWindow.CloseOverlay()
+                $ovWindow.CurrentSettings.CpuPowerMode = $savedMode
+                Pump 150
+                $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerMtp
+            }
 
             # 随机闪烁：等 1–10 秒来一次，单次 0.30–0.75 秒，里面必须有真正的暗台阶。
             $flickerNext = [double](Read-Field $powerCard '_nextFlickerIn' $flags)
@@ -422,9 +487,9 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the GPU bar uses the shared 16-segment style' (($null -ne $gpuBar) -and ($gpuBar.BarStyle.ToString() -eq 'Segments') -and ([double]$gpuBar.Height -eq 22)) ''
             $cpuFraction = [double](Read-Field $cpuBar '_value' $flags)
             $gpuFraction = [double](Read-Field $gpuBar '_value' $flags)
-            Check 'the CPU bar is scaled to its TDP' ([Math]::Abs($cpuFraction - (112.6 / 125.0)) -lt 0.001) ("cpu=" + $cpuFraction)
+            Check 'the CPU bar is scaled to its MTP limit' ([Math]::Abs($cpuFraction - (112.6 / 253.0)) -lt 0.001) ("cpu=" + $cpuFraction)
             Check 'the GPU bar is scaled to its TDP' ([Math]::Abs($gpuFraction - (46.5 / 320.0)) -lt 0.001) ("gpu=" + $gpuFraction)
-            Check 'the bars use the 125 W / 320 W TDP denominators' (($cpuBar.ToolTip -like '*125*') -and ($gpuBar.ToolTip -like '*320*')) ''
+            Check 'the bars use the 253 W / 320 W denominators' (($cpuBar.ToolTip -like '*253*') -and ($gpuBar.ToolTip -like '*320*')) ''
 
             $networkWidth = [double](Find-ById $ovRoot 'NetworkCard').ActualWidth
             $powerWidth = [double]$powerCard.ActualWidth

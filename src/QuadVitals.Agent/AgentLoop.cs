@@ -142,9 +142,12 @@ namespace QuadVitals.Agent
                 snapshot.Flags |= MetricFlags.CpuPowerValid;
             }
 
-            // TDP 走固件 MSR（Intel 0x614，失败再试 0x610）；读不到就写 0，界面退回型号表并标估算。
-            double cpuTdp = _cpuTdp.Read(nowUtc);
-            snapshot.CpuTdpWatts = cpuTdp > 0 ? (ushort)Math.Round(cpuTdp) : (ushort)0;
+            // 两个数各占一个槽：基础功耗（TDP/PBP）写 170，固件配置的上限（PL1/PL2 取大）写 370。
+            // 读不到就写 0，界面退回型号表并标估算。
+            double cpuLimit = _cpuTdp.Read(nowUtc);
+            double cpuBase = _cpuTdp.BaseTdpWatts;
+            snapshot.CpuPowerLimitWatts = cpuLimit > 0 ? (ushort)Math.Round(cpuLimit) : (ushort)0;
+            snapshot.CpuTdpWatts = cpuBase > 0 ? (ushort)Math.Round(cpuBase) : (ushort)0;
 
             MetricsSnapshot.FanReading[] fans;
             if (_temperature.TryGetFans(nowUtc, TimeSpan.FromSeconds(12), out fans))
