@@ -76,8 +76,11 @@ namespace QuadVitals.Settings
             // 环心只放数值：和单位当成一整块居中，不再占一行「合计」。
             _ringTotal.Text = MetricFormat.Invalid;
             _ringTotal.FontSize = 22;
-            // 固定宽度 + 居中：环心数字位数变化时整块不会左右挪。
-            _ringTotal.Width = 74;
+            // 合计搬到右侧读数块顶部，环心不再放数字。
+            _ringTotal.Visibility = Visibility.Collapsed;
+            _ringUnit.Visibility = Visibility.Collapsed;
+            // 不给固定宽度：「数目 + W」整体居中，才会真的落在环心；
+            // 位数变化时数字向两侧对称展开，环本身不动。
             _ringTotal.TextAlignment = TextAlignment.Center;
             _ringTotal.FontWeight = FontWeights.SemiBold;
             _ringTotal.Foreground = Theme.TextPrimaryBrush;
@@ -87,7 +90,6 @@ namespace QuadVitals.Settings
 
             _ringUnit.Text = "W";
             _ringUnit.FontSize = 12;
-            _ringUnit.Width = 14;
             _ringUnit.TextAlignment = TextAlignment.Left;
             _ringUnit.Foreground = Theme.TextSecondaryBrush;
             _ringUnit.VerticalAlignment = VerticalAlignment.Bottom;
@@ -135,7 +137,6 @@ namespace QuadVitals.Settings
             if (_ringColumn != null) _ringColumn.Width = new GridLength(rings ? RingSize : 0);
             if (_ringGap != null) _ringGap.Width = new GridLength(rings ? 24 : 0);
 
-            if (_totalLine != null) _totalLine.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             // 环样式下内容比卡片窄，整体居中才不会左边一堆、右边一片空。
             if (_body != null) _body.HorizontalAlignment = rings ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
             // 读数块宽度固定：居中布局里只要内容宽度变了，整组就会左右挪一下（每秒一次像抖动）。
