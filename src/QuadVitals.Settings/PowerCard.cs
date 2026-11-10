@@ -249,10 +249,14 @@ namespace QuadVitals.Settings
 
             _cpuTdpText.Text = (mtp ? "MTP " : "TDP ") + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W" + (_cpuTdpKnown ? string.Empty : "*");
             string source = mtp
-                ? (hasSpec ? "规格表里的最大睿频功耗（MTP）" : "型号表估算的最大睿频功耗；该型型号未登记")
+                ? (hasSpec
+                    ? "规格表里的最大睿频功耗（MTP）"
+                    : (_cpuTdpKnown
+                        ? "型号表里的最大睿频功耗（MTP）"
+                        : "未登记该型号的最大睿频功耗，当前数是估算值"))
                 : (_cpuTdpFromMsr
                     ? "固件 MSR 0x614 报的处理器基础功耗（PBP）"
-                    : (hasSpec ? "规格表里的处理器基础功耗（TDP/PBP）" : "型号表估算的处理器基础功耗"));
+                    : (hasSpec ? "规格表里的处理器基础功耗（TDP/PBP）" : "型号表估算的处理器基础功耗（TDP/PBP）"));
             // PL1/PL2 不做标签，但能帮人判断这台机器有没有被解锁，放在 tooltip 里补一句。
             if (firmwareLimit > 0)
             {
@@ -349,7 +353,8 @@ namespace QuadVitals.Settings
             _note.Foreground = Theme.TextSecondaryBrush;
             _note.Text = _cpuTdpKnown
                 ? string.Empty
-                : "CPU 型号未登记，TDP 按 " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算";
+                : "CPU 型号未登记，" + (string.Equals(CpuPowerMode, AppSettings.CpuPowerTdp, StringComparison.OrdinalIgnoreCase) ? "TDP" : "MTP") + " 按 " +
+                  _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算";
             _note.Visibility = _note.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
 

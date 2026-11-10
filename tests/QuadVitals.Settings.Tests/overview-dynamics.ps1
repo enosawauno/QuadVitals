@@ -414,6 +414,10 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $powerSnap.CpuPowerLimitWatts = 0
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 80
+            # 表没命中、但内置型号表认识这个型号：措辞不能写成“未登记”。
+            $fallbackText = Find-ById $ovRoot 'PowerCpuTdp'
+            Check 'the MTP tooltip names the model table when the spec table misses' (($fallbackText.ToolTip -as [string]) -like '*型号表*') ("tip=" + $fallbackText.ToolTip)
+            Check 'a model-table hit does not claim the CPU is unregistered' (-not (($fallbackText.ToolTip -as [string]) -like '*未登记*')) ("tip=" + $fallbackText.ToolTip)
             $powerIcon = Find-ById $ovRoot 'PowerIcon'
             Check 'the power card has a drawn energy icon on the left' (($null -ne $powerIcon) -and ($powerIcon -is [System.Windows.Controls.Canvas]) -and ([double]$powerIcon.Width -eq 96) -and ([double]$powerIcon.Height -eq 128)) ''
             $powerIconX = -1
