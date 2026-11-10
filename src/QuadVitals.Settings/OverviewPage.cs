@@ -872,6 +872,7 @@ namespace QuadVitals.Settings
             _fanCard.PreferredChannel = _window.CurrentSettings.FanChannel;
             _fanCard.Update(snapshot, true);
             _powerCard.CpuPowerMode = _window.CurrentSettings.CpuPowerMode;
+            _powerCard.CardStyle = _window.CurrentSettings.PowerCardStyle;
             _powerCard.Update(snapshot, true);
 
             bool netValid = snapshot.Has(MetricFlags.NetworkValid);

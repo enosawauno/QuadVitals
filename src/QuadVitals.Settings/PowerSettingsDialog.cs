@@ -21,6 +21,7 @@ namespace QuadVitals.Settings
 
         /// <summary>下拉的名字：弹窗、断言、文档、截图统一用这四个字。</summary>
         public const string ModeLabel = "CPU 功耗";
+        public const string StyleLabel = "指示样式";
 
         private readonly SettingsWindow _window;
 
@@ -96,6 +97,40 @@ namespace QuadVitals.Settings
             Grid.SetRow(fields, 1);
             grid.Children.Add(fields);
 
+            // 第二项：指示样式（条形 / 圆环）。与分母互不影响：分母决定比例，样式只决定怎么画。
+            StackPanel styleBlock = new StackPanel { Margin = new Thickness(0, 24, 0, 0) };
+            styleBlock.Children.Add(new TextBlock
+            {
+                Text = StyleLabel,
+                FontSize = 12,
+                Foreground = Theme.TextTertiaryBrush,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            List<KeyValuePair<string, string>> styles = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>(AppSettings.PowerStyleBars, "条形指示图（当前样式）"),
+                new KeyValuePair<string, string>(AppSettings.PowerStyleRings, "圆环（外环 CPU、内环 GPU）")
+            };
+            DarkComboBox styleBox = new DarkComboBox();
+            AutomationProperties.SetAutomationId(styleBox, "PowerCardStyle");
+            AutomationProperties.SetName(styleBox, StyleLabel);
+            styleBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+            int styleIndex = string.Equals(settings == null ? null : settings.PowerCardStyle,
+                AppSettings.PowerStyleRings, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            for (int i = 0; i < styles.Count; i++) styleBox.Items.Add(styles[i].Value);
+            styleBox.SelectedIndex = styleIndex;
+            styleBlock.Children.Add(styleBox);
+            styleBlock.Children.Add(new TextBlock
+            {
+                Text = "两种样式同语义：弧长或条长等于占各自功耗上限的比例。",
+                FontSize = 11,
+                Foreground = Theme.TextTertiaryBrush,
+                TextWrapping = TextWrapping.NoWrap,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+            fields.Children.Add(styleBlock);
+
             StackPanel buttons = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -111,7 +146,7 @@ namespace QuadVitals.Settings
 
             FlatButton save = new FlatButton("保存", true);
             AutomationProperties.SetAutomationId(save, "PowerSettingsSave");
-            save.Click += (sender, e) => Save(modeBox, options);
+            save.Click += (sender, e) => Save(modeBox, options, styleBox, styles);
             buttons.Children.Add(save);
             Grid.SetRow(buttons, 2);
             grid.Children.Add(buttons);
@@ -120,11 +155,16 @@ namespace QuadVitals.Settings
             return panel;
         }
 
-        private void Save(DarkComboBox box, List<KeyValuePair<string, string>> options)
+        private void Save(DarkComboBox box, List<KeyValuePair<string, string>> options,
+                          DarkComboBox styleBox, List<KeyValuePair<string, string>> styles)
         {
             AppSettings edited = _window.CurrentSettings.Clone();
             int index = box.SelectedIndex;
             edited.CpuPowerMode = index >= 0 && index < options.Count ? options[index].Key : AppSettings.CpuPowerMtp;
+            int styleIndex = styleBox.SelectedIndex;
+            edited.PowerCardStyle = styleIndex >= 0 && styleIndex < styles.Count
+                ? styles[styleIndex].Key
+                : AppSettings.PowerStyleBars;
             edited.Normalize();
 
             _window.CloseOverlay();

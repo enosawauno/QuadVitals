@@ -435,6 +435,22 @@ namespace QuadVitals.Core.Tests
             Settings copy = Settings.CreateDefault();
             copy.CpuPowerMode = Settings.CpuPowerTdp;
             Equal(Settings.CpuPowerTdp, copy.Clone().CpuPowerMode, "Clone 保留模式");
+
+            // 功耗卡的指示样式：默认条形，非法值回退条形，两种写法都认。
+            Equal(Settings.PowerStyleBars, Settings.CreateDefault().PowerCardStyle, "默认条形指示图");
+            settings.PowerCardStyle = Settings.PowerStyleRings;
+            settings.Normalize();
+            Equal(Settings.PowerStyleRings, settings.PowerCardStyle, "合法样式保留");
+            settings.PowerCardStyle = "pie";
+            settings.Normalize();
+            Equal(Settings.PowerStyleBars, settings.PowerCardStyle, "未知样式恢复条形");
+            settings.PowerCardStyle = null;
+            settings.Normalize();
+            Equal(Settings.PowerStyleBars, settings.PowerCardStyle, "缺字段按条形");
+            Equal(true, Settings.IsKnownPowerStyle("RINGS"), "大小写不敏感");
+            Settings styleCopy = Settings.CreateDefault();
+            styleCopy.PowerCardStyle = Settings.PowerStyleRings;
+            Equal(Settings.PowerStyleRings, styleCopy.Clone().PowerCardStyle, "Clone 保留样式");
         }
 
         private static void DefaultSettings()

@@ -437,6 +437,19 @@ namespace QuadVitals.Core
                    string.Equals(mode, CpuPowerMtp, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>功耗卡的指示样式：`bars` = 现在的横向分段条，`rings` = 两同心环。</summary>
+        public const string PowerStyleBars = "bars";
+        public const string PowerStyleRings = "rings";
+
+        [DataMember(Name = "powerCardStyle")]
+        public string PowerCardStyle { get; set; }
+
+        public static bool IsKnownPowerStyle(string style)
+        {
+            return string.Equals(style, PowerStyleBars, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(style, PowerStyleRings, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static Settings CreateDefault()
         {
             Settings settings = new Settings
@@ -446,6 +459,7 @@ namespace QuadVitals.Core
                 AutoAddPreset = false,
                 FanChannel = -1,
                 CpuPowerMode = CpuPowerMtp,
+                PowerCardStyle = PowerStyleBars,
                 Band = new BandSettings
                 {
                     Height = 40,
@@ -692,6 +706,12 @@ namespace QuadVitals.Core
             {
                 if (!string.IsNullOrEmpty(CpuPowerMode)) warnings.Add("cpuPowerMode 非法，已恢复 MTP");
                 CpuPowerMode = CpuPowerMtp;
+            }
+
+            if (!IsKnownPowerStyle(PowerCardStyle))
+            {
+                if (!string.IsNullOrEmpty(PowerCardStyle)) warnings.Add("powerCardStyle 非法，已恢复条形指示图");
+                PowerCardStyle = PowerStyleBars;
             }
 
             if (Items == null || Items.Count == 0)

@@ -25,7 +25,7 @@ namespace QuadVitals.Settings
     /// 分段条在右，条尾写 TDP 上限。条用设备四格同一套 16 段几何，不铺满整行，
     /// 否则 16 段会被拉成近方形的块。
     /// </summary>
-    internal sealed class PowerCard : Grid, IDisposable
+    internal sealed partial class PowerCard : Grid, IDisposable
     {
         private const double BarHeight = 22.0;
         private const double BarWidth = 200.0;
@@ -76,6 +76,8 @@ namespace QuadVitals.Settings
         private bool _hover;
         private Color _sceneColour = Theme.AccentGreen;
         private MetricTone _tone = MetricTone.Normal;
+        private MetricTone _cpuTone = MetricTone.Normal;
+        private MetricTone _gpuTone = MetricTone.Normal;
 
         /// <summary>当前分档，供断言与测试读取。</summary>
         public MetricTone Tone { get { return _tone; } }
@@ -165,9 +167,12 @@ namespace QuadVitals.Settings
             _gpuBar.SetValue(gpuFraction);
 
             // 分档看“最接近自己上限的那一路”：GPU 单路吃满时不该被空闲的 CPU 摊平。
+            _cpuTone = MetricTones.Generic(cpuFraction * 100);
+            _gpuTone = MetricTones.Generic(gpuFraction * 100);
             _load = Math.Max(cpuFraction, gpuFraction);
             _tone = MetricTones.Generic(Math.Max(cpuFraction, gpuFraction) * 100);
             ApplySceneTone(ColourFor(_tone));
+            ApplyCardStyle();
 
             if (cpuValid && gpuValid)
             {
@@ -187,6 +192,9 @@ namespace QuadVitals.Settings
                 _note.Foreground = Theme.AccentOrangeBrush;
                 _note.Visibility = Visibility.Visible;
             }
+
+            // 合计文案上面才定下来，环心用它，所以放在最后。
+            UpdateRings(cpuFraction, gpuFraction, cpuValid, gpuValid, _total.Text);
 
             StartIfAllowed();
         }
@@ -291,6 +299,10 @@ namespace QuadVitals.Settings
             _note.Text = reason;
             _note.Foreground = Theme.AccentOrangeBrush;
             _note.Visibility = Visibility.Visible;
+            _ringCpuPath.Data = null;
+            _ringGpuPath.Data = null;
+            _ringTotal.Text = MetricFormat.Invalid;
+            _ringUnit.Text = string.Empty;
             Stop();
         }
 
@@ -397,16 +409,26 @@ namespace QuadVitals.Settings
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(IconWidth) });
             // 图标列与读数之间留一格：4 px 在放大后的闪电旁看起来是粘住的。
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+            // 环样式专用的两列：条形样式下宽度为 0，所以两种样式共用同一个 body。
+            _ringColumn = new ColumnDefinition { Width = new GridLength(0) };
+            _ringGap = new ColumnDefinition { Width = new GridLength(0) };
+            body.ColumnDefinitions.Add(_ringColumn);
+            body.ColumnDefinitions.Add(_ringGap);
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             body.Children.Add(_scene);
 
+            _ringHost = BuildRingCluster();
+            Grid.SetColumn(_ringHost, 2);
+            body.Children.Add(_ringHost);
+
             StackPanel readout = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            readout.Children.Add(BuildTotalLine());
-            readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8));
-            readout.Children.Add(BuildReadout("GPU", _gpuValue, _gpuUnit, _gpuTdpText, _gpuBar, "PowerGpu", 0));
+            _totalLine = BuildTotalLine();
+            readout.Children.Add(_totalLine);
+            readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8, out _cpuBarColumn));
+            readout.Children.Add(BuildReadout("GPU", _gpuValue, _gpuUnit, _gpuTdpText, _gpuBar, "PowerGpu", 0, out _gpuBarColumn));
             // 说明行跟合计、CPU / GPU 同一条左边缘：卡片里所有文字都从这一列起。
             readout.Children.Add(BuildNote());
-            Grid.SetColumn(readout, 2);
+            Grid.SetColumn(readout, 4);
             body.Children.Add(readout);
             return body;
         }
@@ -452,7 +474,7 @@ namespace QuadVitals.Settings
         /// </summary>
         private static FrameworkElement BuildReadout(string name, TextBlock value, TextBlock unit,
                                                      TextBlock tdp, MetricBar bar, string automationId,
-                                                     double bottomMargin)
+                                                     double bottomMargin, out ColumnDefinition barColumn)
         {
             TextBlock label = new TextBlock
             {
@@ -498,7 +520,8 @@ namespace QuadVitals.Settings
             Grid row = new Grid { Margin = new Thickness(0, 0, 0, bottomMargin) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(BarWidth) });
+            barColumn = new ColumnDefinition { Width = new GridLength(BarWidth) };
+            row.ColumnDefinitions.Add(barColumn);
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.Children.Add(line);
             Grid.SetColumn(bar, 2);

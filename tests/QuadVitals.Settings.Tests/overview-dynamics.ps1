@@ -440,6 +440,31 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 Check 'the scope hint rides above the first readout' (($hintY -lt $firstRowY) -and ($hintY -ge 0)) ("hintY=" + [Math]::Round($hintY, 1) + " rowY=" + [Math]::Round($firstRowY, 1))
             }
 
+            # 指示样式：默认条形；切到圆环后两条横条收起、环显出来、环心里的合计与左边那一行一致。
+            $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleBars
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 120
+            $ringsHost = Find-ById $ovRoot 'PowerRings'
+            Check 'the ring cluster exists but starts hidden' (($null -ne $ringsHost) -and ($ringsHost.Visibility -eq [System.Windows.Visibility]::Collapsed)) ''
+            Check 'the bars are visible in the default style' ((Find-ById $ovRoot 'PowerCpuBar').Visibility -eq [System.Windows.Visibility]::Visible) ''
+
+            $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleRings
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 120
+            Check 'the ring style shows the rings' (($null -ne $ringsHost) -and ($ringsHost.Visibility -eq [System.Windows.Visibility]::Visible)) ''
+            Check 'the ring style hides both bars' (((Find-ById $ovRoot 'PowerCpuBar').Visibility -eq [System.Windows.Visibility]::Collapsed) -and ((Find-ById $ovRoot 'PowerGpuBar').Visibility -eq [System.Windows.Visibility]::Collapsed)) ''
+            $ringTotal = Find-ById $ovRoot 'PowerRingTotal'
+            Check 'the ring centre carries the total' (($null -ne $ringTotal) -and ($ringTotal.Text -eq (Find-ById $ovRoot 'PowerTotal').Text)) ("ring=" + $(if ($null -eq $ringTotal) { 'none' } else { $ringTotal.Text }))
+            $ringCpu = $powerCard.GetType().GetField('_ringCpuPath', $flags).GetValue($powerCard)
+            $ringGpu = $powerCard.GetType().GetField('_ringGpuPath', $flags).GetValue($powerCard)
+            Check 'both arcs are drawn' (($null -ne $ringCpu.Data) -and ($null -ne $ringGpu.Data) -and (-not $ringCpu.Data.IsEmpty()) -and (-not $ringGpu.Data.IsEmpty())) ''
+            $ringCpuBounds = $ringCpu.Data.Bounds
+            Check 'the CPU arc stays inside the ring box' (($ringCpuBounds.Left -ge -1) -and ($ringCpuBounds.Right -le 129)) ("left=" + [math]::Round($ringCpuBounds.Left, 1) + " right=" + [math]::Round($ringCpuBounds.Right, 1))
+            $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleBars
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 120
+            Check 'switching back restores the bars' (((Find-ById $ovRoot 'PowerCpuBar').Visibility -eq [System.Windows.Visibility]::Visible) -and ($ringsHost.Visibility -eq [System.Windows.Visibility]::Collapsed)) ''
+
             # 右上角齿轮：与其他卡片一致，悬停才显示；点开是功耗设置（TDP / MTP 两个选项）。
             $powerGear = Find-ById $ovRoot 'PowerSettings'
             Check 'the power card has a hover-revealed gear' (($null -ne $powerGear) -and ($powerGear.Opacity -lt 0.01)) ("opacity=" + $(if ($null -eq $powerGear) { 'none' } else { $powerGear.Opacity }))
@@ -464,6 +489,12 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                     Check 'the dropdown preselects the current mode' ($modeBox.SelectedIndex -eq 0) ("index=" + $modeBox.SelectedIndex)
                 }
                 Check 'the dialog has cancel and save' (($null -ne (Find-ById $ovRoot 'PowerSettingsCancel')) -and ($null -ne (Find-ById $ovRoot 'PowerSettingsSave'))) ''
+                # 同一个弹窗里还有第二项：指示样式（条形 / 圆环）。
+                $styleBox = Find-ById $ovRoot 'PowerCardStyle'
+                Check 'the dialog also offers the indicator style' (($null -ne $styleBox) -and ($styleBox.Items.Count -eq 2)) ("items=" + $(if ($null -eq $styleBox) { 0 } else { $styleBox.Items.Count }))
+                if ($null -ne $styleBox) {
+                    Check 'the style dropdown offers bars and rings' ((($styleBox.Items[0] -as [string]) -like '条形*') -and (($styleBox.Items[1] -as [string]) -like '圆环*')) ("items=" + ($styleBox.Items -join ' / '))
+                }
                 $ovWindow.CloseOverlay()
                 $ovWindow.CurrentSettings.CpuPowerMode = $savedMode
                 Pump 150
@@ -627,8 +658,9 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         # 功耗卡图标列与读数之间留 16 px。
         $powerCard = Find-ById $ovRoot 'PowerCard'
         $powerBody = $null
+        # 两种样式共用一个 body：图标列 + 16 px 间距 + 环列（条形样式下宽 0）+ 环后间距 + 读数。
         foreach ($candidate in (Find-ByTypeName $powerCard 'Grid')) {
-            if (($candidate.ColumnDefinitions.Count -eq 3) -and ([double]$candidate.ColumnDefinitions[1].Width.Value -eq 16)) { $powerBody = $candidate; break }
+            if (($candidate.ColumnDefinitions.Count -eq 5) -and ([double]$candidate.ColumnDefinitions[1].Width.Value -eq 16)) { $powerBody = $candidate; break }
         }
         Check 'the power icon column leaves a 16 px gap' ($null -ne $powerBody) ''
         # 网速标题行：IP 值与操作图标之间留 16 px，两组不再挤成一串。
