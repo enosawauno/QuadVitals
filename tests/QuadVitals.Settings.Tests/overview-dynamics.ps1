@@ -362,6 +362,10 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $powerSnap.GpuPowerWatts = 46.5
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
 
+            # 这组断言针对 16 段几何；开发机的 indicatorStyle 可能是胶囊，先钉回分段。
+            $ovWindow.CurrentSettings.IndicatorStyle = [QuadVitals.Core.Settings]::IndicatorSegments
+            $ovPage.ApplyIndicatorStyle() | Out-Null
+            Pump 100
             $cpuBar = Find-ById $ovRoot 'PowerCpuBar'
             $gpuBar = Find-ById $ovRoot 'PowerGpuBar'
             Check 'the CPU and GPU have separate bars' (($null -ne $cpuBar) -and ($null -ne $gpuBar) -and -not [object]::ReferenceEquals($cpuBar, $gpuBar)) ''
@@ -461,6 +465,15 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         $powerGpuBar = Find-ById $ovRoot 'PowerGpuBar'
         Check 'the fan bar uses the shared 16-segment style' (($null -ne $fanBar) -and ($fanBar.BarStyle.ToString() -eq 'Segments')) ''
         Check 'the fan bar matches the power bars at 22 px / 200 px' (($null -ne $fanBar) -and ($null -ne $powerCpuBar) -and ($null -ne $powerGpuBar) -and ([double]$fanBar.Height -eq 22) -and ([double]$fanBar.Width -eq 200) -and ([double]$powerCpuBar.Height -eq 22) -and ([double]$powerGpuBar.Height -eq 22)) ("fan=" + $(if($null -ne $fanBar){$fanBar.Height}else{'none'}) + "x" + $(if($null -ne $fanBar){$fanBar.Width}else{'none'}) + " cpu=" + $(if($null -ne $powerCpuBar){$powerCpuBar.Height}else{'none'}) + " gpu=" + $(if($null -ne $powerGpuBar){$powerGpuBar.Height}else{'none'}))
+        # 分段/胶囊是全局设置：风扇与功耗卡也必须跟随。
+        $ovWindow.CurrentSettings.IndicatorStyle = [QuadVitals.Core.Settings]::IndicatorCapsule
+        $ovPage.ApplyIndicatorStyle() | Out-Null
+        Check 'capsule applies to the fan bar' ($fanBar.BarStyle.ToString() -eq 'Capsule') "style=$($fanBar.BarStyle)"
+        Check 'capsule applies to both power bars' (($powerCpuBar.BarStyle.ToString() -eq 'Capsule') -and ($powerGpuBar.BarStyle.ToString() -eq 'Capsule')) "cpu=$($powerCpuBar.BarStyle) gpu=$($powerGpuBar.BarStyle)"
+        $ovWindow.CurrentSettings.IndicatorStyle = [QuadVitals.Core.Settings]::IndicatorSegments
+        $ovPage.ApplyIndicatorStyle() | Out-Null
+        Check 'segments restores the fan bar' ($fanBar.BarStyle.ToString() -eq 'Segments') "style=$($fanBar.BarStyle)"
+        Check 'segments restores both power bars' (($powerCpuBar.BarStyle.ToString() -eq 'Segments') -and ($powerGpuBar.BarStyle.ToString() -eq 'Segments')) "cpu=$($powerCpuBar.BarStyle) gpu=$($powerGpuBar.BarStyle)"
 
         $deviceCard = Find-ById $ovRoot 'DeviceCard'
         # 卡片左边到导航胶囊右边的距离 = 卡片右边到窗口右边的距离。

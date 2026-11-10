@@ -252,6 +252,9 @@ namespace QuadVitals.Settings
             _memoryTile.BarStyle = style;
             _gpuTile.BarStyle = style;
             _diskTile.BarStyle = style;
+            // 通用设置的这一条控制所有分段指示器，风扇与功耗卡也必须跟随。
+            _fanCard.SetBarStyle(style);
+            _powerCard.SetBarStyle(style);
             return style;
         }
 

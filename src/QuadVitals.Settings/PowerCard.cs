@@ -127,6 +127,13 @@ namespace QuadVitals.Settings
             else StartIfAllowed();
         }
 
+        /// <summary>分段/胶囊样式由通用设置的「进度样式」统一控制，不只作用于设备四格。</summary>
+        public void SetBarStyle(MetricBarStyle style)
+        {
+            _cpuBar.BarStyle = style;
+            _gpuBar.BarStyle = style;
+        }
+
         /// <summary>Called from the overview tick (about once per second).</summary>
         public void Update(MetricsSnapshot snapshot, bool alive)
         {
