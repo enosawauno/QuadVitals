@@ -86,7 +86,7 @@ if ($null -ne $generalPanel) {
     # is sized once instead of growing a row at a time.
     # A short settings list does not take the 640x427 board the form dialogs use: the height follows
     # the content, and the width matches the sensor panel instead of leaving half a sheet empty.
-    Check 'the panel is a 613x377 card' (([math]::Abs($generalPanel.ActualWidth - 613) -le 0.5) -and ([math]::Abs($generalPanel.ActualHeight - 377) -le 0.5)) ("size=" + [math]::Round($generalPanel.ActualWidth) + "x" + [math]::Round($generalPanel.ActualHeight))
+    Check 'the panel is a 613x417 card' (([math]::Abs($generalPanel.ActualWidth - 613) -le 0.5) -and ([math]::Abs($generalPanel.ActualHeight - 417) -le 0.5)) ("size=" + [math]::Round($generalPanel.ActualWidth) + "x" + [math]::Round($generalPanel.ActualHeight))
     # The scheduler hint under the switch was removed on request: the switch only stores a
     # preference, and the install-time script name is not something the dialog should carry.
     $hintLines = 0
@@ -133,10 +133,12 @@ if ($null -ne $indicatorStyle) {
 # left and the control right next to it; the battery switch belongs to the performance group.
 $groupStart = Find-ById $generalRoot 'GeneralGroupStart'
 $groupPerf = Find-ById $generalRoot 'GeneralGroupPerformance'
+$groupAppearance = Find-ById $generalRoot 'GeneralGroupAppearance'
 $startText = -join [char[]](0x542F, 0x52A8, 0x8BBE, 0x7F6E)
 $perfText = -join [char[]](0x6027, 0x80FD, 0x8BBE, 0x7F6E)
-Check 'the panel is split into two named groups' (($null -ne $groupStart) -and ($null -ne $groupPerf) -and ($groupStart.Text -eq $startText) -and ($groupPerf.Text -eq $perfText)) ("start=" + $(if ($null -eq $groupStart) { 'none' } else { $groupStart.Text }) + " perf=" + $(if ($null -eq $groupPerf) { 'none' } else { $groupPerf.Text }))
-Check 'every group title is four characters' (($null -ne $groupStart) -and ($null -ne $groupPerf) -and ($groupStart.Text.Length -eq 4) -and ($groupPerf.Text.Length -eq 4)) ''
+$appearanceText = -join [char[]](0x5916, 0x89C2, 0x8BBE, 0x7F6E)
+Check 'the panel is split into three named groups' (($null -ne $groupStart) -and ($null -ne $groupPerf) -and ($null -ne $groupAppearance) -and ($groupStart.Text -eq $startText) -and ($groupPerf.Text -eq $perfText) -and ($groupAppearance.Text -eq $appearanceText)) ("start=" + $(if ($null -eq $groupStart) { 'none' } else { $groupStart.Text }) + " perf=" + $(if ($null -eq $groupPerf) { 'none' } else { $groupPerf.Text }) + " appearance=" + $(if ($null -eq $groupAppearance) { 'none' } else { $groupAppearance.Text }))
+Check 'every group title is four characters' (($null -ne $groupStart) -and ($null -ne $groupPerf) -and ($null -ne $groupAppearance) -and ($groupStart.Text.Length -eq 4) -and ($groupPerf.Text.Length -eq 4) -and ($groupAppearance.Text.Length -eq 4)) ''
 
 function Row-Centre($element) {
     if ($null -eq $element) { return $null }
@@ -173,7 +175,11 @@ $yStart = Row-Centre $groupStart
 $yPerf = Row-Centre $groupPerf
 $yBattery = Row-Centre $batteryLabel
 $yAuto = Row-Centre $autostartLabel
+$yPolicy = Row-Centre $policyLabel
+$yIndicator = Row-Centre $indicatorLabel
+$yAppearance = Row-Centre $groupAppearance
 Check 'the battery row sits under the performance group' (($null -ne $yStart) -and ($null -ne $yPerf) -and ($null -ne $yAuto) -and ($null -ne $yBattery) -and ($yAuto -gt $yStart) -and ($yBattery -gt $yPerf) -and ($yPerf -gt $yAuto)) ("start=$yStart auto=$yAuto perf=$yPerf battery=$yBattery")
+Check 'the style row sits under the appearance group, not performance' (($null -ne $yAppearance) -and ($null -ne $yPolicy) -and ($null -ne $yIndicator) -and ($yAppearance -gt $yPolicy) -and ($yIndicator -gt $yAppearance)) ("policy=$yPolicy appearance=$yAppearance indicator=$yIndicator")
 
 function Left-Edge($element) {
     if ($null -eq $element) { return -999 }

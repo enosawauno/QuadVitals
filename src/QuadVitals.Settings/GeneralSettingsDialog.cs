@@ -17,7 +17,7 @@ namespace QuadVitals.Settings
     {
         public const double DialogWidth = 613;
         /// <summary>面板高度：当前三行只占一半，余下留给后加的设置项。</summary>
-        public const double DialogHeight = 377;
+        public const double DialogHeight = 417;
         /// <summary>面板内边距；行宽与按钮位置都从这里算。</summary>
         public const double PanelPadding = 24;
         /// <summary>行左侧标签列宽：四个字 + 余量，保证各行控件从同一条竖线起。</summary>
@@ -133,6 +133,9 @@ namespace QuadVitals.Settings
             }
             renderPolicy.SelectedIndex = selectedPolicy;
             body.Children.Add(FieldRow("渲染策略", renderPolicy, "GeneralRenderPolicyLabel"));
+
+            // 进度样式是外观设置，不是性能项：它不改变采样或渲染时机，只改指示器画法。
+            body.Children.Add(GroupHeader("外观设置", "GeneralGroupAppearance", true));
 
             // 进度样式从设备卡弹窗挪过来：它是四格共用的一条设置，放在通用设置里才不会让人
             // 以为只影响刚打开的那张卡。
