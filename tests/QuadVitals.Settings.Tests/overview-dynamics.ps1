@@ -476,6 +476,14 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 Check 'tracks and progress share their radii' ($radii -eq '40,40,59,59') ("radii=" + $radii)
                 $full = @($arcs | Where-Object { [double]$_.Fraction -ge 0.999 }).Count
                 Check 'exactly two of them are the full tracks' ($full -eq 2) ("full=" + $full)
+                # 弧的颜色走占用色阶（与任务栏渐变环同一组锤点）：0 绿、80 黄、90 以上红。
+                $ramp = $arcType.GetMethod('RampColour', [System.Reflection.BindingFlags]'NonPublic,Public,Static')
+                $atZero = $ramp.Invoke($null, @(0.0))
+                $atWarn = $ramp.Invoke($null, @(85.0))
+                $atDanger = $ramp.Invoke($null, @(95.0))
+                Check 'the ramp starts at the accent green' ($atZero -eq [QuadVitals.UI.Theme]::AccentGreen) ("rgb=" + $atZero.R + ',' + $atZero.G + ',' + $atZero.B)
+                Check 'the ramp passes through the warning band' (($atWarn.R -gt 200) -and ($atWarn.G -lt 200) -and ($atWarn.G -gt 100)) ("rgb=" + $atWarn.R + ',' + $atWarn.G + ',' + $atWarn.B)
+                Check 'the ramp ends at the danger red' ($atDanger -eq [QuadVitals.UI.Theme]::AccentRed) ("rgb=" + $atDanger.R + ',' + $atDanger.G + ',' + $atDanger.B)
             }
             $ringBody = Read-Field $powerCard '_body' $flags
             Check 'the ring style centres the content' (($null -ne $ringBody) -and ($ringBody.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Center)) ''

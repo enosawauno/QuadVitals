@@ -58,8 +58,8 @@ namespace QuadVitals.Settings
             Canvas canvas = new Canvas { Width = RingSize, Height = RingSize };
             // 轨道也用同一段圆弧画（Fraction = 1），不用 Ellipse：Shape 的布局盒会把描边算进去，
             // 实际半径是 (Width - StrokeThickness)/2，跟弧线的半径对不上，看着就是「弧比轨道偏外」。
-            canvas.Children.Add(new RingArc(OuterRadius) { Fraction = 1, Colour = Theme.TrackGrey, IsHitTestVisible = false });
-            canvas.Children.Add(new RingArc(InnerRadius) { Fraction = 1, Colour = Theme.TrackGrey, IsHitTestVisible = false });
+            canvas.Children.Add(new RingArc(OuterRadius) { Fraction = 1, FlatColour = Theme.TrackGrey, IsHitTestVisible = false });
+            canvas.Children.Add(new RingArc(InnerRadius) { Fraction = 1, FlatColour = Theme.TrackGrey, IsHitTestVisible = false });
             canvas.Children.Add(_ringCpu);
             canvas.Children.Add(_ringGpu);
             host.Children.Add(canvas);
@@ -107,8 +107,6 @@ namespace QuadVitals.Settings
 
             _ringCpu.Fraction = cpuValid ? cpuFraction : 0;
             _ringGpu.Fraction = gpuValid ? gpuFraction : 0;
-            _ringCpu.Colour = cpuValid ? ColourFor(_cpuTone) : Theme.TextSecondary;
-            _ringGpu.Colour = gpuValid ? ColourFor(_gpuTone) : Theme.TextSecondary;
             _ringTotal.Text = totalText;
             _ringUnit.Text = totalText == MetricFormat.Invalid ? string.Empty : "W";
         }
@@ -150,7 +148,6 @@ namespace QuadVitals.Settings
         {
             private readonly double _radius;
             private double _fraction;
-            private Color _colour = Theme.AccentGreen;
 
             public RingArc(double radius)
             {
@@ -159,6 +156,9 @@ namespace QuadVitals.Settings
                 Height = RingSize;
                 SnapsToDevicePixels = false;
             }
+
+            /// <summary>固定颜色（轨道用）；null 表示按占用色阶扫渐变。</summary>
+            public Color? FlatColour { get; set; }
 
             /// <summary>轨道与弧共用的半径；两者必须相等，否则会出现「弧在轨道外」。</summary>
             public double Radius { get { return _radius; } }
@@ -175,16 +175,6 @@ namespace QuadVitals.Settings
                 }
             }
 
-            public Color Colour
-            {
-                get { return _colour; }
-                set
-                {
-                    if (value == _colour) return;
-                    _colour = value;
-                    InvalidateVisual();
-                }
-            }
 
             protected override void OnRender(DrawingContext drawing)
             {
@@ -193,25 +183,61 @@ namespace QuadVitals.Settings
 
                 Point center = new Point(RenderSize.Width / 2, RenderSize.Height / 2);
                 double sweep = 360.0 * _fraction;
-                StreamGeometry geometry = new StreamGeometry();
-                using (StreamGeometryContext context = geometry.Open())
-                {
-                    // 一整圈拆两段半圆：起终点重合时单段 ArcTo 会退化成一笔。
-                    context.BeginFigure(PointOn(center, 0), false, false);
-                    context.ArcTo(PointOn(center, sweep / 2), new Size(_radius, _radius), 0,
-                        false, SweepDirection.Clockwise, true, false);
-                    context.ArcTo(PointOn(center, sweep), new Size(_radius, _radius), 0,
-                        false, SweepDirection.Clockwise, true, false);
-                }
-                geometry.Freeze();
 
-                Pen pen = new Pen(new SolidColorBrush(_colour), RingThickness)
+                // 与任务栏那个「渐变环」同一套：弧按 4 度一段描，每段取自己所在位置的色阶颜色
+                // （绿 → 80% 黄 → 90% 红），扫过去就是一整条连续渐变，而不是三档纯色。
+                const double stepDegrees = 4.0;
+                int segments = (int)(sweep / stepDegrees);
+                if (segments < 1) segments = 1;
+
+                for (int i = 0; i < segments; i++)
                 {
-                    StartLineCap = PenLineCap.Round,
-                    EndLineCap = PenLineCap.Round
-                };
-                pen.Freeze();
-                drawing.DrawGeometry(null, pen, geometry);
+                    double from = i * stepDegrees;
+                    double to = (i + 1 == segments) ? sweep : (i + 1) * stepDegrees;
+                    double middlePercent = (from + to) / 2.0 / 360.0 * 100.0;
+
+                    StreamGeometry geometry = new StreamGeometry();
+                    using (StreamGeometryContext context = geometry.Open())
+                    {
+                        context.BeginFigure(PointOn(center, from), false, false);
+                        // 段与段之间重叠 0.5 度，圆头端点接起来才没有暗缝。
+                        context.ArcTo(PointOn(center, to + 0.5), new Size(_radius, _radius), 0,
+                            (to - from) > 180.0, SweepDirection.Clockwise, true, false);
+                    }
+                    geometry.Freeze();
+
+                    Color stroke = FlatColour.HasValue ? FlatColour.Value : RampColour(middlePercent);
+                    Pen pen = new Pen(new SolidColorBrush(stroke), RingThickness)
+                    {
+                        StartLineCap = PenLineCap.Round,
+                        EndLineCap = PenLineCap.Round
+                    };
+                    pen.Freeze();
+                    drawing.DrawGeometry(null, pen, geometry);
+                }
+            }
+
+            /// <summary>
+            /// 占用色阶：0 到 80 从绿插到黄，80 到 90 从黄插到红，90 以上恒红。
+            /// 与任务栏渐变环同一组锚点（80 / 90），所以两处同一读数看到的是同一个颜色。
+            /// </summary>
+            internal static Color RampColour(double percent)
+            {
+                if (percent != percent) percent = 0;
+                if (percent < 0) percent = 0;
+                if (percent > 100) percent = 100;
+
+                Color from;
+                Color to;
+                double t;
+                if (percent < 80) { from = Theme.AccentGreen; to = Theme.AccentOrange; t = percent / 80.0; }
+                else if (percent < 90) { from = Theme.AccentOrange; to = Theme.AccentRed; t = (percent - 80) / 10.0; }
+                else return Theme.AccentRed;
+
+                return Color.FromRgb(
+                    (byte)(from.R + (to.R - from.R) * t + 0.5),
+                    (byte)(from.G + (to.G - from.G) * t + 0.5),
+                    (byte)(from.B + (to.B - from.B) * t + 0.5));
             }
 
             /// <summary>0° 在 12 点，顺时针为正。</summary>
