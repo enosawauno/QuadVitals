@@ -37,6 +37,7 @@ namespace QuadVitals.Settings
         private Ellipse _cpuDot;
         private Ellipse _gpuDot;
         private FrameworkElement _ringHost;
+        private StackPanel _readout;
         private FrameworkElement _totalLine;
         private Grid _body;
         private string _appliedStyle;
@@ -75,6 +76,9 @@ namespace QuadVitals.Settings
             // 环心只放数值：和单位当成一整块居中，不再占一行「合计」。
             _ringTotal.Text = MetricFormat.Invalid;
             _ringTotal.FontSize = 22;
+            // 固定宽度 + 居中：环心数字位数变化时整块不会左右挪。
+            _ringTotal.Width = 74;
+            _ringTotal.TextAlignment = TextAlignment.Center;
             _ringTotal.FontWeight = FontWeights.SemiBold;
             _ringTotal.Foreground = Theme.TextPrimaryBrush;
             _ringTotal.HorizontalAlignment = HorizontalAlignment.Center;
@@ -83,6 +87,8 @@ namespace QuadVitals.Settings
 
             _ringUnit.Text = "W";
             _ringUnit.FontSize = 12;
+            _ringUnit.Width = 14;
+            _ringUnit.TextAlignment = TextAlignment.Left;
             _ringUnit.Foreground = Theme.TextSecondaryBrush;
             _ringUnit.VerticalAlignment = VerticalAlignment.Bottom;
             _ringUnit.Margin = new Thickness(3, 0, 0, 3);
@@ -132,6 +138,8 @@ namespace QuadVitals.Settings
             if (_totalLine != null) _totalLine.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             // 环样式下内容比卡片窄，整体居中才不会左边一堆、右边一片空。
             if (_body != null) _body.HorizontalAlignment = rings ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+            // 读数块宽度固定：居中布局里只要内容宽度变了，整组就会左右挪一下（每秒一次像抖动）。
+            if (_readout != null) _readout.Width = rings ? 236 : double.NaN;
             // 圆点只占位不变化：只改透明度，行宽不会跟着变。
             if (_cpuDot != null) _cpuDot.Opacity = rings ? 1 : 0;
             if (_gpuDot != null) _gpuDot.Opacity = rings ? 1 : 0;

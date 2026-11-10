@@ -421,6 +421,7 @@ namespace QuadVitals.Settings
             body.Children.Add(_ringHost);
 
             StackPanel readout = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            _readout = readout;
             _totalLine = BuildTotalLine();
             readout.Children.Add(_totalLine);
             readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8, out _cpuBarColumn, out _cpuStarColumn, out _cpuDot));
@@ -488,6 +489,9 @@ namespace QuadVitals.Settings
 
             value.Text = MetricFormat.Invalid;
             value.FontSize = ComponentValueSize;
+            // 固定宽度：数值从 9.2 变成 144.8 时不会把单位、上限跟着推走（那是每秒一次的抖动）。
+            value.Width = 52;
+            value.TextAlignment = TextAlignment.Left;
             value.FontWeight = FontWeights.SemiBold;
             value.Foreground = Theme.TextPrimaryBrush;
             value.VerticalAlignment = VerticalAlignment.Bottom;
@@ -496,6 +500,9 @@ namespace QuadVitals.Settings
 
             unit.Text = string.Empty;
             unit.FontSize = 12;
+            // 单位也固定宽度：没有数据时单位为空，行宽不能因此缩一截。
+            unit.Width = 12;
+            unit.TextAlignment = TextAlignment.Left;
             unit.Foreground = Theme.TextSecondaryBrush;
             unit.VerticalAlignment = VerticalAlignment.Bottom;
             unit.Margin = new Thickness(3, 0, 0, 2);

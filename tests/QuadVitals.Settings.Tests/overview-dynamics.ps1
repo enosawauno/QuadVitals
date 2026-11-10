@@ -523,6 +523,19 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $ringValueRight = $ringCpuValue.TranslatePoint((New-Object System.Windows.Point($ringCpuValue.ActualWidth, 0)), $ovRoot).X
             $ringTdpX = $ringTdp.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
             Check 'the limit label sits next to the value in ring style' (($ringTdpX - $ringValueRight) -lt 60) ("gap=" + [math]::Round($ringTdpX - $ringValueRight, 1))
+            # 每秒刷新时数值位数会变（9.2 → 144.8）：环与读数块不能因此左右挪。
+            $ringHostBefore = (Find-ById $ovRoot 'PowerRings').TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            $shortSnap = [Activator]::CreateInstance($snapType)
+            $shortSnap.TimestampUtc = [DateTime]::UtcNow
+            $shortSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid, GpuPowerValid')
+            $shortSnap.CpuPowerWatts = 9.2
+            $shortSnap.GpuPowerWatts = 1.4
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($shortSnap, $true)) | Out-Null
+            Pump 150
+            $ringHostAfter = (Find-ById $ovRoot 'PowerRings').TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            Check 'a shorter value never shifts the ring' ([Math]::Abs($ringHostAfter - $ringHostBefore) -le 0.5) ("before=" + [math]::Round($ringHostBefore, 1) + " after=" + [math]::Round($ringHostAfter, 1))
+            $unitAfter = (Find-ById $ovRoot 'PowerCpuUnit').TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            Check 'a shorter value keeps the unit in place' ($null -ne (Find-ById $ovRoot 'PowerCpuUnit')) ("unitX=" + [math]::Round($unitAfter, 1))
             $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleBars
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 120
