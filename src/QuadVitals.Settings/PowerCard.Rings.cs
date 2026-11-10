@@ -34,6 +34,8 @@ namespace QuadVitals.Settings
         private ColumnDefinition _gpuBarColumn;
         private ColumnDefinition _cpuStarColumn;
         private ColumnDefinition _gpuStarColumn;
+        private Ellipse _cpuDot;
+        private Ellipse _gpuDot;
         private FrameworkElement _ringHost;
         private FrameworkElement _totalLine;
         private Grid _body;
@@ -70,31 +72,29 @@ namespace QuadVitals.Settings
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            TextBlock caption = new TextBlock
-            {
-                Text = "合计",
-                FontSize = 9.5,
-                Foreground = Theme.TextTertiaryBrush,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 2)
-            };
-            center.Children.Add(caption);
-
+            // 环心只放数值：和单位当成一整块居中，不再占一行「合计」。
             _ringTotal.Text = MetricFormat.Invalid;
-            _ringTotal.FontSize = 20;
+            _ringTotal.FontSize = 22;
             _ringTotal.FontWeight = FontWeights.SemiBold;
             _ringTotal.Foreground = Theme.TextPrimaryBrush;
             _ringTotal.HorizontalAlignment = HorizontalAlignment.Center;
             Typography.SetNumeralAlignment(_ringTotal, FontNumeralAlignment.Tabular);
             AutomationProperties.SetAutomationId(_ringTotal, "PowerRingTotal");
-            center.Children.Add(_ringTotal);
 
             _ringUnit.Text = "W";
-            _ringUnit.FontSize = 11;
+            _ringUnit.FontSize = 12;
             _ringUnit.Foreground = Theme.TextSecondaryBrush;
-            _ringUnit.HorizontalAlignment = HorizontalAlignment.Center;
-            _ringUnit.Margin = new Thickness(0, 1, 0, 0);
-            center.Children.Add(_ringUnit);
+            _ringUnit.VerticalAlignment = VerticalAlignment.Bottom;
+            _ringUnit.Margin = new Thickness(3, 0, 0, 3);
+            StackPanel totalRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            totalRow.Children.Add(_ringTotal);
+            totalRow.Children.Add(_ringUnit);
+            center.Children.Add(totalRow);
             host.Children.Add(center);
 
             return host;
@@ -107,6 +107,9 @@ namespace QuadVitals.Settings
 
             _ringCpu.Fraction = cpuValid ? cpuFraction : 0;
             _ringGpu.Fraction = gpuValid ? gpuFraction : 0;
+            // 两个圆点用弧末端的同一个色阶颜色：数据与环靠颜色一一对应，不用记“外环是 CPU”。
+            if (_cpuDot != null) _cpuDot.Fill = new SolidColorBrush(RingArc.RampColour(cpuValid ? cpuFraction * 100 : 0));
+            if (_gpuDot != null) _gpuDot.Fill = new SolidColorBrush(RingArc.RampColour(gpuValid ? gpuFraction * 100 : 0));
             _ringTotal.Text = totalText;
             _ringUnit.Text = totalText == MetricFormat.Invalid ? string.Empty : "W";
         }
@@ -129,6 +132,9 @@ namespace QuadVitals.Settings
             if (_totalLine != null) _totalLine.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             // 环样式下内容比卡片窄，整体居中才不会左边一堆、右边一片空。
             if (_body != null) _body.HorizontalAlignment = rings ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+            // 圆点只占位不变化：只改透明度，行宽不会跟着变。
+            if (_cpuDot != null) _cpuDot.Opacity = rings ? 1 : 0;
+            if (_gpuDot != null) _gpuDot.Opacity = rings ? 1 : 0;
             _cpuBar.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             _gpuBar.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             if (_cpuBarColumn != null) _cpuBarColumn.Width = new GridLength(rings ? 0 : BarWidth);

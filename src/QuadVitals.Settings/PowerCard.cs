@@ -423,8 +423,8 @@ namespace QuadVitals.Settings
             StackPanel readout = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             _totalLine = BuildTotalLine();
             readout.Children.Add(_totalLine);
-            readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8, out _cpuBarColumn, out _cpuStarColumn));
-            readout.Children.Add(BuildReadout("GPU", _gpuValue, _gpuUnit, _gpuTdpText, _gpuBar, "PowerGpu", 0, out _gpuBarColumn, out _gpuStarColumn));
+            readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8, out _cpuBarColumn, out _cpuStarColumn, out _cpuDot));
+            readout.Children.Add(BuildReadout("GPU", _gpuValue, _gpuUnit, _gpuTdpText, _gpuBar, "PowerGpu", 0, out _gpuBarColumn, out _gpuStarColumn, out _gpuDot));
             // 说明行跟合计、CPU / GPU 同一条左边缘：卡片里所有文字都从这一列起。
             readout.Children.Add(BuildNote());
             Grid.SetColumn(readout, 4);
@@ -473,7 +473,8 @@ namespace QuadVitals.Settings
         /// </summary>
         private static FrameworkElement BuildReadout(string name, TextBlock value, TextBlock unit,
                                                      TextBlock tdp, MetricBar bar, string automationId,
-                                                     double bottomMargin, out ColumnDefinition barColumn, out ColumnDefinition starColumn)
+                                                     double bottomMargin, out ColumnDefinition barColumn, out ColumnDefinition starColumn,
+                                                     out Ellipse dot)
         {
             TextBlock label = new TextBlock
             {
@@ -512,6 +513,18 @@ namespace QuadVitals.Settings
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            // 颜色点：环样式下跟在标签前面，颜色取该路环的当前色阶；条形样式下透明度 0，但仍占位。
+            dot = new Ellipse
+            {
+                Width = 7,
+                Height = 7,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 1),
+                Opacity = 0,
+                Fill = new SolidColorBrush(Theme.AccentGreen)
+            };
+            AutomationProperties.SetAutomationId(dot, automationId + "Dot");
+            line.Children.Add(dot);
             line.Children.Add(label);
             line.Children.Add(value);
             line.Children.Add(unit);

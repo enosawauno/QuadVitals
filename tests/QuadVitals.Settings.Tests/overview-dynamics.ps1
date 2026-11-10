@@ -495,6 +495,26 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 Check 'the ramp starts at the accent green' ($atZero -eq [QuadVitals.UI.Theme]::AccentGreen) ("rgb=" + $atZero.R + ',' + $atZero.G + ',' + $atZero.B)
                 Check 'the ramp passes through the warning band' (($atWarn.R -gt 200) -and ($atWarn.G -lt 200) -and ($atWarn.G -gt 100)) ("rgb=" + $atWarn.R + ',' + $atWarn.G + ',' + $atWarn.B)
                 Check 'the ramp ends at the danger red' ($atDanger -eq [QuadVitals.UI.Theme]::AccentRed) ("rgb=" + $atDanger.R + ',' + $atDanger.G + ',' + $atDanger.B)
+            # 环心不再有「合计」两个字，数值 + 单位当一整块；两行前面各有一个与环同色的小圆点。
+            $ringCaptions = @()
+            foreach ($child in $ringsHost.Children) {
+                if ($child -is [System.Windows.Controls.StackPanel]) {
+                    foreach ($inner in $child.Children) {
+                        if ($inner -is [System.Windows.Controls.TextBlock] -and $inner.Text -eq [string]::Concat([char]0x5408, [char]0x8BA1)) { $ringCaptions += $inner }
+                    }
+                }
+            }
+            Check 'the ring centre drops the caption' ($ringCaptions.Count -eq 0) ("found=" + $ringCaptions.Count)
+            $cpuDotEl = Find-ById $ovRoot 'PowerCpuDot'
+            $gpuDotEl = Find-ById $ovRoot 'PowerGpuDot'
+            Check 'both rows carry a colour dot' (($null -ne $cpuDotEl) -and ($null -ne $gpuDotEl)) ''
+            if (($null -ne $cpuDotEl) -and ($null -ne $gpuDotEl)) {
+                $expectedCpu = $ramp.Invoke($null, @([double]$ringCpu.Fraction * 100))
+                $expectedGpu = $ramp.Invoke($null, @([double]$ringGpu.Fraction * 100))
+                Check 'the CPU dot follows its ring colour' ($cpuDotEl.Fill.Color -eq $expectedCpu) ("dot=" + $cpuDotEl.Fill.Color + " ring=" + $expectedCpu)
+                Check 'the GPU dot follows its ring colour' ($gpuDotEl.Fill.Color -eq $expectedGpu) ("dot=" + $gpuDotEl.Fill.Color + " ring=" + $expectedGpu)
+                Check 'the dots are visible in the ring style' (($cpuDotEl.Opacity -ge 0.999) -and ($gpuDotEl.Opacity -ge 0.999)) ''
+            }
             }
             $ringBody = Read-Field $powerCard '_body' $flags
             Check 'the ring style centres the content' (($null -ne $ringBody) -and ($ringBody.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Center)) ''
