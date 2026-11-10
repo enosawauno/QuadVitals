@@ -53,10 +53,10 @@ namespace QuadVitals.Settings
             AutomationProperties.SetAutomationId(host, "PowerRings");
 
             Canvas canvas = new Canvas { Width = RingSize, Height = RingSize };
-            canvas.Children.Add(BuildRingTrack(OuterRadius));
-            canvas.Children.Add(BuildRingTrack(InnerRadius));
-            // 弧自己在 OnRender 里按 12 点起顺时针画，不经过 Shape 的 Stretch/包围盒逻辑，
-            // 所以不会出现「弧跑出轨道」这种尺寸推算问题。
+            // 轨道也用同一段圆弧画（Fraction = 1），不用 Ellipse：Shape 的布局盒会把描边算进去，
+            // 实际半径是 (Width - StrokeThickness)/2，跟弧线的半径对不上，看着就是「弧比轨道偏外」。
+            canvas.Children.Add(new RingArc(OuterRadius) { Fraction = 1, Colour = Theme.TrackGrey, IsHitTestVisible = false });
+            canvas.Children.Add(new RingArc(InnerRadius) { Fraction = 1, Colour = Theme.TrackGrey, IsHitTestVisible = false });
             canvas.Children.Add(_ringCpu);
             canvas.Children.Add(_ringGpu);
             host.Children.Add(canvas);
@@ -85,21 +85,6 @@ namespace QuadVitals.Settings
             host.Children.Add(center);
 
             return host;
-        }
-
-        private static Ellipse BuildRingTrack(double radius)
-        {
-            Ellipse track = new Ellipse
-            {
-                Width = radius * 2,
-                Height = radius * 2,
-                Stroke = new SolidColorBrush(Theme.TrackGrey),
-                StrokeThickness = RingThickness,
-                Fill = Brushes.Transparent
-            };
-            Canvas.SetLeft(track, RingSize / 2 - radius);
-            Canvas.SetTop(track, RingSize / 2 - radius);
-            return track;
         }
 
         private void UpdateRings(double cpuFraction, double gpuFraction, bool cpuValid, bool gpuValid,
@@ -155,6 +140,9 @@ namespace QuadVitals.Settings
                 Height = RingSize;
                 SnapsToDevicePixels = false;
             }
+
+            /// <summary>轨道与弧共用的半径；两者必须相等，否则会出现「弧在轨道外」。</summary>
+            public double Radius { get { return _radius; } }
 
             public double Fraction
             {

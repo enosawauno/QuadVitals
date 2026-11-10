@@ -461,6 +461,22 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the CPU arc is scaled to its own limit' ([Math]::Abs([double]$ringCpu.Fraction - (112.6 / 253.0)) -lt 0.001) ("cpu=" + [double]$ringCpu.Fraction)
             Check 'the GPU arc is scaled to its own limit' ([Math]::Abs([double]$ringGpu.Fraction - (46.5 / 320.0)) -lt 0.001) ("gpu=" + [double]$ringGpu.Fraction)
             Check 'the ring arcs sit inside the ring box' (([double]$ringCpu.Width -le 128) -and ([double]$ringCpu.Height -le 128)) ("box=" + $ringCpu.Width + "x" + $ringCpu.Height)
+            # 轨道与弧必须是同一套绘制、同一半径：分开画（Ellipse 的布局盒算上描边）时
+            # 实际半径会差半个描边，看起来就是弧总在轨道外侧。
+            $ringsCanvas = [System.Windows.Media.VisualTreeHelper]::GetChild($ringsHost, 0)
+            $arcType = $powerCard.GetType().GetNestedType('RingArc', [System.Reflection.BindingFlags]'Public,NonPublic')
+            $arcs = @()
+            for ($i = 0; $i -lt [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($ringsCanvas); $i++) {
+                $child = [System.Windows.Media.VisualTreeHelper]::GetChild($ringsCanvas, $i)
+                if (($null -ne $arcType) -and $arcType.IsInstanceOfType($child)) { $arcs += $child }
+            }
+            Check 'four ring arcs share the canvas' ($arcs.Count -eq 4) ("count=" + $arcs.Count)
+            if ($arcs.Count -eq 4) {
+                $radii = ($arcs | ForEach-Object { [double]$_.Radius } | Sort-Object) -join ','
+                Check 'tracks and progress share their radii' ($radii -eq '40,40,56,56') ("radii=" + $radii)
+                $full = @($arcs | Where-Object { [double]$_.Fraction -ge 0.999 }).Count
+                Check 'exactly two of them are the full tracks' ($full -eq 2) ("full=" + $full)
+            }
             $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleBars
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 120
