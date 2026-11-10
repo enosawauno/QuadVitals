@@ -429,6 +429,17 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the energy icon has no circle around it' ($iconRings.Count -eq 0) ("rings=" + $iconRings.Count)
             Check 'the energy icon carries a bolt and sparks' ($iconSparks.Count -ge 4) ("paths=" + $iconSparks.Count)
             Check 'the scope note no longer takes a bottom line' ((Find-ById $ovRoot 'PowerNote').Text.Length -eq 0) ("text=" + (Find-ById $ovRoot 'PowerNote').Text)
+            # 告警文字不得造成抖动：同一瞬间把功耗卡/风扇卡置成「无数据」，高度必须不变。
+            $normalPowerHeight = [double]$powerCard.ActualHeight
+            $normalFanHeight = [double]$freshCard.ActualHeight
+            $broken = [Activator]::CreateInstance($snapType)
+            $broken.TimestampUtc = [DateTime]::UtcNow
+            $broken.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive')
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($broken, $true)) | Out-Null
+            $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($broken, $true)) | Out-Null
+            Pump 150
+            Check 'a missing metric never changes the card height' (([Math]::Abs([double]$powerCard.ActualHeight - $normalPowerHeight) -le 1) -and ([Math]::Abs([double]$freshCard.ActualHeight - $normalFanHeight) -le 1)) ("power=" + [double]$powerCard.ActualHeight + " fan=" + [double]$freshCard.ActualHeight)
+            Check 'the warning line keeps its single-line slot' (((Find-ById $ovRoot 'PowerNote').TextWrapping -eq [System.Windows.TextWrapping]::NoWrap) -and ((Find-ById $ovRoot 'PowerNote').MinHeight -gt 0)) ''
             # 统计范围改成标题旁的提示徽标：徽标要在标题行上，并且把整句话当成 tooltip。
             $scopeHint = Find-ById $ovRoot 'PowerScopeHint'
             $scopeTip = if ($null -eq $scopeHint) { $null } else { $scopeHint.ToolTip -as [System.Windows.Controls.TextBlock] }

@@ -244,7 +244,6 @@ namespace QuadVitals.Settings
             _others.Foreground = Theme.TextSecondaryBrush;
             _others.TextWrapping = TextWrapping.Wrap;
             _others.Margin = new Thickness(0, 8, 0, 0);
-            _others.Visibility = Visibility.Collapsed;
             AutomationProperties.SetAutomationId(_others, "FanOthers");
 
             _empty.Text = string.Empty;
@@ -254,7 +253,6 @@ namespace QuadVitals.Settings
             _empty.Foreground = Theme.AccentOrangeBrush;
             _empty.TextWrapping = TextWrapping.NoWrap;
             _empty.Margin = new Thickness(0, 8, 0, 0);
-            _empty.Visibility = Visibility.Collapsed;
             AutomationProperties.SetAutomationId(_empty, "FanEmpty");
 
             Grid body = new Grid();
@@ -270,8 +268,12 @@ namespace QuadVitals.Settings
             readout.Children.Add(_caption);
             readout.Children.Add(row);
             readout.Children.Add(_bar);
-            readout.Children.Add(_empty);
-            readout.Children.Add(_others);
+            // 两行状态（“其余…”与告警原因）叠在同一格里：任何时候只可能有一行有文字，
+            // 占位固定 21 px，警告出现不会把卡片撑高、也不会把上面的数值顶走。
+            Grid status = new Grid { Height = 21 };
+            status.Children.Add(_empty);
+            status.Children.Add(_others);
+            readout.Children.Add(status);
             Grid.SetColumn(readout, 2);
             body.Children.Add(readout);
 
@@ -357,9 +359,7 @@ namespace QuadVitals.Settings
                 _caption.Text = "通道 " + PreferredChannel;
                 _empty.Text = "所选通道未读数";
                 _empty.Foreground = Theme.AccentOrangeBrush;
-                _empty.Visibility = Visibility.Visible;
-                _others.Text = string.Empty;
-                _others.Visibility = Visibility.Collapsed;
+                    _others.Text = string.Empty;
                 _bar.SetValue(0);
                 _tone = MetricTone.Warning;
                 return;
@@ -383,7 +383,6 @@ namespace QuadVitals.Settings
             _empty.Text = stopped ? "风扇停转" : string.Empty;
             _empty.Foreground = stopped ? Theme.AccentRedBrush : Theme.AccentOrangeBrush;
             // 常态不占行：留一个空 TextBlock 会把整列抬高一行，三张卡就不同高了。
-            _empty.Visibility = stopped ? Visibility.Visible : Visibility.Collapsed;
             _bar.SetValue(FanZones.Fraction(rpm));
 
             MetricTone tone;
@@ -421,7 +420,6 @@ namespace QuadVitals.Settings
             _others.Text = extra.Count == 0 ? string.Empty : "其余 · " + string.Join("    ", extra.ToArray());
             // 空的“其余”行不能占高度：它和“停转/未读数”那一行是互斥的，
             // 两行同时占位会让读数区比左边的风扇图形还高，三张卡就不同高了。
-            _others.Visibility = extra.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
 
             // 三档给三种明显不同的转速：绿 0.30–0.45、黄 0.65–0.80、红 1.00–1.25 转/秒。
             // 不追求与真实 RPM 等比例（真实 25 转/秒在屏幕上只会频闪），但档位之间必须一眼能看出来。
@@ -486,11 +484,9 @@ namespace QuadVitals.Settings
             _unit.Text = string.Empty;
             _empty.Text = reason;
             _others.Text = string.Empty;
-            _others.Visibility = Visibility.Collapsed;
             _bar.SetValue(0);
             _tone = MetricTone.Normal;
             _empty.Foreground = Theme.AccentOrangeBrush;
-            _empty.Visibility = Visibility.Visible;
             // 整套图形走灰：环、叶片、`--` 都换成能读的灰。
             // 绿着显示 `--`，空态看起来就像“正常但没数值”，只有换色才说得清区别。
             ApplyEmptyVisuals();

@@ -190,7 +190,6 @@ namespace QuadVitals.Settings
                     ? "CPU 与 GPU 功耗读取失败"
                     : "缺少 CPU 或 GPU 功耗";
                 _note.Foreground = Theme.AccentOrangeBrush;
-                _note.Visibility = Visibility.Visible;
             }
 
             // 合计文案上面才定下来，环心用它，所以放在最后。
@@ -298,7 +297,6 @@ namespace QuadVitals.Settings
             ApplySceneTone(Theme.TextSecondary);
             _note.Text = reason;
             _note.Foreground = Theme.AccentOrangeBrush;
-            _note.Visibility = Visibility.Visible;
             _ringCpu.Fraction = 0;
             _ringGpu.Fraction = 0;
             _ringTotal.Text = MetricFormat.Invalid;
@@ -349,7 +347,7 @@ namespace QuadVitals.Settings
                 ? string.Empty
                 : "CPU 型号未登记，" + (string.Equals(CpuPowerMode, AppSettings.CpuPowerTdp, StringComparison.OrdinalIgnoreCase) ? "TDP" : "MTP") + " 按 " +
                   _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算";
-            _note.Visibility = _note.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+
         }
 
         /// <summary>
@@ -541,7 +539,11 @@ namespace QuadVitals.Settings
             _note.Foreground = Theme.TextSecondaryBrush;
             _note.TextWrapping = TextWrapping.NoWrap;
             _note.TextTrimming = TextTrimming.CharacterEllipsis;
-            _note.Margin = new Thickness(0, 10, 0, 0);
+            // 固定占一行：警告文字出现/消失只换内容与颜色，不改变卡片高度、也不推动上下两行。
+            // 只占 13 px（不再留 10 px 上间距），这样条纹样式下卡片仍是 204 高。
+            _note.Margin = new Thickness(0, 0, 0, 0);
+            _note.MinHeight = 13;
+            _note.Visibility = Visibility.Visible;
             AutomationProperties.SetAutomationId(_note, "PowerNote");
             return _note;
         }
