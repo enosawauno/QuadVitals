@@ -383,16 +383,34 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'without a reported TDP the table still applies' ((Find-ById $ovRoot 'PowerCpuTdp').Text -eq 'TDP 125 W') ("tdp=" + (Find-ById $ovRoot 'PowerCpuTdp').Text)
             $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerMtp
             # 固件限制（PL1/PL2 取大）优先于基础 TDP：13900K 报 125 W 但实跑 200 W 以上，
-            # 用 125 W 做分母会让条一直顶满。
+            # 固件配置的上限（PL1/PL2）不是 MTP：它只进 tooltip，不能改写尾标。
             $powerSnap.CpuPowerLimitWatts = 215
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 120
             $limitText = Find-ById $ovRoot 'PowerCpuTdp'
-            Check 'a firmware power limit drives the MTP value' ($limitText.Text -eq 'MTP 215 W') ("tdp=" + $limitText.Text)
-            Check 'the MTP tooltip names the MSR it came from' ($limitText.ToolTip -like '*PL1/PL2*') ("tip=" + $limitText.ToolTip)
-            $limitBar = Find-ById $ovRoot 'PowerCpuBar'
-            $limitFraction = [double](Read-Field $limitBar '_value' $flags)
-            Check 'the CPU bar is scaled to the firmware limit' ([Math]::Abs($limitFraction - (112.6 / 215.0)) -lt 0.001) ("cpu=" + $limitFraction)
+            Check 'a firmware power limit never masquerades as MTP' ($limitText.Text -eq 'MTP 253 W') ("tdp=" + $limitText.Text)
+            Check 'the tooltip still reports the local limit' (($limitText.ToolTip -as [string]) -like '*本机配置上限 215 W*') ("tip=" + $limitText.ToolTip)
+
+            # 规格表命中时按表里的两个固定值算（厂商定的数，与 BIOS 无关）。
+            $tableType = $coreAsm.GetType('QuadVitals.Core.CpuSpecTable')
+            $specTable = [Activator]::CreateInstance($tableType)
+            $specTable.Add('intel', 'I9-13900K', 125.0, 199.0, $null)
+            [QuadVitals.Core.CpuSpecs]::Apply($specTable)
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 120
+            $specText = Find-ById $ovRoot 'PowerCpuTdp'
+            Check 'the spec table drives the MTP caption' ($specText.Text -eq 'MTP 199 W') ("tdp=" + $specText.Text)
+            Check 'the MTP tooltip names the spec table' (($specText.ToolTip -as [string]) -like '*规格表*') ("tip=" + $specText.ToolTip)
+            $specBar = Find-ById $ovRoot 'PowerCpuBar'
+            $specFraction = [double](Read-Field $specBar '_value' $flags)
+            Check 'the CPU bar is scaled to the spec table value' ([Math]::Abs($specFraction - (112.6 / 199.0)) -lt 0.001) ("cpu=" + $specFraction)
+            # TDP 口径：固件没报时用表里的基础功耗。
+            $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerTdp
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            Pump 120
+            Check 'the spec table also supplies the base power' ((Find-ById $ovRoot 'PowerCpuTdp').Text -eq 'TDP 125 W') ("tdp=" + (Find-ById $ovRoot 'PowerCpuTdp').Text)
+            $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerMtp
+            [QuadVitals.Core.CpuSpecs]::Apply($null)
             $powerSnap.CpuPowerLimitWatts = 0
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 80

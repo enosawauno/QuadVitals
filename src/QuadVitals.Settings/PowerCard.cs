@@ -195,21 +195,45 @@ namespace QuadVitals.Settings
         {
             string cpuModel = HardwareInfo.CpuSignature;
             bool mtp = !string.Equals(CpuPowerMode, AppSettings.CpuPowerTdp, StringComparison.OrdinalIgnoreCase);
-            // 两个数各有一个固件槽：基础功耗在 170（0x614），配置上限在 370（0x610 PL1/PL2）。
-            ushort reported = snapshot == null
-                ? (ushort)0
-                : (mtp ? snapshot.CpuPowerLimitWatts : snapshot.CpuTdpWatts);
+            // 两个固件槽：基础功耗在 170（0x614），主板配置的上限在 370（0x610 PL1/PL2）。
+            ushort firmwareBase = snapshot == null ? (ushort)0 : snapshot.CpuTdpWatts;
+            ushort firmwareLimit = snapshot == null ? (ushort)0 : snapshot.CpuPowerLimitWatts;
 
-            _cpuTdpFromMsr = reported > 0;
-            if (_cpuTdpFromMsr)
+            // MTP（最大睿频功耗）是厂商给这个 SKU 定的固定值，只能来自规格表；
+            // PL1/PL2 是主板抄给这台机器的配置，拿它冒充 MTP 会把“解锁的 4096 W”显示成规格。
+            CpuSpecEntry spec = null;
+            CpuSpecTable table = CpuSpecs.Current;
+            bool hasSpec = table != null && table.TryLookup(cpuModel, out spec);
+
+            _cpuTdpFromMsr = false;
+            if (mtp)
             {
-                _cpuTdp = reported;
-                _cpuTdpKnown = true;
+                if (hasSpec)
+                {
+                    _cpuTdp = spec.MaxWatts;
+                    _cpuTdpKnown = true;
+                }
+                else if (PowerLimits.CpuMaxPowerKnown(cpuModel))
+                {
+                    _cpuTdp = PowerLimits.CpuMaxPower(cpuModel);
+                    _cpuTdpKnown = true;
+                }
+                else
+                {
+                    _cpuTdp = PowerLimits.DefaultCpuMaxWatts;
+                    _cpuTdpKnown = false;
+                }
             }
-            else if (mtp)
+            else if (firmwareBase > 0)
             {
-                _cpuTdp = PowerLimits.CpuMaxPower(cpuModel);
-                _cpuTdpKnown = PowerLimits.CpuMaxPowerKnown(cpuModel);
+                _cpuTdp = firmwareBase;
+                _cpuTdpKnown = true;
+                _cpuTdpFromMsr = true;
+            }
+            else if (hasSpec)
+            {
+                _cpuTdp = spec.BaseWatts;
+                _cpuTdpKnown = true;
             }
             else
             {
@@ -224,13 +248,17 @@ namespace QuadVitals.Settings
             if (gpuTdp > 0) _gpuTdp = gpuTdp;
 
             _cpuTdpText.Text = (mtp ? "MTP " : "TDP ") + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W" + (_cpuTdpKnown ? string.Empty : "*");
-            _cpuTdpText.ToolTip = _cpuTdpFromMsr
-                ? (mtp ? "最大睿频功耗，固件 MSR 0x610 的 PL1/PL2" : "处理器基础功耗，固件 MSR 0x614")
-                : (mtp
-                    ? "最大睿频功耗（型号表）"
-                    : (_cpuTdpKnown
-                        ? "处理器基础功耗（型号表）"
-                        : "未登记该处理器型号，按 " + _cpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W 估算；分段条只表示大致比例"));
+            string source = mtp
+                ? (hasSpec ? "规格表里的最大睿频功耗（MTP）" : "型号表估算的最大睿频功耗；该型型号未登记")
+                : (_cpuTdpFromMsr
+                    ? "固件 MSR 0x614 报的处理器基础功耗（PBP）"
+                    : (hasSpec ? "规格表里的处理器基础功耗（TDP/PBP）" : "型号表估算的处理器基础功耗"));
+            // PL1/PL2 不做标签，但能帮人判断这台机器有没有被解锁，放在 tooltip 里补一句。
+            if (firmwareLimit > 0)
+            {
+                source += "；本机配置上限 " + firmwareLimit.ToString(CultureInfo.InvariantCulture) + " W（MSR 0x610，不是规格值）";
+            }
+            _cpuTdpText.ToolTip = source;
             _gpuTdpText.Text = "TDP " + _gpuTdp.ToString("0", CultureInfo.InvariantCulture) + " W";
             _gpuTdpText.ToolTip = driverLimit > 0
                 ? "显卡驱动报告的功耗上限（" + GpuPowerLimit.Source + "）"

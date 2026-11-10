@@ -132,6 +132,8 @@ namespace QuadVitals.Settings
             ShowPage(_pages.ContainsKey(startPage) ? startPage : "overview");
             if (startFeedback) Loaded += (sender, e) => ShowFeedback();
             if (startGeneral) Loaded += (sender, e) => ShowGeneralSettings();
+            // 只在窗口真的上屏后才去拉规格表：测试与离屏渲染不联网。
+            Loaded += (sender, e) => CpuSpecsUpdater.Start();
 
             // 关闭前把网速曲线落盘：下次打开接着上一张图的右端继续跑。
             Closed += (sender, e) =>

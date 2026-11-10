@@ -86,6 +86,9 @@ namespace QuadVitals.Core.Tests
             Suite("Update 安装包哈希", UpdateHashingBehaviour);
             Suite("Update 下载", UpdateDownloadBehaviour);
             Suite("Update 安装器", UpdateInstallerBehaviour);
+            Suite("CpuSku 型号归一化", CpuSpecKeyBehaviour);
+            Suite("CpuSpec 规格表解析", CpuSpecTableParseBehaviour);
+            Suite("CpuSpec 刷新与缓存", CpuSpecRefreshBehaviour);
 
             Console.WriteLine();
             Console.WriteLine("===== {0} passed, {1} failed =====", _passed, _failed);
