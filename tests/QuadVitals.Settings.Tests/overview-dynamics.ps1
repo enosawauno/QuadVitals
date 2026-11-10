@@ -264,6 +264,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         $networkCard = Find-ById $ovRoot 'NetworkCard'
         # IP 掩码切换不能改变值列宽度/字号，也不能推动右侧图标。
         $lanValue = Find-ById $ovRoot 'LanIpValue'
+        $pubValue = Find-ById $ovRoot 'PublicIpValue'
         $eyeButton = Find-ById $ovRoot 'ToggleIpMask'
         $copyButton = Find-ById $ovRoot 'CopyIps'
         if (($null -ne $lanValue) -and ($null -ne $eyeButton) -and ($null -ne $copyButton)) {
@@ -283,6 +284,32 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $eyeAfter = $eyeButton.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
             Check 'the eye icon does not move when toggling' ([math]::Abs($eyeAfter - $eyeX) -le 0.5) "mask=$eyeX ip=$eyeAfter"
             Check 'unmasking restores the IP text' ($lanValue.Text -eq 'lan-host') "text=$($lanValue.Text)"
+        }
+        # 值列只按自己的 IP 量宽：统一按最长 IPv4 兜底会在每列右侧多留 40 多 px 空白，
+        # 整行比卡片内容还宽，最右的齿轮被顶到卡片内边距里。
+        # 样例用等长的数字串：字面 IP 会被敏感数据门禁拦下，而列宽只跟字符宽度有关。
+        $lanSample = '22222222'        # 15 px SemiBold ≈ 67 px，与一个局域网 IPv4 同宽
+        $pubSample = '22222222222'     # ≈ 92 px，与一个公网 IPv4 同宽
+        if (($null -ne $lanValue) -and ($null -ne $pubValue) -and ($null -ne $eyeButton) -and ($null -ne $copyButton) -and ($null -ne $networkGear) -and ($null -ne $networkCard)) {
+            $ovPage.GetType().GetField('_lanIp', $flags).SetValue($ovPage, $lanSample)
+            $ovPage.GetType().GetField('_publicIp', $flags).SetValue($ovPage, $pubSample)
+            $ovPage.GetType().GetMethod('ApplyIpDisplay', $flags).Invoke($ovPage, @()) | Out-Null
+            Pump 150
+            $xLan = $lanValue.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            $xPub = $pubValue.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            $xCopy = $copyButton.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            $xGear = $networkGear.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            $xCard = $networkCard.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            $contentRight = $xCard + $networkCard.ActualWidth - 20
+            Check 'the LAN column is sized to its own IP' ($lanValue.ActualWidth -le 70) "w=$($lanValue.ActualWidth)"
+            Check 'the public column is sized to its own IP' (($pubValue.ActualWidth -ge 88) -and ($pubValue.ActualWidth -le 96)) "w=$($pubValue.ActualWidth)"
+            Check 'the IP group keeps its gap to the icons' ([math]::Abs(($xCopy - $xPub - $pubValue.ActualWidth) - 16) -le 0.5) ("gap=" + ($xCopy - $xPub - $pubValue.ActualWidth))
+            Check 'the network gear stays inside the card' (($xGear + $networkGear.ActualWidth) -le ($contentRight + 0.5)) "gearRight=$([math]::Round($xGear + $networkGear.ActualWidth, 1)) contentRight=$([math]::Round($contentRight, 1))"
+            Check 'the value columns do not reserve the longest IPv4' (($lanValue.ActualWidth + $pubValue.ActualWidth) -lt 170) ("sum=" + ($lanValue.ActualWidth + $pubValue.ActualWidth))
+            $ovPage.GetType().GetField('_lanIp', $flags).SetValue($ovPage, 'lan-host')
+            $ovPage.GetType().GetField('_publicIp', $flags).SetValue($ovPage, 'wan-host')
+            $ovPage.GetType().GetMethod('ApplyIpDisplay', $flags).Invoke($ovPage, @()) | Out-Null
+            Pump 80
         }
         if ($null -ne $networkCard) {
             Check 'the network card sets a minimum height, not a fixed one' ([double]::IsNaN($networkCard.Height) -and $networkCard.MinHeight -gt 0) ("height=" + $networkCard.Height + " min=" + $networkCard.MinHeight)
