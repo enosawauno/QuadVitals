@@ -162,6 +162,14 @@ namespace QuadVitals.Core.Tests
             Equal(162.0, entry.MaxWatts, "7800X3D 的 PPT");
             True(table.TryLookup("AMD Ryzen 5 5700X3D 8-Core Processor", out entry), "5700X3D 在表里");
             Equal(false, table.TryLookup("Intel(R) Xeon(R) Gold 6430", out entry), "未登记的型号不命中");
+
+            // 嵌进 Core.dll 的那份必须与文件是同一份：改了 JSON 忘了重嵌，这里会红。
+            string embeddedError;
+            True(CpuSpecs.TryLoadEmbedded(out embeddedError), "嵌入表能加载 " + embeddedError);
+            True(CpuSpecs.Current != null, "嵌入表装进内存");
+            Equal(table.Count, CpuSpecs.Current.Count, "嵌入表行数与文件一致");
+            True(CpuSpecs.Current.TryLookup("13th Gen Intel(R) Core(TM) i9-13900K", out entry), "嵌入表能查到 13900K");
+            Equal(253.0, entry.MaxWatts, "嵌入表里的 13900K 上限");
         }
 
         /// <summary>从测试程序的目录往上找仓库根，找不到返回 null。</summary>

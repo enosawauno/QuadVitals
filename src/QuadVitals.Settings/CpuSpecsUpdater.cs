@@ -24,8 +24,10 @@ namespace QuadVitals.Settings
                 {
                     string cache = CpuSpecs.CachePath();
                     string error;
+                    // 先装上包里那份基线，离线新装也能拿到完整列表；缓存与远端只负责覆盖它。
+                    CpuSpecs.TryLoadEmbedded(out error);
                     CpuSpecs.TryLoadCache(cache, out error);
-                    if (CpuSpecs.Current != null && CpuSpecs.CacheIsFresh(cache, DateTime.UtcNow, CpuSpecs.MaxCacheAge))
+                    if (CpuSpecs.CacheIsFresh(cache, DateTime.UtcNow, CpuSpecs.MaxCacheAge))
                     {
                         return;
                     }

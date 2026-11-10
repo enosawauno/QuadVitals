@@ -22,12 +22,17 @@ $testExe = Join-Path $outTest 'QuadVitals.Core.Tests.exe'
 $coreSources = Get-ChildItem -Path $coreDir -Filter '*.cs' | ForEach-Object { $_.FullName }
 # Version metadata for every managed binary lives in one file; see QuadVitals.Core.ProductVersion.
 $sharedAssemblyInfo = Join-Path $root 'src\SharedAssemblyInfo.cs'
+# Processor spec table goes into the DLL as a resource so an offline install still has the full
+# list; the remote copy only has to be newer, not present. Name is fixed: CpuSpecs looks it up.
+$specTable = Join-Path $root 'assets\cpu-specs.json'
+if (-not (Test-Path -LiteralPath $specTable)) { throw "spec table not found: $specTable" }
 & $csc /nologo /target:library /langversion:7.3 /codepage:65001 /platform:anycpu /optimize+ /debug- `
     /out:"$coreDll" `
     /r:System.Runtime.Serialization.dll `
     /r:System.IO.Compression.dll `
     /r:System.Core.dll `
     /r:System.dll `
+    /resource:"$specTable",QuadVitals.Core.cpu-specs.json `
     $coreSources `
     $sharedAssemblyInfo
 if ($LASTEXITCODE -ne 0) { throw "core build failed ($LASTEXITCODE)" }

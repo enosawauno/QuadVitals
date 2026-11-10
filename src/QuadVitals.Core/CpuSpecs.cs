@@ -277,6 +277,9 @@ namespace QuadVitals.Core
         public const string DefaultFeedUrl = "https://raw.githubusercontent.com/enosawauno/QuadVitals/main/assets/cpu-specs.json";
         public const string FeedUrlVariable = "QUADVITALS_SPEC_FEED";
 
+        /// <summary>编进 Core.dll 的基线表（构建时用 csc /resource 嵌入）。</summary>
+        public const string EmbeddedResourceName = "QuadVitals.Core.cpu-specs.json";
+
         /// <summary>缓存多久后重新拉一次。规格是固定值，追新一代 CPU 不需要天天看。</summary>
         public static readonly TimeSpan MaxCacheAge = TimeSpan.FromDays(7);
 
@@ -303,6 +306,43 @@ namespace QuadVitals.Core
             if (candidate.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 candidate.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return candidate;
             return DefaultFeedUrl;
+        }
+
+        /// <summary>
+        /// 读编进 DLL 的那份表：离线新装也能拿到完整列表，远端只负责“更新”。
+        /// 解析失败或资源缺失只返回 false，不抛异常。
+        /// </summary>
+        public static bool TryLoadEmbedded(out string error)
+        {
+            error = string.Empty;
+            try
+            {
+                Stream stream = typeof(CpuSpecs).Assembly.GetManifestResourceStream(EmbeddedResourceName);
+                if (stream == null)
+                {
+                    error = "missing-resource";
+                    return false;
+                }
+
+                string json;
+                using (stream)
+                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    json = reader.ReadToEnd();
+                }
+
+                CpuSpecTable table;
+                List<string> warnings;
+                if (!CpuSpecTable.TryParse(json, out table, out warnings, out error)) return false;
+
+                Apply(table);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = "embedded:" + ex.GetType().Name;
+                return false;
+            }
         }
 
         public static string CachePath()
