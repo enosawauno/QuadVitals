@@ -232,6 +232,12 @@ if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batter
     $beforeBattery = (Read-Settings $generalWindow).PauseAnimationsOnBattery -ne $false
     $beforePolicy = [string](Read-Settings $generalWindow).RenderPolicy
     $beforeStyle = [string](Read-Settings $generalWindow).IndicatorStyle
+    # 这组断言会真的写 settings.json：先留一份原文，收尾时原样写回。
+    # WPF 进程里首次读文件夹偶发返回空，重试一次再当它是空。
+    $appData = [Environment]::GetFolderPath('ApplicationData')
+    if ([string]::IsNullOrEmpty($appData)) { $appData = [Environment]::GetFolderPath('ApplicationData') }
+    $settingsFile = [IO.Path]::Combine($appData, 'QuadVitals', 'settings.json')
+    $settingsBefore = [IO.File]::ReadAllText($settingsFile)
     # Use unfocused as the save target: hover would leak HoverOnlyCards into the next suite.
     $targetPolicy = 'unfocused'
     $targetIndex = 2
@@ -279,10 +285,21 @@ try {
     $restore.StartAgentWithWindows = $before
     $restore.PauseAnimationsOnBattery = $beforeBattery
     $restore.RenderPolicy = $beforePolicy
+    # 进度样式也被这次保存改过：先还原到内存对象上再写盘。
+    if ($null -ne $beforeStyle) { $restore.IndicatorStyle = $beforeStyle }
     $restore.Normalize()
     $windowType.GetMethod('SaveSettingsQuietly').Invoke($generalWindow, @($restore)) | Out-Null
     }
 }
 $generalWindow.Close()
+# 最后一个写盘的是这里：关窗后让排队的定时器/回调跑完，再把原文写回，
+# 否则后面一次保存会把还原盖掉。
+Pump 300
+if ($null -ne $settingsBefore) {
+    [IO.File]::WriteAllText($settingsFile, $settingsBefore)
+    $settingsAfter = [IO.File]::ReadAllText($settingsFile)
+    Check 'the suite leaves the settings file untouched' ($settingsAfter -eq $settingsBefore) ''
+    Check 'the suite puts the indicator style back on disk' ($settingsAfter -match ('"indicatorStyle"\s*:\s*"' + [regex]::Escape($beforeStyle) + '"')) ("before=" + $beforeStyle)
+}
 
 Complete-Run 'settings-ui-general'
