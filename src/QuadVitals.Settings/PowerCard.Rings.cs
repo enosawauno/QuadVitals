@@ -32,8 +32,11 @@ namespace QuadVitals.Settings
         private ColumnDefinition _ringGap;
         private ColumnDefinition _cpuBarColumn;
         private ColumnDefinition _gpuBarColumn;
+        private ColumnDefinition _cpuStarColumn;
+        private ColumnDefinition _gpuStarColumn;
         private FrameworkElement _ringHost;
         private FrameworkElement _totalLine;
+        private Grid _body;
         private string _appliedStyle;
 
         /// <summary>功耗卡的指示样式：`bars`（默认）或 `rings`；由概览页每帧从设置里带进来。</summary>
@@ -67,6 +70,16 @@ namespace QuadVitals.Settings
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            TextBlock caption = new TextBlock
+            {
+                Text = "合计",
+                FontSize = 9.5,
+                Foreground = Theme.TextTertiaryBrush,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 2)
+            };
+            center.Children.Add(caption);
+
             _ringTotal.Text = MetricFormat.Invalid;
             _ringTotal.FontSize = 20;
             _ringTotal.FontWeight = FontWeights.SemiBold;
@@ -113,13 +126,19 @@ namespace QuadVitals.Settings
 
             if (_ringHost != null) _ringHost.Visibility = rings ? Visibility.Visible : Visibility.Collapsed;
             if (_ringColumn != null) _ringColumn.Width = new GridLength(rings ? RingSize : 0);
-            if (_ringGap != null) _ringGap.Width = new GridLength(rings ? 16 : 0);
+            if (_ringGap != null) _ringGap.Width = new GridLength(rings ? 24 : 0);
 
             if (_totalLine != null) _totalLine.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
+            // 环样式下内容比卡片窄，整体居中才不会左边一堆、右边一片空。
+            if (_body != null) _body.HorizontalAlignment = rings ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
             _cpuBar.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             _gpuBar.Visibility = rings ? Visibility.Collapsed : Visibility.Visible;
             if (_cpuBarColumn != null) _cpuBarColumn.Width = new GridLength(rings ? 0 : BarWidth);
             if (_gpuBarColumn != null) _gpuBarColumn.Width = new GridLength(rings ? 0 : BarWidth);
+            // 环样式下横条没了，星号列会把 TDP 推到卡片最右边（中间空出一大截）。
+            // 把星号压成 0，两行就变成「CPU 138.7 W　MTP 253 W」的紧凑一行。
+            if (_cpuStarColumn != null) _cpuStarColumn.Width = rings ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+            if (_gpuStarColumn != null) _gpuStarColumn.Width = rings ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         }
 
         /// <summary>

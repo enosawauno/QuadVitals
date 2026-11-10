@@ -406,6 +406,7 @@ namespace QuadVitals.Settings
         private FrameworkElement BuildBody()
         {
             Grid body = new Grid();
+            _body = body;
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(IconWidth) });
             // 图标列与读数之间留一格：4 px 在放大后的闪电旁看起来是粘住的。
             body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
@@ -424,8 +425,8 @@ namespace QuadVitals.Settings
             StackPanel readout = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             _totalLine = BuildTotalLine();
             readout.Children.Add(_totalLine);
-            readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8, out _cpuBarColumn));
-            readout.Children.Add(BuildReadout("GPU", _gpuValue, _gpuUnit, _gpuTdpText, _gpuBar, "PowerGpu", 0, out _gpuBarColumn));
+            readout.Children.Add(BuildReadout("CPU", _cpuValue, _cpuUnit, _cpuTdpText, _cpuBar, "PowerCpu", 8, out _cpuBarColumn, out _cpuStarColumn));
+            readout.Children.Add(BuildReadout("GPU", _gpuValue, _gpuUnit, _gpuTdpText, _gpuBar, "PowerGpu", 0, out _gpuBarColumn, out _gpuStarColumn));
             // 说明行跟合计、CPU / GPU 同一条左边缘：卡片里所有文字都从这一列起。
             readout.Children.Add(BuildNote());
             Grid.SetColumn(readout, 4);
@@ -474,7 +475,7 @@ namespace QuadVitals.Settings
         /// </summary>
         private static FrameworkElement BuildReadout(string name, TextBlock value, TextBlock unit,
                                                      TextBlock tdp, MetricBar bar, string automationId,
-                                                     double bottomMargin, out ColumnDefinition barColumn)
+                                                     double bottomMargin, out ColumnDefinition barColumn, out ColumnDefinition starColumn)
         {
             TextBlock label = new TextBlock
             {
@@ -519,7 +520,8 @@ namespace QuadVitals.Settings
 
             Grid row = new Grid { Margin = new Thickness(0, 0, 0, bottomMargin) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            starColumn = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
+            row.ColumnDefinitions.Add(starColumn);
             barColumn = new ColumnDefinition { Width = new GridLength(BarWidth) };
             row.ColumnDefinitions.Add(barColumn);
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

@@ -477,6 +477,13 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 $full = @($arcs | Where-Object { [double]$_.Fraction -ge 0.999 }).Count
                 Check 'exactly two of them are the full tracks' ($full -eq 2) ("full=" + $full)
             }
+            $ringBody = Read-Field $powerCard '_body' $flags
+            Check 'the ring style centres the content' (($null -ne $ringBody) -and ($ringBody.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Center)) ''
+            $ringCpuValue = Find-ById $ovRoot 'PowerCpu'
+            $ringTdp = Find-ById $ovRoot 'PowerCpuTdp'
+            $ringValueRight = $ringCpuValue.TranslatePoint((New-Object System.Windows.Point($ringCpuValue.ActualWidth, 0)), $ovRoot).X
+            $ringTdpX = $ringTdp.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            Check 'the limit label sits next to the value in ring style' (($ringTdpX - $ringValueRight) -lt 60) ("gap=" + [math]::Round($ringTdpX - $ringValueRight, 1))
             $powerCard.CardStyle = [QuadVitals.Core.Settings]::PowerStyleBars
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
             Pump 120
