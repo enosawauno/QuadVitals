@@ -296,25 +296,7 @@ namespace QuadVitals.Settings
 
         private FrameworkElement BuildHeaderRight()
         {
-            StackPanel row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            TextBlock scope = new TextBlock
-            {
-                Text = "CPU + GPU",
-                FontSize = 11.5,
-                Foreground = Theme.TextSecondaryBrush,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 8, 0),
-                ToolTip = "只统计 CPU 封装与 GPU 模块；不含主板、硬盘、风扇以及其他硬件数据和电源损耗。"
-            };
-            AutomationProperties.SetAutomationId(scope, "PowerScope");
-            row.Children.Add(scope);
-
+            // 统计范围只留在标题旁边的「?」徽标里：这里再写一句「CPU + GPU」是重复信息。
             FlatButton gear = new FlatButton(string.Empty);
             gear.Width = 22;
             gear.Height = 22;
@@ -341,10 +323,10 @@ namespace QuadVitals.Settings
             gear.Click += (sender, e) => { Action handler = OpenSettings; if (handler != null) handler(); };
             AutomationProperties.SetAutomationId(gear, "PowerSettings");
             AutomationProperties.SetName(gear, "功耗设置");
-            row.Children.Add(gear);
+            gear.HorizontalAlignment = HorizontalAlignment.Right;
             // 与其他卡片一致：平时不显示，指针进入卡片才淡入。
             HoverReveal.Attach(_card, gear);
-            return row;
+            return gear;
         }
 
         /// <summary>底部一行：正常状态不占行（统计范围在标题徽标的 tooltip 里），异常时写原因。</summary>
@@ -382,7 +364,13 @@ namespace QuadVitals.Settings
                 BorderBrush = Theme.BorderStrongBrush,
                 Background = Brushes.Transparent,
                 Child = mark,
-                ToolTip = "只统计 CPU 封装与 GPU 模块；不含主板、硬盘、风扇以及其他硬件数据和电源损耗。"
+                // tooltip 限宽换行：不限制的话一句话会拉成一整行，跑到主窗口外面去。
+                ToolTip = new TextBlock
+                {
+                    Text = "只统计 CPU 封装与 GPU 模块；不含主板、硬盘、风扇以及其他硬件数据和电源损耗。",
+                    MaxWidth = 280,
+                    TextWrapping = TextWrapping.Wrap
+                }
             };
             AutomationProperties.SetAutomationId(badge, "PowerScopeHint");
             AutomationProperties.SetName(badge, "功耗统计范围");

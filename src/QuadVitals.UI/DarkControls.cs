@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace QuadVitals.UI
 {
@@ -153,6 +154,11 @@ namespace QuadVitals.UI
             FrameworkElement list = popup == null ? null : popup.Child as FrameworkElement;
             if (list == null) return;
 
+            // 弹层里套了两层给投影留位的阴影容器，卡片相对弹窗原点有一段内缩；
+            // 固定偏移在不同对话框里算不准（同一个常量在风扇弹窗差 27 px、设备弹窗差 32 px），
+            // 所以展开后直接量一次卡片与字段的屏幕坐标，差多少补多少。
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => AlignPopup(popup)));
+
             ScaleTransform scale = new ScaleTransform(1, 0.94);
             list.RenderTransformOrigin = new Point(0.5, 0);   // 从列表顶部展开
             list.RenderTransform = scale;
@@ -165,6 +171,43 @@ namespace QuadVitals.UI
             {
                 EasingFunction = Theme.EnterFade()
             });
+        }
+
+        /// <summary>
+        /// 把弹层里的卡片左边缘对到字段左边缘。只调一次：量不到（还没上屏）就什么也不做。
+        /// </summary>
+        private void AlignPopup(Popup popup)
+        {
+            try
+            {
+                Border card = FindCard(popup.Child as DependencyObject);
+                if (card == null) return;
+
+                Point field = PointToScreen(new Point(0, 0));
+                Point target = card.PointToScreen(new Point(0, 0));
+                double delta = target.X - field.X;
+                if (Math.Abs(delta) > 0.5) popup.HorizontalOffset -= delta;
+            }
+            catch (InvalidOperationException)
+            {
+                // 弹窗已经关了或还没连上 PresentationSource：对齐不是功能，下一次展开再调。
+            }
+        }
+
+        private static Border FindCard(DependencyObject root)
+        {
+            if (root == null) return null;
+
+            Border self = root as Border;
+            if (self != null && self.CornerRadius.TopLeft == 10) return self;
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                Border hit = FindCard(VisualTreeHelper.GetChild(root, i));
+                if (hit != null) return hit;
+            }
+            return null;
         }
 
         private static Style BuildItemStyle()

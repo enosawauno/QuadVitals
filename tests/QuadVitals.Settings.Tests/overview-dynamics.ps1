@@ -352,7 +352,8 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the GPU power is shown on its own line' ($powerGpuText.Text -eq '46.5') ("gpu=" + $powerGpuText.Text)
             Check 'each wattage carries its own unit' (($powerCpuUnit.Text -eq 'W') -and ($powerGpuUnit.Text -eq 'W')) ''
             Check 'the component wattages step down from the total' (([double]$powerCpuText.FontSize -eq 18) -and ([double]$powerGpuText.FontSize -eq 18) -and ([double]$powerCpuText.FontSize -lt [double]$powerTotalText.FontSize)) ''
-            Check 'the power scope says CPU + GPU' ((Find-ById $ovRoot 'PowerScope').Text -eq 'CPU + GPU') ''
+            # 统计范围只在标题旁「?」徽标的 tooltip 里；标题行右侧不再重复一句「CPU + GPU」。
+            Check 'the redundant scope caption is gone' ($null -eq (Find-ById $ovRoot 'PowerScope')) ''
             Check 'the GPU row is labelled GPU' ((Find-ById $ovRoot 'PowerGpuLabel').Text -eq 'GPU') ''
             $powerCpuY = $powerCpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
             $powerGpuY = $powerGpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
@@ -430,7 +431,9 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the scope note no longer takes a bottom line' ((Find-ById $ovRoot 'PowerNote').Text.Length -eq 0) ("text=" + (Find-ById $ovRoot 'PowerNote').Text)
             # 统计范围改成标题旁的提示徽标：徽标要在标题行上，并且把整句话当成 tooltip。
             $scopeHint = Find-ById $ovRoot 'PowerScopeHint'
-            Check 'the scope hint sits on the title row' (($null -ne $scopeHint) -and (($scopeHint.ToolTip -as [string]) -like '*主板*')) ("tip=" + $scopeHint.ToolTip)
+            $scopeTip = if ($null -eq $scopeHint) { $null } else { $scopeHint.ToolTip -as [System.Windows.Controls.TextBlock] }
+            Check 'the scope hint sits on the title row' (($null -ne $scopeHint) -and ($null -ne $scopeTip) -and ($scopeTip.Text -like '*主板*')) ("tip=" + $(if ($null -eq $scopeTip) { 'none' } else { $scopeTip.Text }))
+            Check 'the scope tooltip wraps instead of running off the window' (($null -ne $scopeTip) -and ($scopeTip.MaxWidth -gt 0) -and ($scopeTip.MaxWidth -le 320) -and ($scopeTip.TextWrapping -eq [System.Windows.TextWrapping]::Wrap)) ("max=" + $(if ($null -eq $scopeTip) { 0 } else { $scopeTip.MaxWidth }))
             if ($null -ne $scopeHint) {
                 $hintY = $scopeHint.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
                 $firstRowY = (Find-ById $ovRoot 'PowerCpuLabel').TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
