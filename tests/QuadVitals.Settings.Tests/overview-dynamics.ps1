@@ -262,6 +262,28 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
 
         # Height must not be bound to another element's layout output (it forbids growing at high DPI).
         $networkCard = Find-ById $ovRoot 'NetworkCard'
+        # IP 掩码切换不能改变值列宽度/字号，也不能推动右侧图标。
+        $lanValue = Find-ById $ovRoot 'LanIpValue'
+        $eyeButton = Find-ById $ovRoot 'ToggleIpMask'
+        $copyButton = Find-ById $ovRoot 'CopyIps'
+        if (($null -ne $lanValue) -and ($null -ne $eyeButton) -and ($null -ne $copyButton)) {
+            $ovPage.GetType().GetField('_lanIp', $flags).SetValue($ovPage, 'lan-host')
+            $ovPage.GetType().GetField('_publicIp', $flags).SetValue($ovPage, 'wan-host')
+            $ovPage.GetType().GetMethod('ToggleIpMask', $flags).Invoke($ovPage, @()) | Out-Null
+            Pump 150
+            $maskWidth = $lanValue.ActualWidth
+            $maskFont = [double]$lanValue.FontSize
+            $eyeX = $eyeButton.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            $expectedMask = -join (1..10 | ForEach-Object { [char]0x2022 })
+            Check 'masking shows ten dots' ($lanValue.Text -eq $expectedMask) "text=$($lanValue.Text)"
+            $ovPage.GetType().GetMethod('ToggleIpMask', $flags).Invoke($ovPage, @()) | Out-Null
+            Pump 150
+            Check 'unmasking restores the value width' ([math]::Abs($lanValue.ActualWidth - $maskWidth) -le 0.5) "mask=$maskWidth ip=$($lanValue.ActualWidth)"
+            Check 'unmasking keeps the font size' ([double]$lanValue.FontSize -eq $maskFont) "mask=$maskFont ip=$($lanValue.FontSize)"
+            $eyeAfter = $eyeButton.TransformToAncestor($ovRoot).Transform((New-Object System.Windows.Point(0, 0))).X
+            Check 'the eye icon does not move when toggling' ([math]::Abs($eyeAfter - $eyeX) -le 0.5) "mask=$eyeX ip=$eyeAfter"
+            Check 'unmasking restores the IP text' ($lanValue.Text -eq 'lan-host') "text=$($lanValue.Text)"
+        }
         if ($null -ne $networkCard) {
             Check 'the network card sets a minimum height, not a fixed one' ([double]::IsNaN($networkCard.Height) -and $networkCard.MinHeight -gt 0) ("height=" + $networkCard.Height + " min=" + $networkCard.MinHeight)
         }

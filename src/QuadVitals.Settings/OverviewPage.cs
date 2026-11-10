@@ -561,12 +561,12 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// 掩码（10 个圆点）的宽度：值列的最小宽度。掩码比任何 IP 都短，所以点眼睛换成掩码时
-        /// 列不会缩、图标也不会推；IP 本身变长/变短时列跟着内容走，分隔竖线两侧始终各 8 px。
+        /// 值列的最小宽度：取掩码与最长 IPv4（255.255.255.255）的较大者。掩码比真实 IP 短，
+        /// 若只按掩码宽度设下界，切到掩码时列会缩、右侧图标会左移（看起来就是抖动）。
         /// </summary>
         private static double IpMaskWidth()
         {
-            return Math.Ceiling(IpTextWidth(MaskedIp));
+            return Math.Ceiling(Math.Max(IpTextWidth(MaskedIp), IpTextWidth("255.255.255.255")));
         }
 
         private static double IpTextWidth(string text)
@@ -683,8 +683,8 @@ namespace QuadVitals.Settings
             _publicIpValue.Text = _publicIpFetching && IsInvalidIp(_publicIp)
                 ? "获取中…"
                 : FormatIpDisplay(_publicIp, MetricFormat.Invalid);
-            StyleIpValue(_lanIpValue, _lanIp);
-            StyleIpValue(_publicIpValue, _publicIp);
+            StyleIpValue(_lanIpValue);
+            StyleIpValue(_publicIpValue);
             SetCopyEnabled(_ipCopy, !IsInvalidIp(_lanIp) || !IsInvalidIp(_publicIp));
         }
 
@@ -694,11 +694,14 @@ namespace QuadVitals.Settings
             return _ipsMasked ? MaskedIp : ip;
         }
 
-        private void StyleIpValue(TextBlock value, string ip)
+        /// <summary>
+        /// 掩码前后保持同一字号与对齐：改字号/对齐会让 TextBlock 重新测量，切换时整行会抖。
+        /// 值列的宽度由 MinWidth（最长 IPv4）兜底，掩码再短也不会缩小列宽。
+        /// </summary>
+        private static void StyleIpValue(TextBlock value)
         {
-            bool masked = _ipsMasked && !IsInvalidIp(ip);
-            value.FontSize = masked ? 16 : 15;
-            value.TextAlignment = masked ? TextAlignment.Center : TextAlignment.Left;
+            value.FontSize = IpValueFontSize;
+            value.TextAlignment = TextAlignment.Left;
         }
 
         private void ToggleIpMask()

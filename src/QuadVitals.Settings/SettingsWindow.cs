@@ -262,10 +262,10 @@ namespace QuadVitals.Settings
 
             _host.VerticalContentAlignment = VerticalAlignment.Top;
             // 卡片的左右留白要对齐：左边 = 卡片左边缘到导航胶囊右边缘，右边 = 卡片右边缘到窗口右边缘。
-            // 侧栏 196 + host 左 6 + 页面内边距 24 = 卡片左 226；导航胶囊右 160 → 左留白 66。
-            // host 右 42 + 页面内边距 24 = 右留白 66。顶部不再额外下移：页头文字的墨迹上边缘
-            // 要和侧栏第一个导航项的顶边对齐。
-            _host.Margin = new Thickness(6, 0, 42, 0);
+            // 保留原来的右留白 48；侧栏 196 + host 左 -12 + 页面内边距 24 = 卡片左 208，
+            // 导航胶囊右 160 → 左留白 48；host 右 24 + 页面内边距 24 = 右留白 48。
+            // 顶部不再额外下移：页头文字的墨迹上边缘要和侧栏第一个导航项的顶边对齐。
+            _host.Margin = new Thickness(-12, 0, 24, 0);
             Grid.SetColumn(_host, 1);
             body.Children.Add(_host);
 
@@ -671,9 +671,9 @@ namespace QuadVitals.Settings
             {
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center,
-                // 右上角三个要素的右边缘对齐卡片右边缘：卡片右移至 1214 后，36 px 按钮的
-                // 右侧留白从 36 调到 54，对齐的仍是看得见的线条边缘。
-                Margin = new Thickness(0, 0, 54, 0),
+                // 右上角三个要素的右边缘对齐卡片右边缘：卡片右缘回到 1232，36 px 按钮的
+                // 右侧留白保持 36，对齐的仍是看得见的线条边缘。
+                Margin = new Thickness(0, 0, 36, 0),
                 RenderTransform = new TranslateTransform(0, 10)
             };
 
