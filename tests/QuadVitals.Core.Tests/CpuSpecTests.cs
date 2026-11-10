@@ -132,6 +132,52 @@ namespace QuadVitals.Core.Tests
             }
         }
 
+        /// <summary>
+        /// 仓库里那张表自身也要能过：一行写错就是那台机器永远查不到自己的 SKU。
+        /// 表格是人手改的，所以这里用真实文件跑一遍，而不是只验格式。
+        /// </summary>
+        private static void CpuSpecAssetBehaviour()
+        {
+            string path = FindRepoFile("assets\\cpu-specs.json");
+            True(path != null, "仓库里带着规格表文件");
+            if (path == null) return;
+
+            string json = File.ReadAllText(path, Encoding.UTF8);
+            CpuSpecTable table;
+            List<string> warnings;
+            string error;
+            True(CpuSpecTable.TryParse(json, out table, out warnings, out error), "表文件能解析 " + error);
+            Equal(0, warnings.Count, "没有行被丢弃");
+            True(table.Count >= 100, "覆盖至少 100 行（实际 " + table.Count + "）");
+
+            CpuSpecEntry entry;
+            True(table.TryLookup("13th Gen Intel(R) Core(TM) i9-13900K", out entry), "13900K 在表里");
+            Equal(125.0, entry.BaseWatts, "13900K 基础功耗");
+            Equal(253.0, entry.MaxWatts, "13900K 最大睿频功耗");
+            True(table.TryLookup("12th Gen Intel(R) Core(TM) i7-12700H", out entry), "12700H 在表里");
+            Equal(115.0, entry.MaxWatts, "12700H 最大睿频功耗");
+            True(table.TryLookup("Intel(R) Core(TM) Ultra 7 155H", out entry), "Core Ultra 155H 在表里");
+            Equal(28.0, entry.BaseWatts, "155H 基础功耗");
+            True(table.TryLookup("AMD Ryzen 7 7800X3D 8-Core Processor", out entry), "7800X3D 在表里");
+            Equal(162.0, entry.MaxWatts, "7800X3D 的 PPT");
+            True(table.TryLookup("AMD Ryzen 5 5700X3D 8-Core Processor", out entry), "5700X3D 在表里");
+            Equal(false, table.TryLookup("Intel(R) Xeon(R) Gold 6430", out entry), "未登记的型号不命中");
+        }
+
+        /// <summary>从测试程序的目录往上找仓库根，找不到返回 null。</summary>
+        private static string FindRepoFile(string relative)
+        {
+            string directory = AppDomain.CurrentDomain.BaseDirectory;
+            for (int i = 0; i < 8 && !string.IsNullOrEmpty(directory); i++)
+            {
+                string candidate = Path.Combine(directory, relative);
+                if (File.Exists(candidate)) return candidate;
+                DirectoryInfo parent = Directory.GetParent(directory);
+                directory = parent == null ? null : parent.FullName;
+            }
+            return null;
+        }
+
         private sealed class FakeSpecTransport : IUpdateTransport
         {
             private readonly string _text;
