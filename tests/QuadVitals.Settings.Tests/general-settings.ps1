@@ -179,7 +179,8 @@ $yPolicy = Row-Centre $policyLabel
 $yIndicator = Row-Centre $indicatorLabel
 $yAppearance = Row-Centre $groupAppearance
 Check 'the battery row sits under the performance group' (($null -ne $yStart) -and ($null -ne $yPerf) -and ($null -ne $yAuto) -and ($null -ne $yBattery) -and ($yAuto -gt $yStart) -and ($yBattery -gt $yPerf) -and ($yPerf -gt $yAuto)) ("start=$yStart auto=$yAuto perf=$yPerf battery=$yBattery")
-Check 'the style row sits under the appearance group, not performance' (($null -ne $yAppearance) -and ($null -ne $yPolicy) -and ($null -ne $yIndicator) -and ($yAppearance -gt $yPolicy) -and ($yIndicator -gt $yAppearance)) ("policy=$yPolicy appearance=$yAppearance indicator=$yIndicator")
+Check 'the appearance group sits above the performance group' (($null -ne $yAppearance) -and ($null -ne $yPerf) -and ($yAppearance -lt $yPerf)) ("appearance=$yAppearance perf=$yPerf")
+Check 'the style row sits under the appearance group' (($null -ne $yIndicator) -and ($null -ne $yAppearance) -and ($null -ne $yBattery) -and ($yIndicator -gt $yAppearance) -and ($yIndicator -lt $yBattery)) ("appearance=$yAppearance indicator=$yIndicator battery=$yBattery")
 
 function Left-Edge($element) {
     if ($null -eq $element) { return -999 }
@@ -208,7 +209,7 @@ if (($null -ne $renderPolicy) -and ($null -ne $generalPanel)) {
 }
 $panelRight = $generalPanel.ActualWidth - $generalPanel.Padding.Right
 Check 'the dropdown fills the rest of its row' ([math]::Abs($policyRight - $panelRight) -le 1) ("right=$policyRight panel=$panelRight")
-Check 'the rows sit close to each other' (([math]::Abs(($yPerf - $yAuto)) -le 44) -and ([math]::Abs(($yBattery - $yPerf)) -le 44)) ("auto=$yAuto perf=$yPerf battery=$yBattery")
+Check 'the performance rows sit close to each other' (([math]::Abs(($yBattery - $yPerf)) -le 44) -and ([math]::Abs(($yPolicy - $yBattery)) -le 44)) ("perf=$yPerf battery=$yBattery policy=$yPolicy")
 Check 'the panel no longer carries the spacing box' ($null -eq (Find-ById $generalRoot 'GeneralSpacingBox')) ''
 # 面板是“取消 / 保存”：勾选只是草稿，点保存才写盘。
 # The first walk over a freshly shown overlay sometimes returns nothing: retry like the other suites.
@@ -223,7 +224,7 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {
 Check 'the panel has cancel and save buttons' (($null -ne $generalSave) -and ($null -ne $generalClose)) ''
 # The extra height is reserved for settings rows that are not written yet: the buttons stay at the
 # bottom, so there is room for at least one more 34 px row between the last row and the buttons.
-$lastRowBottom = (Row-Centre $indicatorLabel) + 17
+$lastRowBottom = (Row-Centre $policyLabel) + 17
 $buttonTop = $generalSave.TranslatePoint((New-Object System.Windows.Point(0, 0)), $generalPanel).Y
 Check 'the card keeps one row of room for later settings' (($buttonTop - $lastRowBottom) -ge 34) ("room=" + [math]::Round($buttonTop - $lastRowBottom, 1))
 if (($null -ne $generalSave) -and ($null -ne $autoStart) -and ($null -ne $batterySwitch) -and ($null -ne $renderPolicy) -and ($null -ne $indicatorStyle)) {

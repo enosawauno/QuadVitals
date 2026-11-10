@@ -103,6 +103,30 @@ namespace QuadVitals.Settings
             AutomationProperties.SetName(autostart, "开机自启");
             body.Children.Add(CheckRow("开机自启", autostart, "登录系统后自动启动传感器", "GeneralAutostartLabel", "GeneralAutostartHint"));
 
+            // 外观设置放在性能设置上方：它只改指示器画法，不改变采样或渲染时机。
+            body.Children.Add(GroupHeader("外观设置", "GeneralGroupAppearance", true));
+
+            // 进度样式从设备卡弹窗挪过来：它是四格共用的一条设置，放在通用设置里才不会让人
+            // 以为只影响刚打开的那张卡。
+            DarkComboBox indicatorStyle = new DarkComboBox
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            AutomationProperties.SetAutomationId(indicatorStyle, "GeneralIndicatorStyle");
+            AutomationProperties.SetName(indicatorStyle, "进度样式");
+            int selectedStyle = 0;
+            for (int i = 0; i < IndicatorStyleLabels.Length; i++)
+            {
+                indicatorStyle.Items.Add(IndicatorStyleLabels[i]);
+                if (string.Equals(IndicatorStyleKeys[i], settings.IndicatorStyle,
+                                  StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedStyle = i;
+                }
+            }
+            indicatorStyle.SelectedIndex = selectedStyle;
+            body.Children.Add(FieldRow("进度样式", indicatorStyle, "GeneralIndicatorStyleLabel"));
+
             body.Children.Add(GroupHeader("性能设置", "GeneralGroupPerformance", true));
 
             CheckBox battery = new DarkCheckBox
@@ -133,30 +157,6 @@ namespace QuadVitals.Settings
             }
             renderPolicy.SelectedIndex = selectedPolicy;
             body.Children.Add(FieldRow("渲染策略", renderPolicy, "GeneralRenderPolicyLabel"));
-
-            // 进度样式是外观设置，不是性能项：它不改变采样或渲染时机，只改指示器画法。
-            body.Children.Add(GroupHeader("外观设置", "GeneralGroupAppearance", true));
-
-            // 进度样式从设备卡弹窗挪过来：它是四格共用的一条设置，放在通用设置里才不会让人
-            // 以为只影响刚打开的那张卡。
-            DarkComboBox indicatorStyle = new DarkComboBox
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-            AutomationProperties.SetAutomationId(indicatorStyle, "GeneralIndicatorStyle");
-            AutomationProperties.SetName(indicatorStyle, "进度样式");
-            int selectedStyle = 0;
-            for (int i = 0; i < IndicatorStyleLabels.Length; i++)
-            {
-                indicatorStyle.Items.Add(IndicatorStyleLabels[i]);
-                if (string.Equals(IndicatorStyleKeys[i], settings.IndicatorStyle,
-                                  StringComparison.OrdinalIgnoreCase))
-                {
-                    selectedStyle = i;
-                }
-            }
-            indicatorStyle.SelectedIndex = selectedStyle;
-            body.Children.Add(FieldRow("进度样式", indicatorStyle, "GeneralIndicatorStyleLabel"));
 
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
