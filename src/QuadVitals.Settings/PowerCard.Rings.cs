@@ -20,7 +20,7 @@ namespace QuadVitals.Settings
     internal sealed partial class PowerCard
     {
         private const double RingSize = 128;
-        private const double RingThickness = 10;
+        private const double RingThickness = 13;
         private const double OuterRadius = 56;
         private const double InnerRadius = 40;
 
