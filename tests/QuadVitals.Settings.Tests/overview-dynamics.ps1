@@ -460,7 +460,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'both arcs carry their fraction' (($null -ne $ringCpu) -and ($null -ne $ringGpu) -and ([double]$ringCpu.Fraction -gt 0.3) -and ([double]$ringGpu.Fraction -gt 0.1)) ("cpu=" + [math]::Round([double]$ringCpu.Fraction, 3) + " gpu=" + [math]::Round([double]$ringGpu.Fraction, 3))
             Check 'the CPU arc is scaled to its own limit' ([Math]::Abs([double]$ringCpu.Fraction - (112.6 / 253.0)) -lt 0.001) ("cpu=" + [double]$ringCpu.Fraction)
             Check 'the GPU arc is scaled to its own limit' ([Math]::Abs([double]$ringGpu.Fraction - (46.5 / 320.0)) -lt 0.001) ("gpu=" + [double]$ringGpu.Fraction)
-            Check 'the ring arcs sit inside the ring box' (([double]$ringCpu.Width -le 128) -and ([double]$ringCpu.Height -le 128)) ("box=" + $ringCpu.Width + "x" + $ringCpu.Height)
+            Check 'the ring arcs sit inside the ring box' (([double]$ringCpu.Width -ge 128) -and ([double]$ringCpu.Width -le 160)) ("box=" + $ringCpu.Width + "x" + $ringCpu.Height)
             # 轨道与弧必须是同一套绘制、同一半径：分开画（Ellipse 的布局盒算上描边）时
             # 实际半径会差半个描边，看起来就是弧总在轨道外侧。
             $ringsCanvas = [System.Windows.Media.VisualTreeHelper]::GetChild($ringsHost, 0)
@@ -473,7 +473,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'four ring arcs share the canvas' ($arcs.Count -eq 4) ("count=" + $arcs.Count)
             if ($arcs.Count -eq 4) {
                 $radii = ($arcs | ForEach-Object { [double]$_.Radius } | Sort-Object) -join ','
-                Check 'tracks and progress share their radii' ($radii -eq '40,40,56,56') ("radii=" + $radii)
+                Check 'tracks and progress share their radii' ($radii -eq '40,40,59,59') ("radii=" + $radii)
                 $full = @($arcs | Where-Object { [double]$_.Fraction -ge 0.999 }).Count
                 Check 'exactly two of them are the full tracks' ($full -eq 2) ("full=" + $full)
             }

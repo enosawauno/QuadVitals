@@ -21,7 +21,7 @@ namespace QuadVitals.Settings
     {
         private const double RingSize = 128;
         private const double RingThickness = 13;
-        private const double OuterRadius = 56;
+        private const double OuterRadius = 59;
         private const double InnerRadius = 40;
 
         private readonly RingArc _ringCpu = new RingArc(OuterRadius);
