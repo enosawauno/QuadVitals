@@ -61,14 +61,6 @@ namespace QuadVitals.Settings
             grid.Children.Add(title);
 
             StackPanel fields = new StackPanel { Margin = new Thickness(0, 16, 0, 0), VerticalAlignment = VerticalAlignment.Top };
-            fields.Children.Add(new TextBlock
-            {
-                Text = ModeLabel,
-                FontSize = 12,
-                Foreground = Theme.TextTertiaryBrush,
-                Margin = new Thickness(0, 0, 0, 8)
-            });
-
             List<KeyValuePair<string, string>> options = new List<KeyValuePair<string, string>>
             {
                 new KeyValuePair<string, string>(AppSettings.CpuPowerTdp, "TDP（基础功耗）"),
@@ -82,35 +74,12 @@ namespace QuadVitals.Settings
             int selected = AppSettings.CpuPowerMtp == (settings == null ? null : settings.CpuPowerMode) ? 1 : 0;
             for (int i = 0; i < options.Count; i++) modeBox.Items.Add(options[i].Value);
             modeBox.SelectedIndex = selected;
-            fields.Children.Add(modeBox);
 
-            // 一句话说明两者差在哪：一个按规格基础功耗，一个按睿频上限。
-            fields.Children.Add(new TextBlock
-            {
-                Text = "分母取处理器规格：基础功耗决定条形比例偏向保守，最大睿频功耗贴近满载读数。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.NoWrap,
-                Margin = new Thickness(0, 8, 0, 0)
-            });
-
-            Grid.SetRow(fields, 1);
-            grid.Children.Add(fields);
-
-            // 第二项：指示样式（条形 / 圆环）。与分母互不影响：分母决定比例，样式只决定怎么画。
-            StackPanel styleBlock = new StackPanel { Margin = new Thickness(0, 24, 0, 0) };
-            styleBlock.Children.Add(new TextBlock
-            {
-                Text = StyleLabel,
-                FontSize = 12,
-                Foreground = Theme.TextTertiaryBrush,
-                Margin = new Thickness(0, 0, 0, 8)
-            });
-
+            // 第二项：指示样式（条形 / 圆环）。
             List<KeyValuePair<string, string>> styles = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string, string>(AppSettings.PowerStyleBars, "条形指示图（当前样式）"),
-                new KeyValuePair<string, string>(AppSettings.PowerStyleRings, "圆环（外环 CPU、内环 GPU）")
+                new KeyValuePair<string, string>(AppSettings.PowerStyleBars, "条形指示图"),
+                new KeyValuePair<string, string>(AppSettings.PowerStyleRings, "圆环")
             };
             DarkComboBox styleBox = new DarkComboBox();
             AutomationProperties.SetAutomationId(styleBox, "PowerCardStyle");
@@ -120,16 +89,13 @@ namespace QuadVitals.Settings
                 AppSettings.PowerStyleRings, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
             for (int i = 0; i < styles.Count; i++) styleBox.Items.Add(styles[i].Value);
             styleBox.SelectedIndex = styleIndex;
-            styleBlock.Children.Add(styleBox);
-            styleBlock.Children.Add(new TextBlock
-            {
-                Text = "两种样式同语义：弧长或条长等于占各自功耗上限的比例。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.NoWrap,
-                Margin = new Thickness(0, 8, 0, 0)
-            });
-            fields.Children.Add(styleBlock);
+
+            // 两行都按通用设置的字段行排：标签在左、下拉在右，控件落在同一条竖线上。
+            fields.Children.Add(FieldRow(ModeLabel, modeBox, "CpuPowerModeLabel"));
+            fields.Children.Add(FieldRow(StyleLabel, styleBox, "PowerCardStyleLabel"));
+
+            Grid.SetRow(fields, 1);
+            grid.Children.Add(fields);
 
             StackPanel buttons = new StackPanel
             {
@@ -153,6 +119,38 @@ namespace QuadVitals.Settings
 
             panel.Child = grid;
             return panel;
+        }
+
+        /// <summary>
+        /// 标签在左、控件在右的字段行，与通用设置里的下拉行同一套尺寸：
+        /// 行高 34、标签 13 px 主文字、固定标签列宽让两行控件落在同一条竖线上。
+        /// </summary>
+        private const double LabelColumnWidth = 72;
+
+        private static FrameworkElement FieldRow(string label, FrameworkElement control, string labelAutomationId)
+        {
+            Grid row = new Grid { Height = 34, Margin = new Thickness(0, 0, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(LabelColumnWidth) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            TextBlock caption = new TextBlock
+            {
+                Text = label,
+                FontSize = 13,
+                Foreground = Theme.TextPrimaryBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                // 间距放在标签的右边距里：控件带左外边距时下拉弹层会跟着偏到格子左边。
+                Margin = new Thickness(0, 0, 20, 0)
+            };
+            AutomationProperties.SetAutomationId(caption, labelAutomationId);
+            row.Children.Add(caption);
+
+            control.VerticalAlignment = VerticalAlignment.Center;
+            DarkComboBox combo = control as DarkComboBox;
+            if (combo != null) combo.PopupOffset = 14;
+            Grid.SetColumn(control, 1);
+            row.Children.Add(control);
+            return row;
         }
 
         private void Save(DarkComboBox box, List<KeyValuePair<string, string>> options,

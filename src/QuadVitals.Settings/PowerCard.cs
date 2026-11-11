@@ -441,7 +441,8 @@ namespace QuadVitals.Settings
                 FontSize = 11.5,
                 Foreground = Theme.TextSecondaryBrush,
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, 10, 8)
+                // 让出左侧颜色点那一列：合计与 CPU / GPU 两个标签落在同一条竖线上。
+                Margin = new Thickness(13, 0, 10, 8)
             };
             AutomationProperties.SetAutomationId(label, "PowerTotalLabel");
 
@@ -489,8 +490,9 @@ namespace QuadVitals.Settings
 
             value.Text = MetricFormat.Invalid;
             value.FontSize = ComponentValueSize;
-            // 固定宽度：数值从 9.2 变成 144.8 时不会把单位、上限跟着推走（那是每秒一次的抖动）。
-            value.Width = 52;
+            // 数值从左边起排：两行数字的左缘对齐（112.9 与 45.8 不能右对齐）；
+            // 宽度不再写死，单位紧跟在数字后面，不会在固定宽度里漂出一段空白。
+            value.Width = double.NaN;
             value.TextAlignment = TextAlignment.Left;
             value.FontWeight = FontWeights.SemiBold;
             value.Foreground = Theme.TextPrimaryBrush;
@@ -500,8 +502,8 @@ namespace QuadVitals.Settings
 
             unit.Text = string.Empty;
             unit.FontSize = 12;
-            // 单位也固定宽度：没有数据时单位为空，行宽不能因此缩一截。
-            unit.Width = 12;
+            // 单位不占固定宽：数字变长时它跟着数字走，始终贴在数字右缘。
+            unit.Width = double.NaN;
             unit.TextAlignment = TextAlignment.Left;
             unit.Foreground = Theme.TextSecondaryBrush;
             unit.VerticalAlignment = VerticalAlignment.Bottom;

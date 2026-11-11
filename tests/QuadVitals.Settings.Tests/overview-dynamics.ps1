@@ -351,6 +351,21 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the CPU power is shown on its own line' ($powerCpuText.Text -eq '112.6') ("cpu=" + $powerCpuText.Text)
             Check 'the GPU power is shown on its own line' ($powerGpuText.Text -eq '46.5') ("gpu=" + $powerGpuText.Text)
             Check 'each wattage carries its own unit' (($powerCpuUnit.Text -eq 'W') -and ($powerGpuUnit.Text -eq 'W')) ''
+            # 读数块列系统：合计与 CPU / GPU 同一条左边缘；数值右对齐，单位才能紧跟在数字后。
+            $powerTotalLabel = Find-ById $ovRoot 'PowerTotalLabel'
+            $powerCpuLabel = Find-ById $ovRoot 'PowerCpuLabel'
+            if (($null -ne $powerTotalLabel) -and ($null -ne $powerCpuLabel)) {
+                $totalLabelX = $powerTotalLabel.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+                $cpuLabelX = $powerCpuLabel.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+                Check 'the hero label shares the row label column' ([Math]::Abs($totalLabelX - $cpuLabelX) -le 1) ("total=" + [Math]::Round($totalLabelX, 1) + " cpu=" + [Math]::Round($cpuLabelX, 1))
+            }
+            Check 'row values are left-aligned from one edge' (($powerCpuText.TextAlignment -eq [System.Windows.TextAlignment]::Left) -and ($powerGpuText.TextAlignment -eq [System.Windows.TextAlignment]::Left)) ''
+            $cpuValueX = $powerCpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            $gpuValueX = $powerGpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            Check 'both rows start their numbers on the same column' ([Math]::Abs($cpuValueX - $gpuValueX) -le 0.5) ("cpu=" + [Math]::Round($cpuValueX, 1) + " gpu=" + [Math]::Round($gpuValueX, 1))
+            $cpuValueWidth = [double]$powerCpuText.ActualWidth
+            $cpuUnitX = $powerCpuUnit.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+            Check 'the unit sits right after the number' ([Math]::Abs(($cpuValueX + $cpuValueWidth + 3) - $cpuUnitX) -le 1) ("gap=" + [Math]::Round($cpuUnitX - ($cpuValueX + $cpuValueWidth), 1))
             Check 'the component wattages step down from the total' (([double]$powerCpuText.FontSize -eq 18) -and ([double]$powerGpuText.FontSize -eq 18) -and ([double]$powerCpuText.FontSize -lt [double]$powerTotalText.FontSize)) ''
             # 统计范围只在标题旁「?」徽标的 tooltip 里；标题行右侧不再重复一句「CPU + GPU」。
             Check 'the redundant scope caption is gone' ($null -eq (Find-ById $ovRoot 'PowerScope')) ''
@@ -570,7 +585,31 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
                 Check 'the dialog also offers the indicator style' (($null -ne $styleBox) -and ($styleBox.Items.Count -eq 2)) ("items=" + $(if ($null -eq $styleBox) { 0 } else { $styleBox.Items.Count }))
                 if ($null -ne $styleBox) {
                     Check 'the style dropdown offers bars and rings' ((($styleBox.Items[0] -as [string]) -like '条形*') -and (($styleBox.Items[1] -as [string]) -like '圆环*')) ("items=" + ($styleBox.Items -join ' / '))
+                    # 选项后缀（当前样式 / 外环内环）删掉：下拉本身就是当前值，括号描述不用写在选项里。
+                    $paren = [string][char]0xFF08
+                    Check 'the style labels carry no parenthetical hints' ((-not ($styleBox.Items[0] -as [string]).Contains($paren)) -and (-not ($styleBox.Items[1] -as [string]).Contains($paren))) ("items=" + ($styleBox.Items -join ' / '))
                 }
+                # 每项占一行：标签在左、下拉在右，两者垂直居中对齐；说明文字整行删掉。
+                $modeLabel = Find-ById $ovRoot 'CpuPowerModeLabel'
+                $styleLabel = Find-ById $ovRoot 'PowerCardStyleLabel'
+                if (($null -ne $modeLabel) -and ($null -ne $styleLabel) -and ($null -ne $modeBox) -and ($null -ne $styleBox)) {
+                    $modeLabelHalf = [double]$modeLabel.ActualHeight / 2
+                    $modeBoxHalf = [double]$modeBox.ActualHeight / 2
+                    $styleLabelHalf = [double]$styleLabel.ActualHeight / 2
+                    $styleBoxHalf = [double]$styleBox.ActualHeight / 2
+                    $modeLabelPoint = $modeLabel.TranslatePoint((New-Object System.Windows.Point(0, $modeLabelHalf)), $ovRoot)
+                    $modeBoxPoint = $modeBox.TranslatePoint((New-Object System.Windows.Point(0, $modeBoxHalf)), $ovRoot)
+                    $styleLabelPoint = $styleLabel.TranslatePoint((New-Object System.Windows.Point(0, $styleLabelHalf)), $ovRoot)
+                    $styleBoxPoint = $styleBox.TranslatePoint((New-Object System.Windows.Point(0, $styleBoxHalf)), $ovRoot)
+                    Check 'each setting row keeps label-left and dropdown-right' (($modeLabelPoint.X -lt $modeBoxPoint.X) -and ($styleLabelPoint.X -lt $styleBoxPoint.X)) ("modeLabel=" + [Math]::Round($modeLabelPoint.X, 1) + " modeBox=" + [Math]::Round($modeBoxPoint.X, 1))
+                    Check 'label and dropdown share one row centre' (([Math]::Abs($modeLabelPoint.Y - $modeBoxPoint.Y) -le 2) -and ([Math]::Abs($styleLabelPoint.Y - $styleBoxPoint.Y) -le 2)) ("dy=" + [Math]::Round($modeLabelPoint.Y - $modeBoxPoint.Y, 1))
+                }
+                $dialogPanel = Find-ById $ovRoot 'PowerSettingsDialog'
+                $shortLines = @()
+                if ($null -ne $dialogPanel) {
+                    $shortLines = @(Find-ByTypeName $dialogPanel 'TextBlock' | Where-Object { [double]$_.FontSize -eq 11 })
+                }
+                Check 'the dialog no longer explains each setting in a smaller line' ($shortLines.Count -eq 0) ("lines=" + $shortLines.Count)
                 $ovWindow.CloseOverlay()
                 $ovWindow.CurrentSettings.CpuPowerMode = $savedMode
                 Pump 150
