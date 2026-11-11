@@ -494,7 +494,7 @@ namespace QuadVitals.Core.Tests
             MetricFlags known = MetricFlags.ElevationKnown;
             Equal("普通权限，无法获取CPU温度和风扇转速数据", AgentDiagnostics.ElevationLine(known), "已知未提权");
             Equal("管理员：CPU 温度与风扇可读", AgentDiagnostics.ElevationLine(known | MetricFlags.Elevated), "已提权");
-            Equal("未上报（旧版 Agent）", AgentDiagnostics.ElevationLine(MetricFlags.None), "旧 Agent 不下断言");
+            Equal("未上报（旧版程序）", AgentDiagnostics.ElevationLine(MetricFlags.None), "旧版不置提权位时不凭空断言");
             True(AgentDiagnostics.IsKnownUnelevated(known), "flags 与快照两个入口同判");
             True(!AgentDiagnostics.IsKnownUnelevated(known | MetricFlags.Elevated), "提权不算未提权");
 

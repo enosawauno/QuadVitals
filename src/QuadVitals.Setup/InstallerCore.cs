@@ -844,7 +844,7 @@ namespace QuadVitals.Setup
             { "install logon task (one UAC prompt)", "创建开机自启任务" },
             { "remove logon task (one UAC prompt)", "删除开机自启任务" },
             { "unregister DeskBand", "注销任务栏组件" },
-            { "start agent", "启动 Agent" },
+            { "start agent", "启动传感器" },
             { "keep install files (-KeepFiles)", "保留安装文件" },
             { "remove user data", "删除用户数据" },
             { "remove ", "删除" }

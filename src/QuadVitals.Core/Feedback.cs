@@ -138,20 +138,20 @@ namespace QuadVitals.Core
                 {
                     if (reader == null)
                     {
-                        context.AgentSummary = "Agent 未运行（共享内存通道不存在）";
+                        context.AgentSummary = "传感器未运行（共享内存通道不存在）";
                     }
                     else
                     {
                         MetricsSnapshot snapshot = reader.TryRead();
                         context.AgentSummary = snapshot == null
-                            ? "Agent 通道存在，但读不到一致快照"
+                            ? "传感器通道存在，但读不到一致快照"
                             : DescribeAgent(snapshot);
                     }
                 }
             }
             catch (Exception ex)
             {
-                context.AgentSummary = "读取 Agent 状态失败：" + ex.GetType().Name;
+                context.AgentSummary = "读取传感器状态失败：" + ex.GetType().Name;
             }
 
             return context;
@@ -619,7 +619,7 @@ namespace QuadVitals.Core
             {
                 metadata.Add("CPU：" + (string.IsNullOrEmpty(context.CpuModel) ? "未知" : context.CpuModel));
                 metadata.Add("内存：" + MetricFormat.Bytes(context.MemoryTotalBytes));
-                metadata.Add("Agent：" + (string.IsNullOrEmpty(context.AgentSummary) ? "未知" : context.AgentSummary));
+                metadata.Add("传感器：" + (string.IsNullOrEmpty(context.AgentSummary) ? "未知" : context.AgentSummary));
                 metadata.Add("设置：" + (string.IsNullOrEmpty(context.SettingsSummary) ? "未知" : context.SettingsSummary));
             }
 
@@ -917,7 +917,7 @@ namespace QuadVitals.Core
             if (!string.IsNullOrEmpty(context.CpuModel)) text.AppendLine("CPU: " + context.CpuModel);
             if (context.MemoryTotalBytes > 0)
                 text.AppendLine("内存: " + MetricFormat.Bytes(context.MemoryTotalBytes));
-            if (!string.IsNullOrEmpty(context.AgentSummary)) text.AppendLine("Agent: " + context.AgentSummary);
+            if (!string.IsNullOrEmpty(context.AgentSummary)) text.AppendLine("传感器: " + context.AgentSummary);
             if (!string.IsNullOrEmpty(context.SettingsSummary)) text.AppendLine("设置: " + context.SettingsSummary);
             return text.ToString();
         }

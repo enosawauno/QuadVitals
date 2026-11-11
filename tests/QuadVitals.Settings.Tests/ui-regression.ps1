@@ -1403,6 +1403,20 @@ Check 'a dead halo holds still at half opacity' (($null -ne $deadLight.Halo) -an
 Check 'the action restarts the sensor while alive' ((Action-Label $liveAction) -eq $restartSensor) "text=$(Action-Label $liveAction)"
 Check 'the action starts the sensor while offline' ((Action-Label $deadAction) -eq $startSensor) "text=$(Action-Label $deadAction)"
 Check 'the action carries no icon' ($null -eq (Action-Shield $liveAction)) 'label only expected'
+
+# Restarting swaps the text block for a ring. The body keeps its space (Hidden, not Collapsed) so the
+# card does not resize mid-restart, and the ring is invisible until the click happens.
+$liveRing = Find-ById $livePanel 'AgentLoadingRing'
+$ringParent = $null
+if ($null -ne $liveRing) { $ringParent = $liveRing.Parent }
+Check 'the panel carries a loading ring' ($null -ne $liveRing) ''
+Check 'the ring is hidden until a restart starts' (($null -ne $liveRing) -and ($liveRing.Visibility -eq [System.Windows.Visibility]::Collapsed)) "visibility=$($liveRing.Visibility)"
+Check 'the ring shares one stage with the detail rows' (($ringParent -is [System.Windows.Controls.Grid]) -and ($ringParent.Children.Count -eq 2)) ''
+
+$dialogSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\AgentStatusDialog.cs')
+Check 'restarting hides the text without collapsing it' ($dialogSource -match 'body\.Visibility = Visibility\.Hidden') ''
+Check 'restarting centres the action row' ($dialogSource -match 'buttons\.HorizontalAlignment = HorizontalAlignment\.Center') ''
+Check 'a failed restart puts the panel back' ($dialogSource -match 'if \(ok\) return;[\s\S]{0,200}?body\.Visibility = Visibility\.Visible') ''
 Check 'the panel names the shared-memory channel' ((Wait-ById $livePanel 'AgentSubline') -ne $null) ''
 Check 'the panel names the shared-memory channel' ((Find-ById $livePanel 'AgentSubline') -ne $null) ''
 

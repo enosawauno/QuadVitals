@@ -56,18 +56,30 @@ namespace QuadVitals.Settings
                 Margin = new Thickness(0, 0, 0, 14)
             });
 
-            content.Children.Add(BuildStateRow(state));
-            content.Children.Add(new Border
+            // 重启期间面板只留一个加载环：正文用 Hidden 而不是 Collapsed，占位还在，
+            // 卡片尺寸因此不跳；环叠在同一个格子里。
+            StackPanel body = new StackPanel();
+            body.Children.Add(BuildStateRow(state));
+            body.Children.Add(new Border
             {
                 Height = 1,
                 Margin = new Thickness(0, 16, 0, 14),
                 Background = Theme.BorderSubtleBrush
             });
 
-            content.Children.Add(DetailRow("通道", "Local\\QuadVitals.Metrics.v1"));
-            content.Children.Add(DetailRow("采样数据", DescribeData(state)));
-            content.Children.Add(DetailRow("权限", AgentDiagnostics.ElevationLine(state.Flags)));
-            content.Children.Add(DetailRow("自动恢复", AutoRecoveryLine()));
+            body.Children.Add(DetailRow("通道", "Local\\QuadVitals.Metrics.v1"));
+            body.Children.Add(DetailRow("采样数据", DescribeData(state)));
+            body.Children.Add(DetailRow("权限", AgentDiagnostics.ElevationLine(state.Flags)));
+            body.Children.Add(DetailRow("自动恢复", AutoRecoveryLine()));
+
+            RotateTransform spin = new RotateTransform(0);
+            FrameworkElement ring = BuildLoadingRing(spin);
+            ring.Visibility = Visibility.Collapsed;
+
+            Grid stage = new Grid();
+            stage.Children.Add(body);
+            stage.Children.Add(ring);
+            content.Children.Add(stage);
 
             StackPanel buttons = new StackPanel
             {
@@ -101,7 +113,21 @@ namespace QuadVitals.Settings
                     // 否则点下去到面板重建之间看起来像没反应。
                     action.IsEnabled = false;
                     actionLabel.Text = "重启中…";
-                    _window.RestartAgentFromDialog();
+                    body.Visibility = Visibility.Hidden;
+                    ring.Visibility = Visibility.Visible;
+                    buttons.HorizontalAlignment = HorizontalAlignment.Center;
+                    StartSpin(spin);
+                    _window.RestartAgentFromDialog(ok =>
+                    {
+                        // 成功时面板直接关掉，不用复位；失败要把正文和按钮还原，否则面板停在环上。
+                        if (ok) return;
+                        body.Visibility = Visibility.Visible;
+                        ring.Visibility = Visibility.Collapsed;
+                        spin.BeginAnimation(RotateTransform.AngleProperty, null);
+                        buttons.HorizontalAlignment = HorizontalAlignment.Right;
+                        action.IsEnabled = true;
+                        actionLabel.Text = "重启传感器";
+                    });
                 }
                 else
                 {
@@ -256,6 +282,60 @@ namespace QuadVitals.Settings
             }
 
             return light;
+        }
+
+        /// <summary>
+        /// 重启期间的环状加载：一圈淡轨道 + 一段绕中心转的弧。RDP、WPF 软件渲染与电池供电下逐帧
+        /// 动画本来就被禁，那时只留静态的一圈，不用一个不动的环假装在转。
+        /// </summary>
+        private static FrameworkElement BuildLoadingRing(RotateTransform spin)
+        {
+            Grid host = new Grid
+            {
+                Width = 34,
+                Height = 34,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            AutomationProperties.SetAutomationId(host, "AgentLoadingRing");
+
+            host.Children.Add(new Ellipse
+            {
+                Width = 34,
+                Height = 34,
+                Stroke = Theme.AccentGreenBrush,
+                StrokeThickness = 3,
+                Opacity = 0.18
+            });
+
+            Ellipse arc = new Ellipse
+            {
+                Width = 34,
+                Height = 34,
+                Stroke = Theme.AccentGreenBrush,
+                StrokeThickness = 3,
+                StrokeDashArray = new DoubleCollection(new double[] { 2.1, 4.4 }),
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransform = spin
+            };
+            host.Children.Add(arc);
+            return host;
+        }
+
+        private static void StartSpin(RotateTransform spin)
+        {
+            if (RenderEnvironment.AnimationsDisabled)
+            {
+                spin.Angle = 120;
+                return;
+            }
+            spin.BeginAnimation(RotateTransform.AngleProperty,
+                new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(900))
+                {
+                    RepeatBehavior = RepeatBehavior.Forever
+                });
         }
 
         private static string StateLine(AgentStateInfo state)

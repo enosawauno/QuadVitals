@@ -62,7 +62,7 @@ namespace QuadVitals.Core
         /// </summary>
         public static string ElevationLine(MetricFlags flags)
         {
-            if ((flags & MetricFlags.ElevationKnown) == 0) return "未上报（旧版 Agent）";
+            if ((flags & MetricFlags.ElevationKnown) == 0) return "未上报（旧版程序）";
             return (flags & MetricFlags.Elevated) != 0
                 ? "管理员：CPU 温度与风扇可读"
                 : "普通权限，无法获取CPU温度和风扇转速数据";

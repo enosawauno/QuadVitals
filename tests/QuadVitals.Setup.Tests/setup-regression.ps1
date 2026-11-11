@@ -50,6 +50,8 @@ $S_OPEN_DASHBOARD   = Str 0x6253,0x5F00,0x4EEA,0x8868,0x76D8                    
 $S_REINSTALL        = Str 0x91CD,0x65B0,0x5B89,0x88C5                            # reinstall
 $S_REUNINSTALL      = Str 0x91CD,0x65B0,0x5378,0x8F7D                            # re-uninstall
 $S_BAND_RELOADED    = Str 0x5DF2,0x968F,0x8D44,0x6E90,0x7BA1,0x7406,0x5668       # "band reloaded"
+$S_TAGLINE          = Str 0x4EFB,0x52A1,0x680F,0x5E38,0x9A7B,0x663E,0x793A       # the old install tagline
+$S_UNINSTALL_LINE   = Str 0x5C06,0x4ECE,0x8FD9,0x53F0,0x7535,0x8111,0x79FB,0x9664  # "removes from this PC"
 
 function New-Win([bool]$uninstall) {
     $ctor = $windowType.GetConstructor([type[]]@([string], [bool], [string]))
@@ -139,6 +141,7 @@ Check 'install: no admin check box' (($boxes | Where-Object { ([string]$_.Conten
 Check 'install: no admin-authorisation line' (-not (Has-Text $host1 $S_ADMIN_GRANT)) ''
 Check 'install: no will-close line' (-not (Has-Text $host1 $S_WILL_CLOSE)) ''
 Check 'install: no download/SmartScreen line' (-not (Has-Text $host1 $S_DOWNLOADED)) ''
+Check 'install: no tagline under the heading' (-not (Has-Text $host1 $S_TAGLINE)) ''
 
 $win2 = New-Win $true
 $host2 = Host $win2
@@ -146,6 +149,7 @@ $boxes2 = CheckBoxes $host2
 Check 'uninstall: one check box' ($boxes2.Count -eq 1) "(got $($boxes2.Count))"
 Check 'uninstall: keep-settings box' (($boxes2 | Where-Object { ([string]$_.Content).Contains($S_KEEP_SETTINGS) }).Count -eq 1) ''
 Check 'uninstall: no admin-authorisation line' (-not (Has-Text $host2 $S_ADMIN_GRANT)) ''
+Check 'uninstall: keeps its removal line' (Has-Text $host2 $S_UNINSTALL_LINE) ''
 
 # ---- finish page: both exits close the window ------------------------------------------------
 

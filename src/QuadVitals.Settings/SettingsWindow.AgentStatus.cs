@@ -135,16 +135,16 @@ namespace QuadVitals.Settings
         /// 温度与显卡的读取会话都在进程启动时建立，驱动被重置或 NVML 掉线后只有重开进程能重新读到；
         /// 只让 Agent 再发布一帧（原来的「刷新」）改不了这件事。
         /// </summary>
-        public void RestartAgentFromDialog()
+        public void RestartAgentFromDialog(Action<bool> onFinished = null)
         {
-            RestartAgentFromDialog(null);
+            RestartAgentFromDialog(null, onFinished);
         }
 
         /// <param name="reason">
         /// Non-null when the data watchdog asked for this restart: the attempt stays silent and
         /// leaves a line in <c>agent-auto.log</c> instead of a dialog over whatever is full-screen.
         /// </param>
-        private void RestartAgentFromDialog(string reason)
+        private void RestartAgentFromDialog(string reason, Action<bool> onFinished = null)
         {
             if (_agentRestartInProgress) return;
             if (reason == null) _metricWatch.Reset();
@@ -175,6 +175,7 @@ namespace QuadVitals.Settings
                     {
                         // 自动尝试不在全屏游戏上弹窗；原因留在 agent-auto.log。
                         if (reason == null) ShowNotice(error, true);
+                        if (onFinished != null) onFinished(false);
                         return;
                     }
                     // 新进程 = 新的采样会话：面板上的数据整套重来，旧进程的曲线与峰值不留在上面。
@@ -183,9 +184,11 @@ namespace QuadVitals.Settings
                     {
                         ResetDisplayedData();
                         if (IsOverlayOpen) CloseOverlay();
+                        if (onFinished != null) onFinished(true);
                         return;
                     }
                     ScheduleAgentPanelRefresh(250);
+                    if (onFinished != null) onFinished(true);
                 });
             });
         }

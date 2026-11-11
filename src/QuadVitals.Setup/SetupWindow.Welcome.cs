@@ -21,9 +21,11 @@ namespace QuadVitals.Setup
             StackPanel stack = new StackPanel();
 
             stack.Children.Add(Heading(_uninstall ? "卸载 QuadVitals " + _version : "安装 QuadVitals " + _version));
-            stack.Children.Add(Subtitle(_uninstall
-                ? "将从这台电脑移除 QuadVitals 的文件、任务栏组件和登录启动项"
-                : "任务栏常驻显示 CPU / 内存 / 温度 / 网速"));
+            // 安装页不写功能摘要：标题已经说明装什么，再列一行指标只是重复一遍。
+            if (_uninstall)
+            {
+                stack.Children.Add(Subtitle("将从这台电脑移除 QuadVitals 的文件、任务栏组件和登录启动项"));
+            }
 
             if (_uninstall)
             {
