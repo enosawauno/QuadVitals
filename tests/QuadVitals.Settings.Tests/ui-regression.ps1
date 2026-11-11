@@ -1412,6 +1412,21 @@ if ($null -ne $liveRing) { $ringParent = $liveRing.Parent }
 Check 'the panel carries a loading ring' ($null -ne $liveRing) ''
 Check 'the ring is hidden until a restart starts' (($null -ne $liveRing) -and ($liveRing.Visibility -eq [System.Windows.Visibility]::Collapsed)) "visibility=$($liveRing.Visibility)"
 Check 'the ring shares one stage with the detail rows' (($ringParent -is [System.Windows.Controls.Grid]) -and ($ringParent.Children.Count -eq 2)) ''
+Check 'the loading ring is sized for the panel, not for a badge' (($null -ne $liveRing) -and ($liveRing.Width -ge 72)) "width=$($liveRing.Width)"
+
+# A ring made of evenly spaced dashes reads as a static circle: the arc has to be asymmetric for the
+# rotation to be visible at all. 270 degrees of arc plus a 90 degree gap is the shape to pin down.
+$ringArc = $null
+if ($null -ne $liveRing) {
+    $ringArc = @(Find-ByTypeName $liveRing 'Ellipse' | Where-Object { $null -ne $_.StrokeDashArray -and $_.StrokeDashArray.Count -eq 2 }) | Select-Object -First 1
+}
+$dashVisible = 0
+$dashTotal = 1
+if ($null -ne $ringArc) {
+    $dashVisible = $ringArc.StrokeDashArray[0]
+    $dashTotal = $ringArc.StrokeDashArray[0] + $ringArc.StrokeDashArray[1]
+}
+Check 'the spinner arc is asymmetric so the turn is visible' (($null -ne $ringArc) -and ([Math]::Abs(($dashVisible / $dashTotal) - 0.75) -lt 0.03)) "visible=$dashVisible total=$dashTotal"
 
 $dialogSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\AgentStatusDialog.cs')
 Check 'restarting hides the text without collapsing it' ($dialogSource -match 'body\.Visibility = Visibility\.Hidden') ''

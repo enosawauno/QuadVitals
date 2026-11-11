@@ -285,38 +285,66 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// 重启期间的环状加载：一圈淡轨道 + 一段绕中心转的弧。RDP、WPF 软件渲染与电池供电下逐帧
-        /// 动画本来就被禁，那时只留静态的一圈，不用一个不动的环假装在转。
+        /// 重启期间的环状加载：一圈淡轨道加一段 270° 的弧。均匀虚线整圈旋转看上去是静止的，
+        /// 所以弧必须不对称（一个缺口当“头”），转速恒定（加了缓动会一顿一顿）。RDP、WPF 软件
+        /// 渲染与电池供电下逐帧动画本来就被禁，那时只留静态的一圈。
         /// </summary>
         private static FrameworkElement BuildLoadingRing(RotateTransform spin)
         {
+            const double diameter = 80;
+            const double thickness = 6;
+
+            // 虚线段长度按“描边宽度为 1 单位”计，所以 270° + 90° 缺口要自己换算周长。
+            double circumference = Math.PI * (diameter - thickness);
+            double units = circumference / thickness;
+            double visible = units * 0.75;
+
             Grid host = new Grid
             {
-                Width = 34,
-                Height = 34,
+                Width = diameter + 28,
+                Height = diameter + 28,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
             AutomationProperties.SetAutomationId(host, "AgentLoadingRing");
 
+            // 一层很淡的绿晕，让环在空面板上不是一块孤立的线；静态，不跟着转。
+            RadialGradientBrush haloBrush = new RadialGradientBrush
+            {
+                MappingMode = BrushMappingMode.RelativeToBoundingBox,
+                GradientOrigin = new Point(0.5, 0.5),
+                Center = new Point(0.5, 0.5),
+                RadiusX = 0.5,
+                RadiusY = 0.5
+            };
+            haloBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0x1C, 0x1D, 0xB9, 0x54), 0.0));
+            haloBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0x1D, 0xB9, 0x54), 1.0));
+            haloBrush.Freeze();
             host.Children.Add(new Ellipse
             {
-                Width = 34,
-                Height = 34,
+                Width = diameter + 16,
+                Height = diameter + 16,
+                Fill = haloBrush,
+                IsHitTestVisible = false
+            });
+
+            host.Children.Add(new Ellipse
+            {
+                Width = diameter,
+                Height = diameter,
                 Stroke = Theme.AccentGreenBrush,
-                StrokeThickness = 3,
-                Opacity = 0.18
+                StrokeThickness = thickness,
+                Opacity = 0.14
             });
 
             Ellipse arc = new Ellipse
             {
-                Width = 34,
-                Height = 34,
+                Width = diameter,
+                Height = diameter,
                 Stroke = Theme.AccentGreenBrush,
-                StrokeThickness = 3,
-                StrokeDashArray = new DoubleCollection(new double[] { 2.1, 4.4 }),
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
+                StrokeThickness = thickness,
+                StrokeDashArray = new DoubleCollection(new double[] { visible, units - visible }),
+                StrokeDashCap = PenLineCap.Round,
                 RenderTransformOrigin = new Point(0.5, 0.5),
                 RenderTransform = spin
             };
@@ -328,12 +356,14 @@ namespace QuadVitals.Settings
         {
             if (RenderEnvironment.AnimationsDisabled)
             {
-                spin.Angle = 120;
+                // 没动画时让缺口停在右上，看起来是一个“进度环”而不是断掉的圈。
+                spin.Angle = 135;
                 return;
             }
             spin.BeginAnimation(RotateTransform.AngleProperty,
-                new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(900))
+                new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(1050))
                 {
+                    // 匀速：进度指示一旦加速或回弹，就会读成“卡了一下”。
                     RepeatBehavior = RepeatBehavior.Forever
                 });
         }
