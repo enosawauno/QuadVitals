@@ -70,6 +70,8 @@ namespace QuadVitals.Agent
             ToolStripMenuItem diagnostics = new ToolStripMenuItem("诊断信息…", null, (sender, e) => OpenDiagnostics());
             menu.Items.Add(diagnostics);
 
+            menu.Items.Add(new ToolStripMenuItem("重启资源管理器", null, (sender, e) => RestartExplorer()));
+
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("退出", null, (sender, e) =>
             {
@@ -157,6 +159,34 @@ namespace QuadVitals.Agent
             catch (Exception ex)
             {
                 MessageBox.Show("无法打开仪表盘：" + ex.Message, "QuadVitals",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Restarts the shell, which is the only way to rebuild a taskbar that stopped repainting.
+        /// The stopping part runs in a detached powershell so this process never waits for the
+        /// shell to die, and explorer is started again only when it did not come back on its own
+        /// (an unconditional start would open an extra folder window).
+        /// </summary>
+        private static void RestartExplorer()
+        {
+            try
+            {
+                System.Diagnostics.ProcessStartInfo info = new System.Diagnostics.ProcessStartInfo(
+                    "powershell.exe",
+                    "-NoProfile -WindowStyle Hidden -Command \"Start-Sleep -Milliseconds 300; " +
+                    "Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; " +
+                    "Start-Sleep -Seconds 2; " +
+                    "if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) " +
+                    "{ Start-Process explorer.exe }\"");
+                info.UseShellExecute = false;
+                info.CreateNoWindow = true;
+                System.Diagnostics.Process.Start(info);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("无法重启资源管理器：" + ex.Message, "QuadVitals Agent",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }

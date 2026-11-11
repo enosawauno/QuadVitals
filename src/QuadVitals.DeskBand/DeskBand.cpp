@@ -572,6 +572,8 @@ private:
 
         std::vector<pb::CustomMenu::Item> items;
         items.push_back({ 1, L"\u91CD\u542F\u4F20\u611F\u5668", true });
+        // 与重启传感器同一组：一个是换传感器进程，一个是换承载本条的 shell。
+        items.push_back({ 2, L"\u91CD\u542F\u8D44\u6E90\u7BA1\u7406\u5668", true });
         // 诊断信息原本只能从托盘打开；放在发送反馈上面，顺序是“先看数据、后发反馈”。
         items.push_back({ 7, L"\u8BCA\u65AD\u4FE1\u606F", true });
         items.push_back({ 6, L"\u53D1\u9001\u53CD\u9988", true });
@@ -587,6 +589,7 @@ private:
         switch (command)
         {
         case 1: RestartSensor(); break;
+        case 2: RestartExplorer(); break;
         case 7: OpenDashboard(L"--diagnostics"); break;
         case 4: OpenDashboard(L"--about"); break;
         case 6: OpenDashboard(L"--feedback"); break;
@@ -608,6 +611,25 @@ private:
         std::wstring task = L"/Run /TN ";
         task += L'"' + std::wstring(L"QuadVitals Agent") + L'"';
         ShellExecuteW(_hwnd, L"open", L"schtasks.exe", task.c_str(), nullptr, SW_HIDE);
+    }
+
+    /// <summary>
+    /// Rebuilds the shell a fresh band lives in: the point is a stuck taskbar or a band that no
+    /// longer repaints. This window is inside explorer.exe, so it cannot stop the shell itself and
+    /// must not wait for it either — the work goes to a detached powershell. That helper only starts
+    /// explorer when the shell did not come back on its own; an unconditional start on top of a live
+    /// shell opens an extra folder window.
+    /// </summary>
+    void RestartExplorer()
+    {
+        // 300 ms 的起步延迟：让菜单先退栈，避免 shell 在自己还在处理点击时被停。
+        static const wchar_t* command =
+            L"-NoProfile -WindowStyle Hidden -Command \"Start-Sleep -Milliseconds 300; "
+            L"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; "
+            L"Start-Sleep -Seconds 2; "
+            L"if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) "
+            L"{ Start-Process explorer.exe }\"";
+        ShellExecuteW(_hwnd, L"open", L"powershell.exe", command, nullptr, SW_HIDE);
     }
 
     /// <summary>
