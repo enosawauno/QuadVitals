@@ -161,9 +161,7 @@ namespace QuadVitals.Settings
 
             return new Border
             {
-                // 面板宽度跟内容走：固定 520 会让状态行右侧空出一大片，看着像那块比内容宽。
-                MinWidth = 420,
-                MaxWidth = 520,
+                Width = 520,
                 Background = Theme.SurfaceCardBrush,
                 CornerRadius = new CornerRadius(Theme.CardRadius),
                 Padding = new Thickness(24),

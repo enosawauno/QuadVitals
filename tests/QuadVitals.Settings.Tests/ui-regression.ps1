@@ -1516,6 +1516,8 @@ $livePanel.Arrange((New-Object System.Windows.Rect(0, 0, 520, 420)))
 $livePanel.UpdateLayout()
 $headerClose = Find-ById $livePanel 'AgentClose'
 Check 'the status panel closes from a header cross' ($null -ne $headerClose) ''
+# 面板宽度是定死的 520：尺寸不随内容或某次反馈改动，改它要先得到明确要求。
+Check 'the status panel keeps its fixed board width' ([math]::Abs($livePanel.Width - 520) -le 0.5) ('width=' + $livePanel.Width)
 $closeWord = -join [char[]](0x5173, 0x95ED)
 $closeButtons = @(Find-ByTypeName $livePanel 'Button' | Where-Object { (Action-Label $_) -eq $closeWord })
 Check 'the status panel no longer offers a second close button' ($closeButtons.Count -eq 0) ('count=' + $closeButtons.Count)
