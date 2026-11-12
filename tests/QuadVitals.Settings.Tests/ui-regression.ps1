@@ -1384,7 +1384,14 @@ if (($null -ne $alignTitle) -and ($null -ne $alignPill)) {
         $y = $card.TranslatePoint([System.Windows.Point]::new(0, 0), $alignRoot).Y
         if ($y -lt $cardTop) { $cardTop = $y }
     }
-    Check 'the nav starts on the first card top edge' ([math]::Abs($pillY - $cardTop) -le 2) "pill=$pillY card=$cardTop"
+    # 导航块在侧栏里垂直居中（项数从 3 加到 4、5 也居中），不再与第一张卡的上边缘对齐。
+    $navBox = $alignPill.Parent
+    if ($null -ne $navBox) {
+        $navPoint = $navBox.TranslatePoint([System.Windows.Point]::new(0, 0), $alignRoot)
+        $navCentre = $navPoint.Y + $navBox.ActualHeight / 2
+        $bodyCentre = 48 + ($alignRoot.ActualHeight - 48) / 2
+        Check 'the nav block is centred vertically in the sidebar' ([math]::Abs($navCentre - $bodyCentre) -le 2) ("nav=" + [math]::Round($navCentre, 1) + " body=" + [math]::Round($bodyCentre, 1))
+    }
 }
 $alignWindow.Close()
 
