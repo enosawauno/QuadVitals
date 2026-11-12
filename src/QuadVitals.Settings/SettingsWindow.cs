@@ -991,13 +991,7 @@ namespace QuadVitals.Settings
                 // 不与指标抢颜色，也不会因为 16% 的白而在深底上显得脏。
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF)),
                 BorderThickness = new Thickness(1),
-                Child = new Border
-                {
-                    Height = 1,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(1, 1, 1, 0),
-                    Background = new SolidColorBrush(Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF))
-                },
+                Child = BuildNavGliderContent(),
                 Effect = new System.Windows.Media.Effects.DropShadowEffect
                 {
                     Color = Color.FromRgb(0x00, 0x2D, 0x82),
@@ -1051,6 +1045,8 @@ namespace QuadVitals.Settings
             }
 
             if (Math.Abs(_navGliderShift.Y - target) < 0.5) return;
+
+            StartNavSweep();
 
             // 关键：先把“现在看到的位置”写成基准值，再开新动画。
             // BeginAnimation(null) 会把属性打回旧的基准值（上一次落位那一行），

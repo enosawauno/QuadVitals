@@ -1229,6 +1229,13 @@ if ($null -ne $navGlider) {
     Pump 120
     $mid = $navShift.Y
     Check 'the pill animates instead of snapping to the target' $navShift.HasAnimatedProperties "y=$mid"
+    # 切换时选中面外沿有一道扫光沿轮廓跑一圈（fops 的 edge sweep）：虚线沿圆角矩形位移。
+    $navSweep = Find-ById $navRoot 'NavSweep'
+    Check 'the nav pill carries a sweep light' ($null -ne $navSweep) ''
+    if ($null -ne $navSweep) {
+        Check 'the sweep light follows the pill outline' (($navSweep.Data -is [System.Windows.Media.RectangleGeometry]) -and ($null -ne $navSweep.StrokeDashArray) -and ($navSweep.StrokeDashArray.Count -eq 2)) ''
+        Check 'the sweep light runs on every switch' $navSweep.HasAnimatedProperties ''
+    }
     # Switching again while still animating must continue from where the pill is, not snap
     # back to the previous landing position (the old bug: BeginAnimation(null) restored a stale
     # base value and the pill jumped home first).
