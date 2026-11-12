@@ -58,6 +58,10 @@ namespace QuadVitals.Settings
         private DateTime _nextAutoStartUtc = DateTime.MinValue;
         private Grid _overlay;
         private ContentControl _overlayContent;
+        // 第二层弹窗：反馈面板里再开诊断信息时用，自己的遮罩与关闭语义。
+        private Grid _subOverlay;
+        private ContentControl _subOverlayContent;
+        private bool _subOverlayClosesOnBackdrop;
         // 只有当前开着的确实是传感器面板时，自动恢复才会去刷新它；否则会把别的弹窗顶掉。
         private bool _agentPanelShown;
         // 面板按钮正在重启 Agent：这期间的“离线”是预期内的，自动恢复不能同时拉起第二个实例。
@@ -134,6 +138,11 @@ namespace QuadVitals.Settings
             if (startGeneral) Loaded += (sender, e) => ShowGeneralSettings();
             // 只在窗口真的上屏后才去拉规格表：测试与离屏渲染不联网。
             Loaded += (sender, e) => CpuSpecsUpdater.Start();
+            // 常驻软件没有“再次启动”，打开仪表盘就是唯一有人在看的时候。
+            Loaded += (sender, e) =>
+            {
+                if (!SuppressUpdateCheck) UpdateAutoCheck.Begin(this);
+            };
 
             // 关闭前把网速曲线落盘：下次打开接着上一张图的右端继续跑。
             Closed += (sender, e) =>
@@ -147,8 +156,11 @@ namespace QuadVitals.Settings
                 if (e.Key != Key.Escape) return;
 
                 // Esc belongs to the dialog layer when one is open: closing the whole dashboard
-                // from inside a modal panel is never what the user meant.
-                if (IsOverlayOpen) { CloseOverlay(); e.Handled = true; }
+                // from inside a modal panel is never what the user meant. A panel opened on top of
+                // another panel takes the Esc first, otherwise the form behind it would vanish
+                // together with the panel the user is reading.
+                if (IsSubOverlayOpen) { CloseSubOverlay(); e.Handled = true; }
+                else if (IsOverlayOpen) { CloseOverlay(); e.Handled = true; }
                 else Close();
             };
 
@@ -165,6 +177,12 @@ namespace QuadVitals.Settings
             };
             chipTimer.Start();
         }
+
+        /// <summary>
+        /// Diagnostic entry points that put their own panel in the overlay layer (the update preview)
+        /// turn the automatic check off, so two dialogs never race for the same layer.
+        /// </summary>
+        internal bool SuppressUpdateCheck { get; set; }
 
         public void LoadSettings()
         {
@@ -309,6 +327,28 @@ namespace QuadVitals.Settings
             };
             _overlay.Children.Add(_overlayContent);
 
+            // Second dialog layer, stacked on the first: the feedback panel opens its diagnostics
+            // in a board of its own size instead of growing inside the form and squeezing the
+            // writing area. Same dimming rules; Esc and the ✕ close this one only.
+            _subOverlay = new Grid { Visibility = Visibility.Collapsed };
+            Border subBackdrop = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0xB4, 0x00, 0x00, 0x00))
+            };
+            System.Windows.Automation.AutomationProperties.SetAutomationId(subBackdrop, "SubOverlayBackdrop");
+            subBackdrop.MouseLeftButtonUp += (sender, e) =>
+            {
+                if (_subOverlayClosesOnBackdrop) CloseSubOverlay();
+            };
+            _subOverlay.Children.Add(subBackdrop);
+            _subOverlayContent = new ContentControl
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _subOverlay.Children.Add(_subOverlayContent);
+            _overlay.Children.Add(_subOverlay);
+
             // 提示层在最上：保存结果等提示不再用系统 MessageBox（浅色、模态、跟深色壳子割裂）。
 
             Grid layers = new Grid();
@@ -323,6 +363,54 @@ namespace QuadVitals.Settings
         {
             get { return _overlay != null && _overlay.Visibility == Visibility.Visible; }
         }
+
+        /// <summary>True while a panel sits on top of another panel (feedback → diagnostics).</summary>
+        public bool IsSubOverlayOpen
+        {
+            get { return _subOverlay != null && _subOverlay.Visibility == Visibility.Visible; }
+        }
+
+        /// <summary>Raised after the stacked panel is hidden, so its owner can drop the content it built.</summary>
+        public event Action SubOverlayClosed;
+
+        /// <summary>
+        /// Shows a panel above the one already open. The caller keeps building and closing it, which
+        /// is what lets a surface own a second step without the outer panel losing its state.
+        /// </summary>
+        public void ShowSubOverlay(FrameworkElement content, bool backdropCloses = true)
+        {
+            if (content == null || _subOverlay == null) return;
+            _subOverlayClosesOnBackdrop = backdropCloses;
+
+            _subOverlayContent.Content = content;
+            _subOverlay.Visibility = Visibility.Visible;
+
+            ScaleTransform scale = new ScaleTransform(0.965, 0.965);
+            content.RenderTransformOrigin = new Point(0.5, 0.5);
+            content.RenderTransform = scale;
+            content.Opacity = 0;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, Theme.EnterPop(1.006));
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, Theme.EnterPop(1.006));
+            content.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1,
+                TimeSpan.FromMilliseconds(Theme.MotionFadeMs)) { EasingFunction = Theme.EnterFade() });
+        }
+
+        public void CloseSubOverlay()
+        {
+            if (_subOverlay == null || _subOverlay.Visibility != Visibility.Visible) return;
+
+            _subOverlay.Visibility = Visibility.Collapsed;
+            _subOverlayContent.Content = null;
+
+            Action handler = SubOverlayClosed;
+            if (handler != null) handler();
+        }
+
+        /// <summary>
+        /// Raised after the dialog layer is hidden. Panels that own background work (the update
+        /// transfer) listen to this so Esc or another panel cannot leave it running invisibly.
+        /// </summary>
+        public event Action OverlayClosed;
 
         /// <summary>Shows a panel centred in the window with a dimming backdrop (no OS dialog).</summary>
         public void ShowOverlay(FrameworkElement content, bool backdropCloses = false)
@@ -353,9 +441,13 @@ namespace QuadVitals.Settings
         {
             if (_overlay == null) return;
 
+            CloseSubOverlay();
             _overlay.Visibility = Visibility.Collapsed;
             _overlayContent.Content = null;
             _agentPanelShown = false;
+
+            Action handler = OverlayClosed;
+            if (handler != null) handler();
         }
 
         public void ShowNetworkSettings()
@@ -494,11 +586,11 @@ namespace QuadVitals.Settings
         /// 与通用设置、网络、设备状态的齿轮弹窗同一块板（640×427）：反馈不再比它们大一圈，
         /// 也不再随结果态缩成另一个尺寸，四个入口的浮层尺寸一致。
         /// </summary>
-        private const double FeedbackPanelWidth = 640;
-        private const double FeedbackPanelHeight = 427;
+        internal const double FeedbackPanelWidth = 640;
+        internal const double FeedbackPanelHeight = 427;
 
         /// <summary>Small ✕ for panel headers: a third the weight of the caption button, same colour rules.</summary>
-        private static Button PanelCloseButton(string automationId)
+        internal static Button PanelCloseButton(string automationId)
         {
             Button close = new Button
             {

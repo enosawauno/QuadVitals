@@ -35,6 +35,9 @@ namespace QuadVitals.Settings
                 string startPage = "overview";
                 bool openAgentStatus = false;
                 bool openDiagnostics = false;
+#if QV_DEV_TOOLS
+                bool updatePreview = false;
+#endif
                 if (args != null)
                 {
                     foreach (string arg in args)
@@ -71,6 +74,13 @@ namespace QuadVitals.Settings
                             // --page=overview|elements|about（feedback 与 general 开面板，不是页）
                             startPage = arg.Substring("--page=".Length);
                         }
+#if QV_DEV_TOOLS
+                        else if (string.Equals(arg, "--update-preview", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Screenshot entry for the update dialog; absent from release builds.
+                            updatePreview = true;
+                        }
+#endif
                     }
                 }
                 if (openDiagnostics)
@@ -96,6 +106,13 @@ namespace QuadVitals.Settings
 
                 SettingsWindow window = new SettingsWindow(startPage);
                 if (openAgentStatus) window.Loaded += (sender, e) => window.ShowAgentStatus();
+#if QV_DEV_TOOLS
+                if (updatePreview)
+                {
+                    window.SuppressUpdateCheck = true;
+                    window.Loaded += (sender, e) => UpdateDialog.ShowPreview(window);
+                }
+#endif
                 app.Run(window);
             }
             catch (Exception ex)

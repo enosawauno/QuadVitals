@@ -277,6 +277,55 @@ namespace QuadVitals.Core.Tests
             }
         }
 
+        private static void UpdateCheckCacheBehaviour()
+        {
+            string directory = NewTempDirectory();
+            string path = Path.Combine(directory, "update-check.json");
+            DateTime now = new DateTime(2026, 11, 11, 12, 0, 0, DateTimeKind.Utc);
+            try
+            {
+                UpdateCheckCache fresh = UpdateCheckCache.Load(path);
+                True(fresh.ShouldCheck(now), "没有记录时第一次打开要检查");
+                True(fresh.ShouldOffer("1.0.1", "1.0.0"), "更高版本应该提示");
+                True(!fresh.ShouldOffer("1.0.0", "1.0.0"), "相同版本不提示");
+                True(!fresh.ShouldOffer("0.9.9", "1.0.0"), "更旧版本不提示");
+
+                fresh.Record("1.0.1", now);
+                fresh.Save(path);
+
+                UpdateCheckCache loaded = UpdateCheckCache.Load(path);
+                Equal("1.0.1", loaded.LatestVersion, "版本写入后能读回");
+                True(!loaded.ShouldCheck(now.AddHours(23)), "一天内不重复检查");
+                True(loaded.ShouldCheck(now.AddHours(25)), "超过一天再检查");
+                True(loaded.ShouldCheck(now.AddHours(24)), "到点就应该检查");
+
+                loaded.Ignore("1.0.1");
+                loaded.Save(path);
+
+                UpdateCheckCache ignored = UpdateCheckCache.Load(path);
+                True(ignored.IsIgnored("1.0.1"), "跳过过的版本被记住");
+                True(!ignored.ShouldOffer("1.0.1", "1.0.0"), "跳过过的版本不再提示");
+                True(ignored.ShouldOffer("1.0.2", "1.0.0"), "更新的版本仍然提示");
+
+                UpdateCheckCache skew = UpdateCheckCache.Load(path);
+                skew.Record("1.0.1", now);
+                True(skew.ShouldCheck(now.AddMinutes(-30)), "时钟回拨后重新检查");
+
+                File.WriteAllText(path, "{ not json");
+                UpdateCheckCache broken = UpdateCheckCache.Load(path);
+                True(broken.ShouldCheck(now), "坏缓存当成第一次运行");
+                Equal(string.Empty, broken.LatestVersion, "坏缓存不读出假版本");
+
+                File.WriteAllText(path,
+                    "{\"lastCheckUtc\":\"\",\"latestVersion\":\"1.0.1.exe\",\"ignoredVersion\":\"\"}");
+                Equal(string.Empty, UpdateCheckCache.Load(path).LatestVersion, "非数字版本被清掉");
+            }
+            finally
+            {
+                DeleteDirectory(directory);
+            }
+        }
+
         private sealed class FakeUpdateTransport : IUpdateTransport
         {
             private readonly byte[] _payload;

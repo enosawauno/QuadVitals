@@ -1195,6 +1195,8 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         Check 're-focus resumes the power card' ([bool]$powerIsAnimating.GetValue($animPower, $null)) ''
 
         # 全屏停止：全屏时两张卡都停，离开全屏都恢复。
+        # 先钉住“当前不在全屏”：真实前台窗口可能是全屏游戏，不钉住的话这条断言会随桌面状态变。
+        $setFullscreen.Invoke($null, @($false)) | Out-Null
         $animWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
         $ovWindow.CurrentSettings.RenderPolicy = [QuadVitals.Core.Settings]::RenderPolicyFullscreen
         $configurePolicy.Invoke($null, @($false, $true)) | Out-Null

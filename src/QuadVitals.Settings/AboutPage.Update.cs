@@ -30,7 +30,7 @@ namespace QuadVitals.Settings
         private FlatButton _cancelButton;
 
         private bool _updateRunning;
-        private volatile bool _updateCancelled;
+        private UpdateFlow _flow;
         private long _lastProgressTicks;
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace QuadVitals.Settings
             _cancelButton.Visibility = Visibility.Collapsed;
             _cancelButton.Click += (sender, e) =>
             {
-                _updateCancelled = true;
+                if (_flow != null) _flow.Cancel();
                 SetStatus("正在取消…", Theme.TextSecondary);
             };
             Grid.SetColumn(_cancelButton, 1);
@@ -166,7 +166,6 @@ namespace QuadVitals.Settings
         {
             if (_updateRunning) return;
             _updateRunning = true;
-            _updateCancelled = false;
             _lastProgressTicks = 0;
 
             _checkButton.IsEnabled = false;
@@ -175,114 +174,67 @@ namespace QuadVitals.Settings
             SetProgressVisible(false);
             SetStatus("正在检查更新…", Theme.TextSecondary);
 
-            Task.Run((Action)RunUpdateFlow);
+            _flow = new UpdateFlow(OnFlowState, null);
+            _flow.StartCheck();
         }
 
-        /// <summary>Background half of the flow. Every UI touch goes through <see cref="Post"/>.</summary>
-        private void RunUpdateFlow()
+        /// <summary>
+        /// Renders one flow step on the card. The card is one-click on purpose: finding a newer
+        /// version continues straight into the download, so the button never asks for a second
+        /// confirmation the owner just gave.
+        /// </summary>
+        private void OnFlowState(UpdateFlowState state)
         {
-            string baseUrl = UpdateFeed.BaseUrl();
-            IUpdateTransport transport = new HttpUpdateTransport();
-
-            UpdateCheckOutcome outcome = UpdateChecker.Check(transport, baseUrl, ProductVersion.SemVer);
-            if (outcome.Status == UpdateCheckStatus.Failed)
-            {
-                Finish();
-                Post(() => SetStatus("无法检查更新：" + DescribeFailure(outcome.Error), Theme.AccentRed));
-                return;
-            }
-
-            UpdateManifest manifest = outcome.Manifest;
-
-            if (outcome.Status == UpdateCheckStatus.Current)
-            {
-                Finish();
-                Post(() => SetStatus("已是最新版本（" + ProductVersion.SemVer + "）", Theme.AccentGreenSoft));
-                return;
-            }
-
             Post(() =>
             {
-                SetButtonLabel("正在下载…");
-                SetStatus("发现新版本 " + outcome.LatestVersion + "，正在下载…", Theme.TextSecondary);
-            });
-
-            string destination = UpdateInstaller.InstallerPath(manifest);
-            string url;
-            try
-            {
-                url = UpdateFeed.InstallerUrl(baseUrl, manifest.SetupName);
-            }
-            catch (ArgumentException)
-            {
-                Finish();
-                Post(() => SetStatus("更新清单里的安装包名不可用。", Theme.AccentRed));
-                return;
-            }
-
-            Post(() => SetProgressVisible(true));
-            UpdateDownloadResult download = UpdateDownloader.Download(
-                transport, url, destination, OnDownloadProgress, () => _updateCancelled, null);
-
-            if (download.Cancelled)
-            {
-                Finish();
-                Post(() =>
+                switch (state.Phase)
                 {
-                    SetProgressVisible(false);
-                    SetStatus("已取消更新", Theme.TextSecondary);
-                });
-                return;
-            }
-            if (!download.Ok)
-            {
-                Finish();
-                Post(() =>
-                {
-                    SetProgressVisible(false);
-                    SetStatus("下载失败：" + DescribeDownloadFailure(download.Error), Theme.AccentRed);
-                });
-                return;
-            }
+                    case UpdatePhase.Checking:
+                        SetStatus("正在检查更新…", Theme.TextSecondary);
+                        break;
 
-            Post(() =>
-            {
-                SetButtonLabel("正在校验…");
-                SetStatus("正在校验安装包…", Theme.TextSecondary);
+                    case UpdatePhase.Current:
+                        Finish();
+                        SetStatus(state.Message, Theme.AccentGreenSoft);
+                        break;
+
+                    case UpdatePhase.Available:
+                        SetButtonLabel("正在下载…");
+                        SetStatus(state.Message, Theme.TextSecondary);
+                        SetProgressVisible(true);
+                        if (_flow != null) _flow.StartInstall(state.Manifest);
+                        break;
+
+                    case UpdatePhase.Downloading:
+                        if (state.Progress != null) OnDownloadProgress(state.Progress);
+                        break;
+
+                    case UpdatePhase.Verifying:
+                        SetButtonLabel("正在校验…");
+                        SetStatus(state.Message, Theme.TextSecondary);
+                        break;
+
+                    case UpdatePhase.Cancelled:
+                        Finish();
+                        SetProgressVisible(false);
+                        SetStatus(state.Message, Theme.TextSecondary);
+                        break;
+
+                    case UpdatePhase.Launching:
+                        SetProgress(1.0);
+                        SetStatus(state.Message, Theme.AccentGreenSoft);
+                        // The installer stops this process itself (it has to run elevated for that);
+                        // closing first keeps the two from fighting and makes the hand-over one action.
+                        _window.Close();
+                        break;
+
+                    case UpdatePhase.Failed:
+                        Finish();
+                        SetProgressVisible(false);
+                        SetStatus(state.Message, Theme.AccentRed);
+                        break;
+                }
             });
-
-            string actualHash;
-            string verifyError;
-            bool verified = UpdateInstaller.Verify(manifest, destination, out actualHash, out verifyError);
-            if (!verified)
-            {
-                DeleteQuietly(destination);
-                Finish();
-                Post(() =>
-                {
-                    SetProgressVisible(false);
-                    SetStatus("安装包校验未通过（" + DescribeVerifyFailure(verifyError) + "），文件已删除。", Theme.AccentRed);
-                });
-                return;
-            }
-
-            Post(() =>
-            {
-                SetProgress(1.0);
-                SetStatus("安装包校验通过（" + ShortHash(actualHash) + "），正在启动安装程序…", Theme.AccentGreenSoft);
-            });
-
-            string launchError;
-            if (!UpdateInstaller.Launch(destination, out launchError))
-            {
-                Finish();
-                Post(() => SetStatus("无法启动安装程序：" + DescribeFailure(launchError), Theme.AccentRed));
-                return;
-            }
-
-            // The installer stops this process itself (it has to run elevated for that); closing
-            // first keeps the two from fighting and makes the hand-over look like one action.
-            Post(() => _window.Close());
         }
 
         private void OnDownloadProgress(UpdateProgress progress)
@@ -406,74 +358,6 @@ namespace QuadVitals.Settings
             if (_progressTrack == null) return;
             _progressTrack.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
             if (!visible) SetProgress(0);
-        }
-
-        private static string ShortHash(string hash)
-        {
-            if (string.IsNullOrEmpty(hash)) return "—";
-            string text = hash.ToLowerInvariant();
-            return text.Length <= 12 ? text : text.Substring(0, 12) + "…";
-        }
-
-        /// <summary>Turns transport/parse codes into one readable sentence. The raw code is never shown.</summary>
-        private static string DescribeFailure(string error)
-        {
-            if (string.IsNullOrEmpty(error)) return "暂时无法检查更新";
-            switch (error)
-            {
-                case "Timeout": return "连接超时";
-                case "NameResolutionFailure": return "无法解析更新源域名";
-                case "ConnectFailure": return "无法连接更新源";
-                case "TrustFailure":
-                case "SecureChannelFailure": return "更新源的证书校验失败";
-                case "ProtocolError": return "更新源返回错误（可能尚未发布正式版本）";
-                case "manifest-invalid-json":
-                case "manifest-empty":
-                case "manifest-bad-version":
-                case "manifest-no-setup":
-                case "manifest-bad-name":
-                case "manifest-bad-size":
-                case "manifest-bad-hash": return "更新清单格式不正确";
-                case "manifest-too-large": return "更新清单体积异常";
-                case "installer-missing": return "安装程序不存在";
-                default: return "暂时无法检查更新";
-            }
-        }
-
-        private static string DescribeDownloadFailure(string error)
-        {
-            if (string.IsNullOrEmpty(error)) return "未知原因";
-            if (error.StartsWith("download-failed", StringComparison.Ordinal)) return "连接中断";
-            switch (error)
-            {
-                case "too-large": return "安装包体积异常";
-                case "short-read": return "下载不完整";
-                default: return DescribeFailure(error);
-            }
-        }
-
-        private static string DescribeVerifyFailure(string error)
-        {
-            switch (error)
-            {
-                case "size-mismatch": return "大小与清单不符";
-                case "hash-mismatch": return "SHA-256 与清单不符";
-                case "installer-missing": return "安装包不存在";
-                default: return "无法读取安装包";
-            }
-        }
-
-        private static void DeleteQuietly(string path)
-        {
-            try
-            {
-                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
-            }
-            catch (Exception)
-            {
-                // A rejected package that stays on disk is never launched: the name is only ever
-                // reused after a fresh download overwrites it.
-            }
         }
     }
 }

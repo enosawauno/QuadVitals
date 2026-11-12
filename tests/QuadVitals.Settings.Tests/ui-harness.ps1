@@ -10,6 +10,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+# The dashboard checks for updates when it opens; a test must never open a socket.
+$env:QUADVITALS_NO_UPDATE_CHECK = '1'
 if (-not $UiDir) {
     # Default to this checkout's output folder, so the suite needs no machine-specific path.
     $UiDir = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'build\tmp\ui-check'
