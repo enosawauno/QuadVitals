@@ -49,7 +49,13 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $fanOthersX = $fanOthers.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
             Check 'the fan bar sits on the readout left edge' (($fanBar.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Left) -and ([Math]::Abs($fanBarX - $fanCaptionX) -le 1)) ("bar=" + [Math]::Round($fanBarX, 1) + " caption=" + [Math]::Round($fanCaptionX, 1))
             Check 'the fan note shares that edge' ([Math]::Abs($fanOthersX - $fanCaptionX) -le 1) ("others=" + [Math]::Round($fanOthersX, 1) + " caption=" + [Math]::Round($fanCaptionX, 1))
-            Check 'the fan rows keep the 8 px rhythm' (([double]$fanBar.Margin.Top -eq 8) -and ([double]$fanOthers.Margin.Top -eq 8)) ("bar=" + $fanBar.Margin.Top + " others=" + $fanOthers.Margin.Top)
+            Check 'the fan rows keep the 10 px rhythm' (([double]$fanBar.Margin.Top -eq 10) -and ([double]$fanOthers.Margin.Top -eq 10)) ("bar=" + $fanBar.Margin.Top + " others=" + $fanOthers.Margin.Top)
+            # 40 px 的 Arial Black 左侧留白比标签多 1 px：数值行左移这一格，墨迹才与标题、条、说明同一竖线。
+            $fanValue = Find-ById $ovRoot 'FanValue'
+            if ($null -ne $fanValue) {
+                $fanValueX = $fanValue.TranslatePoint((New-Object System.Windows.Point(0, 0)), $ovRoot).X
+                Check 'the fan value is nudged left for its glyph bearing' ([Math]::Abs(($fanCaptionX - $fanValueX) - 1) -le 0.5) ("value=" + [Math]::Round($fanValueX, 1) + " caption=" + [Math]::Round($fanCaptionX, 1))
+            }
         }
 
         # 标题图标是手绘叶轮，不再是 15 px 的系统字形：那个字形在这个尺寸只剩几根细线。

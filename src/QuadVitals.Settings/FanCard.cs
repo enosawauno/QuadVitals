@@ -236,14 +236,14 @@ namespace QuadVitals.Settings
             _bar.Width = 200;
             // 宽 200 在更宽的读数列里默认会居中，看着比上下两行缩进一截；固定靠左才是同一条左边缘。
             _bar.HorizontalAlignment = HorizontalAlignment.Left;
-            _bar.Margin = new Thickness(0, 8, 0, 0);
+            _bar.Margin = new Thickness(0, 10, 0, 0);
             _bar.VerticalAlignment = VerticalAlignment.Center;
             AutomationProperties.SetAutomationId(_bar, "FanBar");
 
             _others.FontSize = 11;
             _others.Foreground = Theme.TextSecondaryBrush;
             _others.TextWrapping = TextWrapping.Wrap;
-            _others.Margin = new Thickness(0, 8, 0, 0);
+            _others.Margin = new Thickness(0, 10, 0, 0);
             AutomationProperties.SetAutomationId(_others, "FanOthers");
 
             _empty.Text = string.Empty;
@@ -252,7 +252,7 @@ namespace QuadVitals.Settings
             _empty.FontSize = 11.5;
             _empty.Foreground = Theme.AccentOrangeBrush;
             _empty.TextWrapping = TextWrapping.NoWrap;
-            _empty.Margin = new Thickness(0, 8, 0, 0);
+            _empty.Margin = new Thickness(0, 10, 0, 0);
             AutomationProperties.SetAutomationId(_empty, "FanEmpty");
 
             Grid body = new Grid();
@@ -262,7 +262,9 @@ namespace QuadVitals.Settings
             body.Children.Add(_scene);
 
             StackPanel readout = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+            // 数值是 40 px 的 Arial Black，字形的左侧留白比 11.5 px 的标签多 1 px；左移这一格，
+            // 标题、数值、分段条与“其余”那一行的墨迹才落在同一条竖线上。
+            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(-1, 4, 0, 0) };
             row.Children.Add(_value);
             row.Children.Add(_unit);
             readout.Children.Add(_caption);
