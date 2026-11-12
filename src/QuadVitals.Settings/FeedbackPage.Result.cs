@@ -158,11 +158,7 @@ namespace QuadVitals.Settings
             StartAutoClose();
             FadeIn(_resultBody);
 
-            if (IsPreviewOpen)
-            {
-                _previewPanel.Visibility = Visibility.Collapsed;
-                _previewButton.Content = "查看将包含的信息";
-            }
+            if (IsPreviewOpen) _window.CloseSubOverlay();
 
             Dispatcher.BeginInvoke(new Action(() =>
             {

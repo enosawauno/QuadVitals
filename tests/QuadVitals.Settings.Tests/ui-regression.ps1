@@ -933,17 +933,52 @@ while ($pageQueue.Count -gt 0 -and $null -eq $feedbackPage) {
 Check 'the feedback page is reachable' ($null -ne $feedbackPage) ''
 $feedbackPanel = Find-ById $feedbackRoot 'FeedbackPanel'
 Check 'the feedback panel is the settings dialog board' (($null -ne $feedbackPanel) -and ([math]::Abs($feedbackPanel.Width - 640) -le 0.5) -and ([math]::Abs($feedbackPanel.Height - 427) -le 0.5)) ("size=" + $feedbackPanel.Width + "x" + $feedbackPanel.Height)
-# The diagnostics hint owns one line: it sits on the same bottom edge as the action buttons, so a
-# wrapped second line would push the row out of line. NoWrap + “measured width fits the column”.
+# The diagnostics sentence lives in the preview board now, so the footer's left block is only the
+# checkbox row: one line high, ending on the same baseline as the action buttons.
 $logsHint = Find-ById $feedbackRoot 'FeedbackLogsHint'
-Check 'the diagnostics hint never wraps' (($null -ne $logsHint) -and ($logsHint.TextWrapping -eq [System.Windows.TextWrapping]::NoWrap)) ''
-if ($null -ne $logsHint) {
-    $hintTextWidth = $logsHint.DesiredSize.Width - $logsHint.Margin.Left - $logsHint.Margin.Right
-    Check 'the diagnostics hint fits its column on one line' ($hintTextWidth -le ($logsHint.ActualWidth + 0.5)) ("text=" + [math]::Round($hintTextWidth, 1) + " column=" + [math]::Round($logsHint.ActualWidth, 1))
+Check 'the footer no longer repeats the diagnostics hint' ($null -eq $logsHint) ''
+$logsSwitch = Find-ById $feedbackRoot 'FeedbackIncludeLogs'
+$submitButton = Find-ById $feedbackRoot 'FeedbackSubmit'
+if (($null -ne $logsSwitch) -and ($null -ne $submitButton)) {
+    $switchBottom = (Screen-Y $logsSwitch) + $logsSwitch.ActualHeight
+    $submitBottom = (Screen-Y $submitButton) + $submitButton.ActualHeight
+    Check 'the checkbox row ends on the action baseline' ([math]::Abs($switchBottom - $submitBottom) -le 2) ("checkbox=" + [math]::Round($switchBottom, 1) + " actions=" + [math]::Round($submitBottom, 1))
 }
+# 预览不再在表单里展开：那块 190 px 的等宽区已从表单行里移除。
+Check 'the preview no longer expands inside the form' ($null -eq $feedbackPageType.GetField('_previewPanel', $flags)) ''
+# 点它开的是同尺寸（640×427）的第二块板，写作区高度不变。
+$previewLink = Find-ById $feedbackRoot 'FeedbackPreview'
+Check 'the preview link exists' ($null -ne $previewLink) ''
+$textBox = $feedbackPageType.GetField('_text', $flags).GetValue($feedbackPage)
+$textHeightBefore = $textBox.ActualHeight
+if ($null -ne $previewLink) {
+    $previewLink.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+    Pump 120
+    $feedbackRoot.UpdateLayout()
+}
+$diagPanel = Find-ById $feedbackRoot 'FeedbackDiagnosticsPanel'
+Check 'the preview opens a board of its own' ($null -ne $diagPanel) ''
+if ($null -ne $diagPanel) {
+    Check 'the diagnostics board matches the feedback board' (([math]::Abs($diagPanel.Width - 640) -le 0.5) -and ([math]::Abs($diagPanel.Height - 427) -le 0.5)) ("size=" + $diagPanel.Width + "x" + $diagPanel.Height)
+}
+$diagText = Find-ById $feedbackRoot 'FeedbackDiagnosticsText'
+Check 'the diagnostics board shows the preview text' (($null -ne $diagText) -and ($diagText.Text.Length -gt 0)) ''
+# 长行折行而不是被右边切掉，并且每一行两端都对齐到卡片内边距。
+Check 'the diagnostics text wraps inside the board' (($null -ne $diagText) -and ($diagText.TextWrapping -eq [System.Windows.TextWrapping]::Wrap) -and ($diagText.HorizontalScrollBarVisibility -eq [System.Windows.Controls.ScrollBarVisibility]::Disabled)) ''
+Check 'the diagnostics text justifies both edges' (($null -ne $diagText) -and ($diagText.TextAlignment -eq [System.Windows.TextAlignment]::Justify)) ''
+Check 'the preview box retints the scrollbar corner' (($null -ne $diagText) -and $diagText.Resources.Contains([System.Windows.SystemColors]::ControlBrushKey)) ''
+$diagHint = Find-ById $feedbackRoot 'FeedbackDiagnosticsHint'
+$expectedHint = U @(0x4EC5, 0x52FE, 0x9009, 0x540E, 0x8BFB, 0x53D6, 0x4F20, 0x611F, 0x5668, 0x4E0E, 0x7A0B, 0x5E8F, 0x65E5, 0x5FD7, 0xFF1B, 0x63D0, 0x4EA4, 0x524D, 0x53EF, 0x67E5, 0x770B, 0xFF0C, 0x76EE, 0x5F55, 0x5DF2, 0x8131, 0x654F, 0x3002)
+Check 'the diagnostics board carries the hint line' (($null -ne $diagHint) -and ($diagHint.Text -eq $expectedHint)) ''
+Check 'the writing area keeps its height while the board is open' ([math]::Abs($textBox.ActualHeight - $textHeightBefore) -le 1) ("before=" + [math]::Round($textHeightBefore, 1) + " after=" + [math]::Round($textBox.ActualHeight, 1))
+# 叠在上面：关掉它只关这一层，后面的表单与面板原样留着。
+$subOverlay = $windowType.GetField('_subOverlay', $flags).GetValue($feedbackWindow)
+Check 'the diagnostics board stacks on the feedback panel' (($null -ne $subOverlay) -and ($subOverlay.Visibility -eq [System.Windows.Visibility]::Visible)) ''
+$windowType.GetMethod('CloseSubOverlay').Invoke($feedbackWindow, $null) | Out-Null
+Pump 60
+Check 'closing the diagnostics board keeps the feedback panel' (($overlay.Visibility -eq [System.Windows.Visibility]::Visible) -and ($subOverlay.Visibility -ne [System.Windows.Visibility]::Visible)) ''
+Check 'closing the diagnostics board keeps the form' ($feedbackPageType.GetField('_formBody', $flags).GetValue($feedbackPage).Visibility -eq [System.Windows.Visibility]::Visible) ''
 if ($null -ne $feedbackPage) {
-    $previewBox = $feedbackPageType.GetField('_previewBox', $flags).GetValue($feedbackPage)
-    Check 'the preview box retints the scrollbar corner' ($previewBox.Resources.Contains([System.Windows.SystemColors]::ControlBrushKey)) ''
     $resultBody = $feedbackPageType.GetField('_resultBody', $flags).GetValue($feedbackPage)
     $feedbackCard = $feedbackPageType.GetField('_cardTitle', $flags).GetValue($feedbackPage)
     $resultBody.Visibility = [System.Windows.Visibility]::Visible
@@ -1096,6 +1131,22 @@ Check 'the feedback panel closes on an outside click' (($null -ne $backdrop) -an
 $windowType.GetMethod('CloseOverlay').Invoke($feedbackWindow, $null) | Out-Null
 $windowType.GetMethod('ShowNetworkSettings').Invoke($feedbackWindow, $null) | Out-Null
 Check 'other dialogs keep their own exit' ($backdropFlag.GetValue($feedbackWindow) -eq $false) ''
+# 网卡弹窗不再在字段下面写说明：两行 11 px 灰字已删，字段之间只留间距。
+$overlayContent = $windowType.GetField('_overlayContent', $flags).GetValue($feedbackWindow)
+$networkCard = $overlayContent.Content
+$smallPrint = 0
+$smallQueue = New-Object 'System.Collections.Queue'
+$smallQueue.Enqueue($networkCard)
+while ($smallQueue.Count -gt 0) {
+    $smallNode = $smallQueue.Dequeue()
+    if (($smallNode -is [System.Windows.Controls.TextBlock]) -and ($smallNode.FontSize -eq 11)) { $smallPrint++ }
+    if ($smallNode -is [System.Windows.Media.Visual]) {
+        $smallKids = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($smallNode)
+        for ($i = 0; $i -lt $smallKids; $i++) { $smallQueue.Enqueue([System.Windows.Media.VisualTreeHelper]::GetChild($smallNode, $i)) }
+    }
+}
+Check 'the network dialog carries no small print under its fields' ($smallPrint -eq 0) ("count=" + $smallPrint)
+Check 'the network dialog keeps its three fields' ((($null -ne (Find-ById $networkCard 'NetworkAdapterSelect')) -and ($null -ne (Find-ById $networkCard 'RefreshRateSelect'))) -and ($null -ne (Find-ById $networkCard 'CurveStyleSelect'))) ''
 $windowType.GetMethod('CloseOverlay').Invoke($feedbackWindow, $null) | Out-Null
 $windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
 Pump 60

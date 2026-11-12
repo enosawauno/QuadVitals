@@ -48,8 +48,9 @@ namespace QuadVitals.Settings
         private readonly FlatButton _addFiles = new FlatButton("添加附件");
         // 入口从按钮改成小字链接：它是个"看一眼"的次要动作，占一格按钮会把下面那行挤满。
         private readonly Button _previewButton = new Button();
-        private readonly StackPanel _previewPanel = new StackPanel();
-        private readonly DarkTextBox _previewBox = new DarkTextBox();
+        // 诊断预览自成一块板（同尺寸 640×427）：它在表单里展开会把写作区挤矮，
+        // 而"核对哪几行会发出去"和"继续写"本来就是两个动作。
+        private FeedbackDiagnosticsDialog _diagnostics;
         // 反馈页只有一张卡片：_formBody 装表单，_resultBody 装提交结果，两者互斥显示。
         private TextBlock _cardTitle;
 
@@ -171,6 +172,8 @@ namespace QuadVitals.Settings
             _kind.SelectionChanged += (sender, e) => ScheduleDraft();
             _includeLogs.Checked += (sender, e) => { ScheduleDraft(); if (IsPreviewOpen) UpdatePreview(); };
             _includeLogs.Unchecked += (sender, e) => { ScheduleDraft(); if (IsPreviewOpen) UpdatePreview(); };
+            // 只订阅一次：这个页面活得和窗口一样长，而每一轮诊断预览都会重新开一块板。
+            _window.SubOverlayClosed += () => _diagnostics = null;
 
             Unloaded += (sender, e) =>
             {
@@ -210,7 +213,7 @@ namespace QuadVitals.Settings
 
         private bool IsPreviewOpen
         {
-            get { return _previewPanel.Visibility == Visibility.Visible; }
+            get { return _diagnostics != null; }
         }
 
         // ---- layout -------------------------------------------------------------------
@@ -322,7 +325,6 @@ namespace QuadVitals.Settings
             flow.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Grid.SetRow(textArea, 0);
             flow.Children.Add(textArea);
             Grid.SetRow(_attachmentHint, 1);
@@ -344,22 +346,6 @@ namespace QuadVitals.Settings
             Grid.SetRow(_scroll, 0);
             form.Children.Add(_scroll);
             _formBody = form;
-
-            _previewBox.IsReadOnly = true;
-            _previewBox.AcceptsReturn = true;
-            _previewBox.TextWrapping = TextWrapping.NoWrap;
-            _previewBox.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
-            _previewBox.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            _previewBox.Height = 190;
-            _previewBox.FontFamily = Theme.MonoFont;
-            _previewBox.FontSize = 11;
-            _previewBox.Padding = new Thickness(10);
-            _previewPanel.Children.Add(_previewBox);
-
-            _previewPanel.Visibility = Visibility.Collapsed;
-            _previewPanel.Margin = new Thickness(0, 12, 0, 0);
-            Grid.SetRow(_previewPanel, 3);
-            flow.Children.Add(_previewPanel);
 
             _resultBody = BuildResultBody();
             _resultBody.Visibility = Visibility.Collapsed;
@@ -416,7 +402,7 @@ namespace QuadVitals.Settings
             _includeLogs.Content = "附带诊断日志";
             _includeLogs.IsChecked = true;
 
-            // 复选框那行末尾接一个绿色小字入口，和 FileOops 的「查看日志详情」同一个位置。
+            // 复选框那行末尾接一个绿色小字入口：它是“看一眼”的次要动作，占一格按钮会把下面那行挤满。
             StackPanel switchRow = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -424,24 +410,10 @@ namespace QuadVitals.Settings
             };
             switchRow.Children.Add(_includeLogs);
             _previewButton.Margin = new Thickness(10, 0, 0, 0);
-            _previewButton.Click += (sender, e) => TogglePreview();
+            _previewButton.Click += (sender, e) => OpenDiagnostics();
             switchRow.Children.Add(_previewButton);
             left.Children.Add(switchRow);
 
-            TextBlock logsHint = new TextBlock
-            {
-                // 一行到底：面板宽度是定的（640），句子必须能装进左栏，所以只留“绑定什么、什么时候读、
-                // 发之前能不能看”。换行会被按钮行挤成两行，那行小字的底边就不再和按钮下沿齐平。
-                Text = "仅勾选后读取传感器与程序日志；提交前可查看，目录已脱敏。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.NoWrap,
-                // Aligned under the checkbox caption, not under its square (user picked "B"):
-                // 18 px square + 9 px gap + 1 px glyph bearing.
-                Margin = new Thickness(28, 6, 0, 0)
-            };
-            AutomationProperties.SetAutomationId(logsHint, "FeedbackLogsHint");
-            left.Children.Add(logsHint);
             Grid.SetColumn(left, 0);
             row.Children.Add(left);
             return row;
@@ -450,7 +422,8 @@ namespace QuadVitals.Settings
         private FrameworkElement BuildFooter()
         {
             // 两行：上面留状态文案（右对齐），下面一行左边是诊断日志、右边是三个动作。
-            // 诊断那块与按钮都贴下沿，所以它最后一行小字的底边和按钮下边缘齐平。
+            // 说明小字已经搬进诊断信息那块板，左边只剩复选框一行，所以它直接贴下沿、
+            // 和右侧按钮的下边缘对齐。
             Grid footer = new Grid();
             footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -989,22 +962,20 @@ namespace QuadVitals.Settings
             }
         }
 
-        private void TogglePreview()
+        private void OpenDiagnostics()
         {
-            if (IsPreviewOpen)
-            {
-                _previewPanel.Visibility = Visibility.Collapsed;
-                _previewButton.Content = "查看将包含的信息";
-                return;
-            }
+            if (IsPreviewOpen) return;
 
+            // 先在内存里把板搭好（文本还没算）：开面板与读日志分两步，读日志失败也能弹出来报错。
+            FeedbackDiagnosticsDialog dialog = new FeedbackDiagnosticsDialog(_window);
+            _diagnostics = dialog;
             UpdatePreview();
-            _previewPanel.Visibility = Visibility.Visible;
-            _previewButton.Content = "收起诊断信息";
+            _window.ShowSubOverlay(dialog.Build(), true);
         }
 
         private void UpdatePreview()
         {
+            if (_diagnostics == null) return;
             try
             {
                 FeedbackPreview preview = FeedbackStore.BuildPreview(
@@ -1012,13 +983,13 @@ namespace QuadVitals.Settings
                 string logSource = string.IsNullOrEmpty(preview.LogFileName)
                     ? "没有找到日志文件"
                     : "日志来源：" + preview.LogFileName;
-                _previewBox.Text =
+                _diagnostics.Text =
                     "【将随反馈提交的诊断信息】\n" + preview.MetadataText +
                     "\n\n【" + logSource + "，最近 40 行】\n" + preview.LogsText;
             }
             catch (Exception ex)
             {
-                _previewBox.Text = "读取诊断信息失败：" + ex.Message;
+                _diagnostics.Text = "读取诊断信息失败：" + ex.Message;
             }
         }
 
@@ -1182,11 +1153,8 @@ namespace QuadVitals.Settings
                 _attachments.Clear();
                 UpdateAttachmentList();
                 RestoreForm();
-                if (IsPreviewOpen)
-                {
-                    _previewPanel.Visibility = Visibility.Collapsed;
-                    _previewButton.Content = "查看将包含的信息";
-                }
+                // 清空是“从头写”：开着的诊断板看的是上一份内容，跟着一起关掉。
+                _window.CloseSubOverlay();
                 ShowStatus(string.Empty, false);
             }
             finally

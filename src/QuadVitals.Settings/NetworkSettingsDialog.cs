@@ -77,14 +77,6 @@ namespace QuadVitals.Settings
             ComboBox adapter = BuildAdapterBox(settings);
             fields.Children.Add(FieldLabel("网卡"));
             fields.Children.Add(adapter);
-            fields.Children.Add(new TextBlock
-            {
-                Text = "自动模式统计所有物理网卡的 IPv4+IPv6 总量，虚拟机/VPN 适配器会被排除。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 7, 0, 0)
-            });
 
             ComboBox rate = BuildRateBox(settings);
             TextBlock rateLabel = FieldLabel("刷新间隔");
@@ -92,14 +84,6 @@ namespace QuadVitals.Settings
             fields.Children.Add(rateLabel);
             fields.Children.Add(rate);
 
-            fields.Children.Add(new TextBlock
-            {
-                Text = "数值刷新、传感器采样与曲线采样共用这个周期（曲线共记录 60 个点）。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 7, 0, 0)
-            });
 
             ComboBox curve = BuildCurveBox(settings);
             TextBlock curveLabel = FieldLabel("曲线样式");
