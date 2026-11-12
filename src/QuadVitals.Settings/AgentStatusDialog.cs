@@ -47,14 +47,24 @@ namespace QuadVitals.Settings
         {
             StackPanel content = new StackPanel();
 
-            content.Children.Add(new TextBlock
+            // 标题行只放标题与右上角的叉：关闭是一个“离开”动作，和标题同层比和主操作同排更好找，
+            // 也与反馈、诊断、设置那几块板保持一致。
+            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 14) };
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            head.Children.Add(new TextBlock
             {
                 Text = "传感器状态",
                 FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = Theme.TextPrimaryBrush,
-                Margin = new Thickness(0, 0, 0, 14)
+                VerticalAlignment = VerticalAlignment.Center
             });
+            Button close = SettingsWindow.PanelCloseButton("AgentClose");
+            close.Click += (sender, e) => _window.CloseOverlay();
+            Grid.SetColumn(close, 1);
+            head.Children.Add(close);
+            content.Children.Add(head);
 
             // 重启期间面板只留一个加载环：正文用 Hidden 而不是 Collapsed，占位还在，
             // 卡片尺寸因此不跳；环叠在同一个格子里。
@@ -84,7 +94,7 @@ namespace QuadVitals.Settings
             StackPanel buttons = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
+                HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 20, 0, 0)
             };
 
@@ -101,9 +111,16 @@ namespace QuadVitals.Settings
             TextBlock actionLabel = new TextBlock
             {
                 Text = state.Alive ? "重启传感器" : "启动传感器",
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center
             };
             action.Content = actionLabel;
+
+            // 重启/启动进行中的文案不省略号：“正在重启传感器”是完整的一句，
+            // 省略号会让按钮宽度随文案跳动。
+            string busyLabel = state.Alive ? "正在重启传感器" : "正在启动传感器";
+            string idleLabel = state.Alive ? "重启传感器" : "启动传感器";
 
             action.Click += (sender, e) =>
             {
@@ -112,10 +129,9 @@ namespace QuadVitals.Settings
                     // 重启要等旧进程退出、新进程写出第一帧，按钮必须立刻显示“在做事”，
                     // 否则点下去到面板重建之间看起来像没反应。
                     action.IsEnabled = false;
-                    actionLabel.Text = "重启中…";
+                    actionLabel.Text = busyLabel;
                     body.Visibility = Visibility.Hidden;
                     ring.Visibility = Visibility.Visible;
-                    buttons.HorizontalAlignment = HorizontalAlignment.Center;
                     StartSpin(spin);
                     _window.RestartAgentFromDialog(ok =>
                     {
@@ -124,26 +140,18 @@ namespace QuadVitals.Settings
                         body.Visibility = Visibility.Visible;
                         ring.Visibility = Visibility.Collapsed;
                         spin.BeginAnimation(RotateTransform.AngleProperty, null);
-                        buttons.HorizontalAlignment = HorizontalAlignment.Right;
                         action.IsEnabled = true;
-                        actionLabel.Text = "重启传感器";
+                        actionLabel.Text = idleLabel;
                     });
                 }
                 else
                 {
                     action.IsEnabled = false;
-                    actionLabel.Text = "启动中…";
+                    actionLabel.Text = busyLabel;
                     _window.StartAgentFromDialog();
                 }
             };
             buttons.Children.Add(action);
-
-            FlatButton close = new FlatButton("关闭");
-            close.MinWidth = 88;
-            close.Margin = new Thickness(10, 0, 0, 0);
-            AutomationProperties.SetAutomationId(close, "AgentClose");
-            close.Click += (sender, e) => _window.CloseOverlay();
-            buttons.Children.Add(close);
 
             content.Children.Add(buttons);
 

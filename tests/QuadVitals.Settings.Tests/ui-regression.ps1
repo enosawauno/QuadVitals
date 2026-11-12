@@ -970,6 +970,12 @@ Check 'the preview box retints the scrollbar corner' (($null -ne $diagText) -and
 $diagHint = Find-ById $feedbackRoot 'FeedbackDiagnosticsHint'
 $expectedHint = U @(0x4EC5, 0x52FE, 0x9009, 0x540E, 0x8BFB, 0x53D6, 0x4F20, 0x611F, 0x5668, 0x4E0E, 0x7A0B, 0x5E8F, 0x65E5, 0x5FD7, 0xFF1B, 0x63D0, 0x4EA4, 0x524D, 0x53EF, 0x67E5, 0x770B, 0xFF0C, 0x76EE, 0x5F55, 0x5DF2, 0x8131, 0x654F, 0x3002)
 Check 'the diagnostics board carries the hint line' (($null -ne $diagHint) -and ($diagHint.Text -eq $expectedHint)) ''
+# 这句话现在是副标题：排在标题下、正文框之上。
+if (($null -ne $diagHint) -and ($null -ne $diagText)) {
+    $hintTop = Screen-Y $diagHint
+    $boxTop = Screen-Y $diagText
+    Check 'the diagnostics hint sits under the title' ($hintTop -lt $boxTop) ("hintY=" + [math]::Round($hintTop, 1) + " boxY=" + [math]::Round($boxTop, 1))
+}
 Check 'the writing area keeps its height while the board is open' ([math]::Abs($textBox.ActualHeight - $textHeightBefore) -le 1) ("before=" + [math]::Round($textHeightBefore, 1) + " after=" + [math]::Round($textBox.ActualHeight, 1))
 # 叠在上面：关掉它只关这一层，后面的表单与面板原样留着。
 $subOverlay = $windowType.GetField('_subOverlay', $flags).GetValue($feedbackWindow)
@@ -1022,6 +1028,10 @@ if (($null -ne $clearButton) -and ($null -ne $attachButton) -and ($null -ne $sub
     $textBox.Text = ''
     Pump 150
     Check 'the clear action hides again after clearing' ($clearButton.Visibility -eq [System.Windows.Visibility]::Collapsed) ''
+    # 输入框要长到页脚：中间不再留一条空白。
+    $footerTop = Screen-Y $submitButton
+    $boxBottom = (Screen-Y $textBox) + $textBox.ActualHeight
+    Check 'the writing box reaches the footer' (($footerTop - $boxBottom) -le 24) ("gap=" + [math]::Round(($footerTop - $boxBottom), 1))
 } else { Check 'the three actions are present' $false '' }
 
 # Submitted state: the form actions step aside for a single close; the panel keeps the same board
@@ -1481,7 +1491,9 @@ Check 'the spinner arc is asymmetric so the turn is visible' (($null -ne $ringAr
 
 $dialogSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\AgentStatusDialog.cs')
 Check 'restarting hides the text without collapsing it' ($dialogSource -match 'body\.Visibility = Visibility\.Hidden') ''
-Check 'restarting centres the action row' ($dialogSource -match 'buttons\.HorizontalAlignment = HorizontalAlignment\.Center') ''
+# 关闭按钮撤掉之后只剩一个动作，它从一建出来就是居中的，不再在重启时改对齐。
+$actionRow = $liveAction.Parent
+Check 'the action row is centred from the start' (($actionRow -is [System.Windows.Controls.StackPanel]) -and ($actionRow.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Center)) ''
 Check 'a failed restart puts the panel back' ($dialogSource -match 'if \(ok\) return;[\s\S]{0,200}?body\.Visibility = Visibility\.Visible') ''
 Check 'the panel names the shared-memory channel' ((Wait-ById $livePanel 'AgentSubline') -ne $null) ''
 Check 'the panel names the shared-memory channel' ((Find-ById $livePanel 'AgentSubline') -ne $null) ''
@@ -1496,6 +1508,26 @@ function New-AgentStateWithFlags([bool]$alive, [int]$flags) {
 }
 $elevationKnown = 8192          # MetricFlags.ElevationKnown
 $elevationElevated = 16384      # MetricFlags.Elevated
+
+# 关闭改成标题行的叉，底下不再有第二个按钮；剩下的主操作整行居中。
+$panelSize = New-Object System.Windows.Size(520, 420)
+$livePanel.Measure($panelSize)
+$livePanel.Arrange((New-Object System.Windows.Rect(0, 0, 520, 420)))
+$livePanel.UpdateLayout()
+$headerClose = Find-ById $livePanel 'AgentClose'
+Check 'the status panel closes from a header cross' ($null -ne $headerClose) ''
+$closeWord = -join [char[]](0x5173, 0x95ED)
+$closeButtons = @(Find-ByTypeName $livePanel 'Button' | Where-Object { (Action-Label $_) -eq $closeWord })
+Check 'the status panel no longer offers a second close button' ($closeButtons.Count -eq 0) ('count=' + $closeButtons.Count)
+if ($null -ne $liveAction) {
+    $actionCentre = $liveAction.TransformToAncestor($livePanel).Transform((New-Object System.Windows.Point(0, 0))).X + $liveAction.ActualWidth / 2
+    Check 'the single action is centred' ([math]::Abs($actionCentre - 260) -le 3) ('centre=' + [math]::Round($actionCentre, 1))
+}
+$dialogSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\AgentStatusDialog.cs')
+$busySentence = -join [char[]](0x6B63, 0x5728, 0x91CD, 0x542F, 0x4F20, 0x611F, 0x5668)
+$oldBusy = (-join [char[]](0x91CD, 0x542F, 0x4E2D)) + [string][char]0x2026
+Check 'the restarting label is the full sentence' ($dialogSource.Contains($busySentence) -and (-not $dialogSource.Contains($oldBusy))) ''
+
 $unelevatedPanel = $buildPanel.Invoke($dialog, @((New-AgentStateWithFlags $true $elevationKnown)))
 $elevatedPanel = $buildPanel.Invoke($dialog, @((New-AgentStateWithFlags $true ($elevationKnown -bor $elevationElevated))))
 $unelevatedLine = (-join [char[]](0x666E, 0x901A, 0x6743, 0x9650, 0xFF0C, 0x65E0, 0x6CD5, 0x83B7, 0x53D6)) + 'CPU' + (-join [char[]](0x6E29, 0x5EA6, 0x548C, 0x98CE, 0x6247, 0x8F6C, 0x901F, 0x6570, 0x636E))

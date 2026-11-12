@@ -249,7 +249,7 @@ namespace QuadVitals.Settings
 
             FrameworkElement footer = BuildFooter();
             footer.Margin = _compact
-                ? new Thickness(0, Theme.CardGap, 0, 0)
+                ? new Thickness(0, 8, 0, 0)
                 : new Thickness(Theme.PagePadding, Theme.CardGap, Theme.PagePadding, Theme.PagePadding);
             Grid.SetRow(footer, 1);
             page.Children.Add(footer);
@@ -320,33 +320,52 @@ namespace QuadVitals.Settings
 
             _attachmentRows.Margin = new Thickness(0, 2, 0, 0);
 
-            // 输入框吃满剩余高度，附件与预览按内容排在它下面；内容多过一屏时这一段自己滚。
-            Grid flow = new Grid();
-            flow.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            flow.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Grid.SetRow(textArea, 0);
-            flow.Children.Add(textArea);
-            Grid.SetRow(_attachmentHint, 1);
-            flow.Children.Add(_attachmentHint);
-            Grid.SetRow(_attachmentRows, 2);
-            flow.Children.Add(_attachmentRows);
-
-            _scroll = new ScrollViewer
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                VerticalContentAlignment = VerticalAlignment.Stretch,
-                Content = flow
-            };
-
             // 表单只剩输入区：诊断日志那一块挪到页脚，和三个动作同排、下沿对齐。
+            // 面板高度固定，所以表单直接排在卡片里，星号行才拿得到剩余高度（输入框因此长到页脚）。
+            // 页面上则把整块表单放进滚动区，输入框拿固定高度。
             Grid form = new Grid();
             form.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            Grid.SetRow(_scroll, 0);
-            form.Children.Add(_scroll);
-            _formBody = form;
+            form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(textArea, 0);
+            form.Children.Add(textArea);
+            Grid.SetRow(_attachmentHint, 1);
+            form.Children.Add(_attachmentHint);
 
+            if (_compact)
+            {
+                // 附件最多 8 条，在面板里给它自己的滚动区，撑满时不会把输入框顶小。
+                ScrollViewer attachments = new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    MaxHeight = 132,
+                    Margin = new Thickness(0, 2, 0, 0),
+                    Content = _attachmentRows
+                };
+                Grid.SetRow(attachments, 2);
+                form.Children.Add(attachments);
+                _formBody = form;
+            }
+            else
+            {
+                _attachmentRows.Margin = new Thickness(0, 2, 0, 0);
+                Grid.SetRow(_attachmentRows, 2);
+                form.Children.Add(_attachmentRows);
+
+                _scroll = new ScrollViewer
+                {
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    VerticalContentAlignment = VerticalAlignment.Stretch,
+                    Content = form
+                };
+                Grid wrapper = new Grid();
+                wrapper.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                Grid.SetRow(_scroll, 0);
+                wrapper.Children.Add(_scroll);
+                _formBody = wrapper;
+            }
             _resultBody = BuildResultBody();
             _resultBody.Visibility = Visibility.Collapsed;
 
@@ -434,6 +453,8 @@ namespace QuadVitals.Settings
             _status.TextAlignment = TextAlignment.Right;
             _status.HorizontalAlignment = HorizontalAlignment.Right;
             _status.Margin = new Thickness(0, 0, 0, 8);
+            // 一开始没有提示，就不占那一行：空行会把输入框挤矮，页脚上方多出一条空白。
+            _status.Visibility = Visibility.Collapsed;
             Grid.SetRow(_status, 0);
             footer.Children.Add(_status);
 
@@ -1173,6 +1194,8 @@ namespace QuadVitals.Settings
             _status.Opacity = 1;
 
             _status.Text = text ?? string.Empty;
+            // 空状态不占行：页脚上方那一条空白就是它占出来的，空着时也不该把自己算进布局。
+            _status.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
             _status.Foreground = string.IsNullOrEmpty(text)
                 ? Theme.TextTertiaryBrush
                 : (isError ? Theme.AccentRedBrush : Theme.TextSecondaryBrush);
@@ -1195,6 +1218,7 @@ namespace QuadVitals.Settings
             fade.Completed += (sender, e) =>
             {
                 _status.Text = string.Empty;
+                _status.Visibility = Visibility.Collapsed;
                 _status.Opacity = 1;
             };
             _status.BeginAnimation(UIElement.OpacityProperty, fade);

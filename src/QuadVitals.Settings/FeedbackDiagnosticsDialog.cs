@@ -52,10 +52,10 @@ namespace QuadVitals.Settings
 
             Grid grid = new Grid();
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 14) };
+            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 6) };
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -78,6 +78,20 @@ namespace QuadVitals.Settings
             Grid.SetRow(head, 0);
             grid.Children.Add(head);
 
+            // 这句话原来贴在板底，与正文分成两截；它解释的是“这一板是什么”，
+            // 所以当副标题放在标题下面，读者先知道在看什么，再看内容。
+            TextBlock hint = new TextBlock
+            {
+                Text = "仅勾选后读取传感器与程序日志；提交前可查看，目录已脱敏。",
+                FontSize = 11,
+                Foreground = Theme.TextTertiaryBrush,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+            AutomationProperties.SetAutomationId(hint, "FeedbackDiagnosticsHint");
+            Grid.SetRow(hint, 1);
+            grid.Children.Add(hint);
+
             // 等宽字体 + 只读：这一块是给“核对哪几行会发出去”看的，不是编辑区。
             // 长行必须折行而不是被右边缘切掉，且每一行左右两条边都要齐齐地贴住卡片内边距。
             _box.IsReadOnly = true;
@@ -92,22 +106,8 @@ namespace QuadVitals.Settings
             _box.FontSize = 11;
             _box.Padding = new Thickness(10);
             AutomationProperties.SetAutomationId(_box, "FeedbackDiagnosticsText");
-            Grid.SetRow(_box, 1);
+            Grid.SetRow(_box, 2);
             grid.Children.Add(_box);
-
-            // 这句话原来贴在复选框下面，只有一句就占了一行，还常被按钮行挤压。
-            // 它的意思只对“正在看这份预览”的人有用，所以跟着预览走。
-            TextBlock hint = new TextBlock
-            {
-                Text = "仅勾选后读取传感器与程序日志；提交前可查看，目录已脱敏。",
-                FontSize = 11,
-                Foreground = Theme.TextTertiaryBrush,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-            AutomationProperties.SetAutomationId(hint, "FeedbackDiagnosticsHint");
-            Grid.SetRow(hint, 2);
-            grid.Children.Add(hint);
 
             panel.Child = grid;
             return panel;
