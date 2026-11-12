@@ -984,15 +984,27 @@ namespace QuadVitals.Settings
             _navGlider = new Border
             {
                 Height = 44,
-                CornerRadius = new CornerRadius(12),
+                CornerRadius = new CornerRadius(10),
                 VerticalAlignment = VerticalAlignment.Top,
                 Background = BuildNavGliderBrush(),
+                // 一层 1 px 的白色描边 + 顶部更亮的一条细线：选中面像一块磨砂玻璃，
+                // 不与指标抢颜色，也不会因为 16% 的白而在深底上显得脏。
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1),
+                Child = new Border
+                {
+                    Height = 1,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(1, 1, 1, 0),
+                    Background = new SolidColorBrush(Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF))
+                },
                 Effect = new System.Windows.Media.Effects.DropShadowEffect
                 {
-                    Color = Theme.AccentGreen,
+                    Color = Color.FromRgb(0x00, 0x2D, 0x82),
                     BlurRadius = 18,
-                    ShadowDepth = 0,
-                    Opacity = 0.35
+                    ShadowDepth = 8,
+                    Direction = 270,
+                    Opacity = 0.10
                 },
                 IsHitTestVisible = false,
                 Visibility = Visibility.Collapsed,
@@ -1015,15 +1027,8 @@ namespace QuadVitals.Settings
 
         private static Brush BuildNavGliderBrush()
         {
-            // 左端实、右端透：文字只落在实色区，行尾自然淡出（和预览里的单色版一致）。
-            LinearGradientBrush brush = new LinearGradientBrush
-            {
-                StartPoint = new Point(0, 0),
-                EndPoint = new Point(1, 1)
-            };
-            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0xF0, 0x1D, 0xB9, 0x54), 0));
-            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0xB8, 0x1D, 0xB9, 0x54), 0.65));
-            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0x5A, 0x1D, 0xB9, 0x54), 1));
+            // 白色 16% 的磨砂面：一级导航只表达“选中”，颜色留给指标与开关。
+            SolidColorBrush brush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0xFF, 0xFF));
             brush.Freeze();
             return brush;
         }

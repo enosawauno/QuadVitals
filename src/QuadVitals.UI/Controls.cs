@@ -303,8 +303,8 @@ namespace QuadVitals.UI
                 _selected = value;
                 // 选中面是列表背后那块会滑动的滑块；行自己必须保持透明，否则会盖住滑块。
                 Background = Brushes.Transparent;
-                // 滑块是品牌绿：白字对比度只有 ~2.4:1，用近黑（和主按钮一致）。
-                _text.Foreground = value ? Theme.OnAccentBrush : Theme.TextSecondaryBrush;
+                // 滑块是一层白玻璃：字用主文字色，选中靠亮度与字重区分。
+                _text.Foreground = value ? Theme.TextPrimaryBrush : Theme.TextSecondaryBrush;
                 _text.FontWeight = value ? FontWeights.SemiBold : FontWeights.Normal;
             }
         }

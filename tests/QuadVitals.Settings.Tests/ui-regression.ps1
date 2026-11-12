@@ -1212,6 +1212,12 @@ $navRoot.Arrange((New-Object System.Windows.Rect(0, 0, 1280, 853)))
 $navRoot.UpdateLayout()
 $navGlider = Find-ById $navRoot 'NavGlider'
 Check 'the sidebar has a selection pill' ($null -ne $navGlider) ''
+# 选中面参照 fops：白色 16% 的薄片 + 1 px 白描边 + 圆角 10，不再有任何绿色。
+if ($null -ne $navGlider) {
+    $navBrush = $navGlider.Background
+    Check 'the nav pill is a translucent white sheet' (($navBrush -is [System.Windows.Media.SolidColorBrush]) -and ($navBrush.Color.A -ge 0x20) -and ($navBrush.Color.A -le 0x40) -and ($navBrush.Color.R -eq 255) -and ($navBrush.Color.G -eq 255) -and ($navBrush.Color.B -eq 255)) ("brush=" + $navBrush.Color)
+    Check 'the nav pill keeps the fops border and radius' (([double]$navGlider.BorderThickness.Left -eq 1) -and ([double]$navGlider.CornerRadius.TopLeft -eq 10)) ("border=" + $navGlider.BorderThickness.Left + " radius=" + $navGlider.CornerRadius.TopLeft)
+}
 if ($null -ne $navGlider) {
     $navShift = $navGlider.RenderTransform
     Check 'the pill starts on the first item without sliding' ([math]::Abs($navShift.Y) -le 0.5) "y=$($navShift.Y)"
