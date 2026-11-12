@@ -49,7 +49,7 @@ namespace QuadVitals.Settings
 
             // 标题行只放标题与右上角的叉：关闭是一个“离开”动作，和标题同层比和主操作同排更好找，
             // 也与反馈、诊断、设置那几块板保持一致。
-            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 14) };
+            Grid head = new Grid { Margin = new Thickness(0, 0, 0, 10) };
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             head.Children.Add(new TextBlock
@@ -73,7 +73,7 @@ namespace QuadVitals.Settings
             body.Children.Add(new Border
             {
                 Height = 1,
-                Margin = new Thickness(0, 16, 0, 14),
+                Margin = new Thickness(0, 10, 0, 8),
                 Background = Theme.BorderSubtleBrush
             });
 
@@ -95,7 +95,7 @@ namespace QuadVitals.Settings
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 20, 0, 0)
+                Margin = new Thickness(0, 14, 0, 0)
             };
 
             // 一个动作：重启传感器。原先“修复登录计划任务”是第二个按钮，但它与重启是同一件事的两半
@@ -244,8 +244,8 @@ namespace QuadVitals.Settings
 
             Ellipse halo = new Ellipse
             {
-                Width = 30,
-                Height = 30,
+                Width = 20,
+                Height = 20,
                 Fill = haloBrush,
                 IsHitTestVisible = false,
                 RenderTransformOrigin = new Point(0.5, 0.5)
@@ -253,14 +253,14 @@ namespace QuadVitals.Settings
 
             Ellipse dot = new Ellipse
             {
-                Width = 9,
-                Height = 9,
+                Width = 7,
+                Height = 7,
                 Fill = new SolidColorBrush(color),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            Grid light = new Grid { Width = 30, Height = 30, Margin = new Thickness(0, 0, 1, 0) };
+            Grid light = new Grid { Width = 20, Height = 20, Margin = new Thickness(0, 0, 6, 0) };
             AutomationProperties.SetAutomationId(light, "AgentStateIcon");
             light.Children.Add(halo);
             light.Children.Add(dot);
@@ -416,7 +416,7 @@ namespace QuadVitals.Settings
 
         private static FrameworkElement DetailRow(string label, string value)
         {
-            Grid row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            Grid row = new Grid { Margin = new Thickness(0, 2, 0, 2) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 

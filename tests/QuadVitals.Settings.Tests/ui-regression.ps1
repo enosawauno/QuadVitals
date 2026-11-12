@@ -1406,6 +1406,11 @@ $livePanel = $buildPanel.Invoke($dialog, @((New-AgentState $true)))
 $deadPanel = $buildPanel.Invoke($dialog, @((New-AgentState $false)))
 $liveIcon = Find-ById $livePanel 'AgentStateIcon'
 $deadIcon = Find-ById $deadPanel 'AgentStateIcon'
+# 状态区一行就够：灯缩小、行距收回，整块面板不再被它顶高。
+Check 'the state light is compact' (($null -ne $liveIcon) -and ($liveIcon.Width -le 22)) ('w=' + $liveIcon.Width)
+$heightProbe = $buildPanel.Invoke($dialog, @((New-AgentState $true)))
+$heightProbe.Measure((New-Object System.Windows.Size(520, [double]::PositiveInfinity)))
+Check 'the state block no longer stretches the panel' ($heightProbe.DesiredSize.Height -le 300) ('height=' + [math]::Round($heightProbe.DesiredSize.Height, 1))
 $liveAction = Find-ById $livePanel 'AgentAction'
 $deadAction = Find-ById $deadPanel 'AgentAction'
 
@@ -1456,7 +1461,7 @@ function Dot-Color($icon) {
 
 $liveLight = Status-Shapes $liveIcon
 $deadLight = Status-Shapes $deadIcon
-Check 'the status light is a halo ring with a dot' (($liveLight.Width -eq 30) -and ($null -ne $liveLight.Halo) -and ($null -ne $liveLight.Dot)) "width=$($liveLight.Width) halo=$($null -ne $liveLight.Halo) dot=$($null -ne $liveLight.Dot)"
+Check 'the status light is a halo ring with a dot' (($liveLight.Width -le 30) -and ($null -ne $liveLight.Halo) -and ($null -ne $liveLight.Dot)) "width=$($liveLight.Width) halo=$($null -ne $liveLight.Halo) dot=$($null -ne $liveLight.Dot)"
 Check 'a live agent shows the green dot' ((Dot-Color $liveIcon) -eq [QuadVitals.UI.Theme]::AccentGreen) "dot=$(Dot-Color $liveIcon)"
 Check 'a live halo breathes' (($null -ne $liveLight.Halo) -and $liveLight.Halo.HasAnimatedProperties -and ($liveLight.Halo.RenderTransform -is [System.Windows.Media.ScaleTransform])) 'animation expected'
 Check 'a dead agent shows the red dot' ((Dot-Color $deadIcon) -eq [QuadVitals.UI.Theme]::AccentRed) "dot=$(Dot-Color $deadIcon)"
