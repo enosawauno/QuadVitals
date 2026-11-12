@@ -94,7 +94,7 @@ namespace QuadVitals.Settings
             StackPanel buttons = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(0, 20, 0, 0)
             };
 
@@ -102,7 +102,8 @@ namespace QuadVitals.Settings
             // （重建任务 → 换进程），拆开后点哪个都只完成一半；现在重建任务在重启里自动完成。
             // 按钮只留文案：图标在 12 px 上只能画成一块色斑，读不出“授权”的含义。
             FlatButton action = new FlatButton(state.Alive ? "重启传感器" : "启动传感器", true);
-            action.MinWidth = 118;
+            // 按钮贴内容宽度：左右内边距收窄后不再比文字宽一圈，也不再靠 MinWidth 撑着。
+            action.Padding = new Thickness(12, 7, 12, 7);
             action.ToolTip = state.Alive
                 ? "以管理员权限重启传感器进程，然后重新读取全部数据"
                 : "以管理员权限启动传感器进程";
@@ -132,6 +133,8 @@ namespace QuadVitals.Settings
                     actionLabel.Text = busyLabel;
                     body.Visibility = Visibility.Hidden;
                     ring.Visibility = Visibility.Visible;
+                    // 只有“正在重启”这个图形态把按钮摆到正中；文字态始终留在右下角。
+                    buttons.HorizontalAlignment = HorizontalAlignment.Center;
                     StartSpin(spin);
                     _window.RestartAgentFromDialog(ok =>
                     {
@@ -140,6 +143,7 @@ namespace QuadVitals.Settings
                         body.Visibility = Visibility.Visible;
                         ring.Visibility = Visibility.Collapsed;
                         spin.BeginAnimation(RotateTransform.AngleProperty, null);
+                        buttons.HorizontalAlignment = HorizontalAlignment.Right;
                         action.IsEnabled = true;
                         actionLabel.Text = idleLabel;
                     });
@@ -157,7 +161,9 @@ namespace QuadVitals.Settings
 
             return new Border
             {
-                Width = 520,
+                // 面板宽度跟内容走：固定 520 会让状态行右侧空出一大片，看着像那块比内容宽。
+                MinWidth = 420,
+                MaxWidth = 520,
                 Background = Theme.SurfaceCardBrush,
                 CornerRadius = new CornerRadius(Theme.CardRadius),
                 Padding = new Thickness(24),

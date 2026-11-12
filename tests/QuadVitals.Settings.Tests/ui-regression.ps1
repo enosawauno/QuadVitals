@@ -1491,9 +1491,9 @@ Check 'the spinner arc is asymmetric so the turn is visible' (($null -ne $ringAr
 
 $dialogSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\AgentStatusDialog.cs')
 Check 'restarting hides the text without collapsing it' ($dialogSource -match 'body\.Visibility = Visibility\.Hidden') ''
-# 关闭按钮撤掉之后只剩一个动作，它从一建出来就是居中的，不再在重启时改对齐。
+# 关闭按钮撤掉之后只剩一个动作：文字态在右下，重启态才居中。
 $actionRow = $liveAction.Parent
-Check 'the action row is centred from the start' (($actionRow -is [System.Windows.Controls.StackPanel]) -and ($actionRow.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Center)) ''
+Check 'the action row is right aligned by default' (($actionRow -is [System.Windows.Controls.StackPanel]) -and ($actionRow.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Right)) ''
 Check 'a failed restart puts the panel back' ($dialogSource -match 'if \(ok\) return;[\s\S]{0,200}?body\.Visibility = Visibility\.Visible') ''
 Check 'the panel names the shared-memory channel' ((Wait-ById $livePanel 'AgentSubline') -ne $null) ''
 Check 'the panel names the shared-memory channel' ((Find-ById $livePanel 'AgentSubline') -ne $null) ''
@@ -1509,7 +1509,7 @@ function New-AgentStateWithFlags([bool]$alive, [int]$flags) {
 $elevationKnown = 8192          # MetricFlags.ElevationKnown
 $elevationElevated = 16384      # MetricFlags.Elevated
 
-# 关闭改成标题行的叉，底下不再有第二个按钮；剩下的主操作整行居中。
+# 关闭改成标题行的叉，底下不再有第二个按钮；文字态的按钮留在右下角。
 $panelSize = New-Object System.Windows.Size(520, 420)
 $livePanel.Measure($panelSize)
 $livePanel.Arrange((New-Object System.Windows.Rect(0, 0, 520, 420)))
@@ -1520,13 +1520,17 @@ $closeWord = -join [char[]](0x5173, 0x95ED)
 $closeButtons = @(Find-ByTypeName $livePanel 'Button' | Where-Object { (Action-Label $_) -eq $closeWord })
 Check 'the status panel no longer offers a second close button' ($closeButtons.Count -eq 0) ('count=' + $closeButtons.Count)
 if ($null -ne $liveAction) {
-    $actionCentre = $liveAction.TransformToAncestor($livePanel).Transform((New-Object System.Windows.Point(0, 0))).X + $liveAction.ActualWidth / 2
-    Check 'the single action is centred' ([math]::Abs($actionCentre - 260) -le 3) ('centre=' + [math]::Round($actionCentre, 1))
+    Check 'the action keeps a compact horizontal padding' (($liveAction.Padding.Left -le 12) -and ($liveAction.Padding.Right -le 12)) ('padding=' + $liveAction.Padding.Left)
+    $actionRow = $liveAction.Parent
+    Check 'the text state keeps the action at the bottom right' (($actionRow -is [System.Windows.Controls.StackPanel]) -and ($actionRow.HorizontalAlignment -eq [System.Windows.HorizontalAlignment]::Right)) ''
 }
 $dialogSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\AgentStatusDialog.cs')
 $busySentence = -join [char[]](0x6B63, 0x5728, 0x91CD, 0x542F, 0x4F20, 0x611F, 0x5668)
 $oldBusy = (-join [char[]](0x91CD, 0x542F, 0x4E2D)) + [string][char]0x2026
 Check 'the restarting label is the full sentence' ($dialogSource.Contains($busySentence) -and (-not $dialogSource.Contains($oldBusy))) ''
+# 只有“正在重启”这一图形态把按钮移到正中，失败后回到右下。
+Check 'only a restart centres the action row' ($dialogSource -match 'buttons\.HorizontalAlignment = HorizontalAlignment\.Center') ''
+Check 'a failed restart puts the row back to the right' ($dialogSource -match 'buttons\.HorizontalAlignment = HorizontalAlignment\.Right') ''
 
 $unelevatedPanel = $buildPanel.Invoke($dialog, @((New-AgentStateWithFlags $true $elevationKnown)))
 $elevatedPanel = $buildPanel.Invoke($dialog, @((New-AgentStateWithFlags $true ($elevationKnown -bor $elevationElevated))))
