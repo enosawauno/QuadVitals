@@ -23,11 +23,27 @@ try {
     }
 
     $uiDir = (Resolve-Path (Join-Path $root $OutDir)).Path
+
+    # The suites type into the feedback form and click submit. Against the real %APPDATA% that
+    # posts real feedback to the server and wipes whatever draft the user is writing, which is
+    # exactly what happened once. Point every child at a scratch tree instead, seeded with the
+    # live settings file so the assertions still see the same configuration.
+    $appDataRoot = Join-Path $root 'build\tmp\ui-appdata'
+    $appDataDir = Join-Path $appDataRoot 'QuadVitals'
+    New-Item -ItemType Directory -Force -Path $appDataDir | Out-Null
+    $liveSettings = Join-Path $env:APPDATA 'QuadVitals\settings.json'
+    if (Test-Path -LiteralPath $liveSettings) {
+        Copy-Item -LiteralPath $liveSettings -Destination (Join-Path $appDataDir 'settings.json') -Force
+    }
+    $env:QUADVITALS_APPDATA = $appDataRoot
+    # No outbound requests from a regression run (update check, processor spec table).
+    $env:QUADVITALS_NO_UPDATE_CHECK = '1'
+    $env:QUADVITALS_NO_AUTO_RECOVERY = '1'
     # Four suites, four processes: the element-list rules, the general settings sheet, the device
     # status dialog / tile formats, and the overview dynamics (fan card / diagnostics / frame clock).
     # Separate processes because the overlay panel kept answering "not found" after a few hundred
     # windows, and because one file per surface is what keeps each suite inside the size limit.
-    $suites = @('ui-regression.ps1', 'general-settings.ps1', 'device-dialog.ps1', 'overview-dynamics.ps1')
+    $suites = @('ui-regression.ps1', 'general-settings.ps1', 'device-dialog.ps1', 'overview-dynamics.ps1', 'update-dialog.ps1')
     $codes = @()
     foreach ($name in $suites) {
         $suite = Join-Path $root ('tests\QuadVitals.Settings.Tests\' + $name)
@@ -39,7 +55,7 @@ try {
 
     # The baseline check wants one number for the whole run: sum the per-suite counts.
     $passed = 0
-    foreach ($part in @('settings-ui-elements', 'settings-ui-general', 'settings-ui-device', 'settings-ui-overview-dynamics')) {
+    foreach ($part in @('settings-ui-elements', 'settings-ui-general', 'settings-ui-device', 'settings-ui-overview-dynamics', 'settings-ui-update')) {
         $partFile = Join-Path $root ('build\tmp\assertion-count-' + $part + '.txt')
         if (Test-Path -LiteralPath $partFile) { $passed += [int]([IO.File]::ReadAllText($partFile).Trim()) }
     }

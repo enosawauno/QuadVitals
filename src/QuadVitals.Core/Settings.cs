@@ -944,7 +944,13 @@ namespace QuadVitals.Core
         {
             get
             {
-                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                // Test/dev escape hatch: the regression suites drive the real feedback form.
+                // Without this they post real feedback and delete the user's draft. Normal runs
+                // never set it, so the shipped product still uses %APPDATA%.
+                string overrideRoot = Environment.GetEnvironmentVariable("QUADVITALS_APPDATA");
+                string appData = string.IsNullOrEmpty(overrideRoot)
+                    ? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                    : overrideRoot;
                 return Path.Combine(Path.Combine(appData, "QuadVitals"), "settings.json");
             }
         }
