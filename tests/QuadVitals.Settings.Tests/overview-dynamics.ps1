@@ -211,7 +211,7 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'the pump halo is translucent' (($pumpGlow.Opacity -gt 0.2) -and ($pumpGlow.Opacity -lt 0.55)) ("opacity=" + $pumpGlow.Opacity)
 
             $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($null, $false)) | Out-Null
-            Check 'offline shows a dash and a reason' (((Find-ById $ovRoot 'FanValue').Text -eq '--') -and ((Find-ById $ovRoot 'FanEmpty').Text.Length -gt 0)) ''
+            Check 'offline shows a dash and a reason' (((Find-ById $ovRoot 'FanValue').Text -eq '--') -and ((Read-Field $fanCard '_card' $flags).Title.Length -gt 2)) ''
 
             # Empty state is grey, not "green but empty": the ring, the blades and the dash all drop
             # to the readable grey, while the reason line takes the warning colour and stays on one
@@ -232,11 +232,12 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $pump.Rpm = 0
             $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
             Check 'a stopped channel reads 0, not a dash' ((Find-ById $ovRoot 'FanValue').Text -eq '0') ("value=" + (Find-ById $ovRoot 'FanValue').Text)
-            Check 'a stopped channel says so' ((Find-ById $ovRoot 'FanEmpty').Text.Length -gt 0) ("text=" + (Find-ById $ovRoot 'FanEmpty').Text)
+            $stoppedWord = U @(0x505C, 0x8F6C)
+            Check 'a stopped channel says so' ((Read-Field $fanCard '_card' $flags).Title.Contains($stoppedWord)) ("title=" + (Read-Field $fanCard '_card' $flags).Title)
             Check 'a stopped channel is a danger band' ($freshCard.GetType().GetProperty('Tone').GetValue($freshCard, $null).ToString() -eq 'Danger') ''
             Check 'a stopped pump drops the cyan halo' (-not [bool]$freshCard.GetType().GetProperty('PumpGlowVisible').GetValue($freshCard, $null)) ''
             $stoppedEmpty = Find-ById $ovRoot 'FanEmpty'
-            Check 'the stopped line is red' ($stoppedEmpty.Foreground -eq [QuadVitals.UI.Theme]::AccentRedBrush) ("fg=" + $stoppedEmpty.Foreground)
+            Check 'the stopped reason sits in the title brackets' ((Read-Field $fanCard '_card' $flags).Title.Contains([string][char]0xFF08)) ''
             $pump.Rpm = $savedPumpRpm
 
             # Configured but absent this frame: say it, never swap to another channel.
@@ -244,14 +245,14 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
             Check 'a missing selected channel does not borrow another one' ((Find-ById $ovRoot 'FanValue').Text -eq '--') ("value=" + (Find-ById $ovRoot 'FanValue').Text)
             Check 'the missing selected channel keeps its number' ((Find-ById $ovRoot 'FanCaption').Text -eq ([string]::Concat([char]0x901A, [char]0x9053, ' 5'))) ("caption=" + (Find-ById $ovRoot 'FanCaption').Text)
-            Check 'the card explains the missing selection' ((Find-ById $ovRoot 'FanEmpty').Text.Length -gt 0) ''
+            Check 'the card explains the missing selection' ((Read-Field $fanCard '_card' $flags).Title.Length -gt 2) ''
 
             # 在线但 Agent 没提权：温度与风扇同源，卡片要说清“未提权”，而不是“未读取到主板风扇”。
             $unelevated = [Activator]::CreateInstance($snapType)
             $unelevated.TimestampUtc = [DateTime]::UtcNow
             $unelevated.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, ElevationKnown')
             $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($unelevated, $true)) | Out-Null
-            $unelevatedText = (Find-ById $ovRoot 'FanEmpty').Text
+            $unelevatedText = (Read-Field $fanCard '_card' $flags).Title
             Check 'the fan card explains an unelevated agent' ($unelevatedText -like '*未提权*') "text=$unelevatedText"
             $freshCard.GetType().GetMethod('Update').Invoke($freshCard, @($snap, $true)) | Out-Null
             $freshCard.GetType().GetProperty('PreferredChannel').SetValue($freshCard, 7, $null)
@@ -681,10 +682,10 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             Check 'a missing GPU feed removes the total' ((Find-ById $ovRoot 'PowerTotal').Text -eq '--') ("total=" + (Find-ById $ovRoot 'PowerTotal').Text)
             Check 'the valid CPU feed stays readable' ((Find-ById $ovRoot 'PowerCpu').Text -eq '112.6') ''
             Check 'the missing GPU feed reads --' ((Find-ById $ovRoot 'PowerGpu').Text -eq '--') ''
-            Check 'the missing feed is explained' ((Find-ById $ovRoot 'PowerNote').Visibility -eq [System.Windows.Visibility]::Visible) ''
+            Check 'the missing feed is explained' ((Read-Field $powerCard '_card' $flags).Title.Length -gt 4) ''
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($null, $false)) | Out-Null
             Check 'an offline power card shows a dash' ((Find-ById $ovRoot 'PowerTotal').Text -eq '--') ''
-            Check 'an offline power card explains itself' ((Find-ById $ovRoot 'PowerNote').Text.Length -gt 0) ''
+            Check 'an offline power card explains itself' (((Read-Field $powerCard '_card' $flags).Title.Length -gt 4) -and ((Find-ById $ovRoot 'PowerNote').Text.Length -eq 0)) ''
 
             # 回到一帧完整数据：错误说明行会在卡片里占一行，量高度前得先让它藏起来。
             $powerSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid, GpuPowerValid')

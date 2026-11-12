@@ -179,6 +179,7 @@ namespace QuadVitals.Settings
                 _total.Text = (cpuWatts + gpuWatts).ToString("0.0", CultureInfo.InvariantCulture);
                 _totalUnit.Text = "W";
                 _total.Foreground = Theme.TextPrimaryBrush;
+                _card.Title = "功耗";
                 ShowScopeNote();
             }
             else
@@ -186,10 +187,12 @@ namespace QuadVitals.Settings
                 _total.Text = MetricFormat.Invalid;
                 _totalUnit.Text = string.Empty;
                 _total.Foreground = Theme.TextSecondaryBrush;
-                _note.Text = !cpuValid && !gpuValid
+                // 原因进标题：卡片底部那行是给统计范围用的，告警挤在那会把它顶掉。
+                string missing = !cpuValid && !gpuValid
                     ? "CPU 与 GPU 功耗读取失败"
                     : "缺少 CPU 或 GPU 功耗";
-                _note.Foreground = Theme.AccentOrangeBrush;
+                _card.Title = "功耗（" + missing + "）";
+                _note.Text = string.Empty;
             }
 
             // 合计文案上面才定下来，环心用它，所以放在最后。
@@ -295,8 +298,8 @@ namespace QuadVitals.Settings
             _load = 0;
             _tone = MetricTone.Normal;
             ApplySceneTone(Theme.TextSecondary);
-            _note.Text = reason;
-            _note.Foreground = Theme.AccentOrangeBrush;
+            _card.Title = "功耗（" + reason + "）";
+            _note.Text = string.Empty;
             _ringCpu.Fraction = 0;
             _ringGpu.Fraction = 0;
             _ringTotal.Text = MetricFormat.Invalid;

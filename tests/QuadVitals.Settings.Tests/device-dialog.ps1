@@ -137,7 +137,7 @@ if ($null -ne $devicePanel) {
         $tile = Read-Field $ovPage $tileFields[$hardware] $flags
         $isTemperature = ($hardware -eq 'cpu') -or ($hardware -eq 'gpu')
         if ($isTemperature) {
-            Check ("the $hardware tile follows the selected metric") ($tile.Label.EndsWith($temperatureWord)) "label=$($tile.Label)"
+            Check ("the $hardware tile follows the selected metric") (((($tile.Label -split [char]0xFF08)[0]).EndsWith($temperatureWord))) "label=$($tile.Label)"
         }
     }
     Set-Setting $metrics 'Cpu' 'usage'

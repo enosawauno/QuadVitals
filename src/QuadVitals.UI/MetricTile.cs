@@ -13,6 +13,7 @@ namespace QuadVitals.UI
     public class MetricTile : StackPanel
     {
         private readonly TextBlock _label = new TextBlock();
+        private string _labelBase;
         private readonly TextBlock _value = new TextBlock();
         private readonly TextBlock _unit = new TextBlock();
         private readonly TextBlock _caption = new TextBlock();
@@ -26,8 +27,12 @@ namespace QuadVitals.UI
             _bar = new MetricBar(accent, Theme.TrackGrey);
 
             _label.Text = label;
+            _labelBase = label;
             _label.FontSize = 12;
             _label.Foreground = Theme.TextTertiaryBrush;
+            // 告警文案会接到标签后面，长一点时只能省略，不能换行把整格拉高。
+            _label.TextWrapping = TextWrapping.NoWrap;
+            _label.TextTrimming = TextTrimming.CharacterEllipsis;
             Children.Add(_label);
 
             StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
@@ -92,7 +97,13 @@ namespace QuadVitals.UI
         public string Label
         {
             get { return _label.Text; }
-            set { _label.Text = value; }
+            set
+            {
+                // 标签名会随指标切换（“CPU · 占用” → “CPU · 功耗”），告警括号拼在它后面，
+                // 所以基名必须一起改，不然后一次 SetValue 会把旧名字写回去。
+                _labelBase = value;
+                _label.Text = value;
+            }
         }
 
         /// <summary>走马循环：淡入度与目标转速，内部缓动逼近（见 MetricBar.SetIoWave）。</summary>
@@ -121,9 +132,23 @@ namespace QuadVitals.UI
             _value.Text = value ?? "--";
             _unit.Text = unit ?? string.Empty;
             _bar.SetValue(fraction);
-            _caption.Text = caption ?? string.Empty;
             // “没有数据”和“数据是 0”必须一眼分开：说明行用警告色，有数据时才是次级灰。
             bool noData = string.IsNullOrEmpty(value) || value == MetricFormat.Invalid;
+            // 没数据时的原因（“未提权，读不到温度”这类）不占卡片底部一行，接到标签后面用全角
+            // 括号括起：同一句话放在哪都读得出来，但放标题上不会把格子的底边挤下去。
+            string note = caption ?? string.Empty;
+            if (noData && note.Length > 0)
+            {
+                _label.Text = _labelBase + "（" + note + "）";
+                _label.Foreground = Theme.AccentOrangeBrush;
+                _caption.Text = string.Empty;
+            }
+            else
+            {
+                _label.Text = _labelBase;
+                _label.Foreground = Theme.TextTertiaryBrush;
+                _caption.Text = note;
+            }
             _caption.Foreground = noData ? Theme.AccentOrangeBrush : Theme.TextSecondaryBrush;
 
             Color barColor = _accent;
