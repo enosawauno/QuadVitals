@@ -85,20 +85,23 @@ namespace QuadVitals.Settings
 
         private void CopyServerId()
         {
-            if (string.IsNullOrEmpty(_serverId))
-            {
-                ShowStatus("没有服务端编号可复制", true);
-                return;
-            }
+            if (string.IsNullOrEmpty(_serverId)) return;
             try
             {
+                // 复制不报结果：页脚的状态行一出现就会把按钮顶上去，一次“静默成功”不值得让布局跳一下。
+                // 反馈改在已有的那行上传结果上：前缀“已上传”→“已复制”，两个字字数相同，宽度不变。
                 Clipboard.SetText(_serverId);
-                ShowStatus("已复制服务端编号 " + _serverId, false);
+                _successUpload.Text = UploadLine("已复制", _serverId);
             }
             catch (Exception)
             {
-                ShowStatus("复制失败，请手动选中编号", true);
+                // 剪贴板被占时不弹提示也不报错：按钮还在，再点一次就行。
             }
+        }
+
+        private static string UploadLine(string prefix, string serverId)
+        {
+            return prefix + "，服务端编号 " + serverId;
         }
 
         /// <summary>Green disc with a white tick, same shape as the installer's finish page.</summary>
@@ -209,7 +212,7 @@ namespace QuadVitals.Settings
                 }
 
                 CleanupUploadTemp();
-                _successUpload.Text = "已上传，服务端编号 " + upload.FeedbackId;
+                _successUpload.Text = UploadLine("已上传", upload.FeedbackId);
                 _successUpload.Foreground = Theme.AccentGreenBrush;
                 _resultMark.Content = SuccessMark();
                 _resultHeadline.Text = "反馈已发送成功";

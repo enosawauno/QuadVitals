@@ -1088,6 +1088,18 @@ Check 'the copy action is labelled copy id' (([string]$copyBtn.Content) -eq $cop
 $resultSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\FeedbackPage.Result.cs')
 Check 'the copy action puts the server id on the clipboard' ($resultSource -match 'Clipboard\.SetText\(_serverId\)') ''
 Check 'no countdown timer is left in the result page' (-not $resultSource.Contains('_autoCloseSeconds')) ''
+# 复制是静默的：页脚状态行一出现就把按钮顶上去，一次复制不该让布局跳。
+$statusLine = $feedbackPageType.GetField('_status', $flags).GetValue($feedbackPage)
+$closeBefore = $closeResult.TransformToAncestor($feedbackRoot).Transform((New-Object System.Windows.Point(0, 0))).Y
+$copyBtn.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+Pump 150
+$closeAfter = $closeResult.TransformToAncestor($feedbackRoot).Transform((New-Object System.Windows.Point(0, 0))).Y
+Check 'copying the id keeps the footer quiet' ($statusLine.Visibility -eq [System.Windows.Visibility]::Collapsed) ('status=' + $statusLine.Visibility)
+Check 'copying the id never moves the buttons' ([math]::Abs($closeAfter - $closeBefore) -le 0.5) ('before=' + [math]::Round($closeBefore, 1) + ' after=' + [math]::Round($closeAfter, 1))
+$copiedPrefix = '已复制'
+$tail = '，服务端编号 '
+$uploadLine = $feedbackPageType.GetField('_successUpload', $flags).GetValue($feedbackPage)
+Check 'copying the id flips the uploaded prefix' (([string]$uploadLine.Text) -eq ($copiedPrefix + $tail + 'QV_abc12345')) ('text=' + $uploadLine.Text)
 Pump 60
 $feedbackRoot.UpdateLayout()
 
