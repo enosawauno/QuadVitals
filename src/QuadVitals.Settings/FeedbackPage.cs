@@ -104,9 +104,6 @@ namespace QuadVitals.Settings
         private string _uploadTempDirectory;
         private readonly IFeedbackTransport _transport = new HttpFeedbackTransport();
         private readonly bool _compact;
-        // 结果态的「关闭」带倒计时：结果看完就该走，不必再点一下。
-        private DispatcherTimer _autoCloseTimer;
-        private int _autoCloseSeconds;
 
         public FeedbackPage(SettingsWindow window) : this(window, false) { }
 
@@ -489,17 +486,19 @@ namespace QuadVitals.Settings
             _submit.Click += OnSubmit;
             actions.Children.Add(_submit);
 
-            // Result state: 关闭 on the left, then the primary action on the right - the same
-            // secondary-then-primary rhythm the form uses for 清空 / 提交反馈.
+            // Result state: 复制编号 / 重新上传 left of 关闭, so the panel's only exit keeps the same
+            // place the form's primary action had.
+            _copyId.Visibility = Visibility.Collapsed;
+            _copyId.Margin = new Thickness(0, 0, 8, 0);
+            AutomationProperties.SetAutomationId(_copyId, "FeedbackCopyId");
+            _copyId.Click += (sender, e) => CopyServerId();
+            actions.Children.Add(_copyId);
+
             _closeResult = new FlatButton("关闭");
             AutomationProperties.SetAutomationId(_closeResult, "FeedbackCloseResult");
             _closeResult.Visibility = Visibility.Collapsed;
             _closeResult.Margin = new Thickness(0, 0, 8, 0);
-            _closeResult.Click += (sender, e) =>
-            {
-                StopAutoClose();
-                _window.CloseOverlay();
-            };
+            _closeResult.Click += (sender, e) => _window.CloseOverlay();
             actions.Children.Add(_closeResult);
 
             // Only after a failed upload; green because retrying is the action worth taking.
@@ -551,9 +550,10 @@ namespace QuadVitals.Settings
                 _closeResult.Visibility = Visibility.Collapsed;
                 _closeResult.Content = "关闭";
             }
-            // 重新上传是结果态的动作：表单行里只该有 清空 / 添加附件 / 提交反馈。
+            // 重新上传与复制编号都是结果态的动作：表单行里只该有 清空 / 添加附件 / 提交反馈。
             _retry.Visibility = Visibility.Collapsed;
-            StopAutoClose();
+            _serverId = null;
+            UpdateCopyAction();
         }
 
         /// <summary>

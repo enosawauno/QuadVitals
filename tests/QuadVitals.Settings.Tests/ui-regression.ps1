@@ -1070,16 +1070,24 @@ while ($scan.Count -gt 0) {
     }
 }
 Check 'submitted: no buttons inside the result block' ($visibleButtons -eq 0) ("buttons=" + $visibleButtons)
+$closeWord = U @(0x5173, 0x95ED)
 $head = $windowType.GetField('_feedbackHead', $flags).GetValue($feedbackWindow)
 Check 'submitted: the result block is narrower than the panel' ($resultBody.ActualWidth -lt $panelBorder.ActualWidth) ("result=" + [math]::Round($resultBody.ActualWidth) + " panel=" + [math]::Round($panelBorder.ActualWidth))
-Check 'submitted: the close button counts down from five' (([string]$closeResult.Content) -eq ((5).ToString() + (U @(0x79D2, 0x540E, 0x81EA, 0x52A8, 0x5173, 0x95ED)))) ("text=" + $closeResult.Content)
-Pump 1100
-Check 'submitted: the countdown ticks down' (([string]$closeResult.Content) -match '^[0-4]') ("text=" + $closeResult.Content)
-# One second left is enough to prove the countdown actually closes the panel.
-$feedbackPageType.GetField('_autoCloseSeconds', $flags).SetValue($feedbackPage, 1)
+Check 'submitted: the close button carries no countdown' (([string]$closeResult.Content) -eq $closeWord) ("text=" + $closeResult.Content)
+# 结果页不再自己消失：它上面有一个值得复制的编号，倒计时是唯一能在人读到一半时把它抽走的东西。
 Pump 1300
-Check 'submitted: the countdown closes the panel on its own' ($overlay.Visibility -ne [System.Windows.Visibility]::Visible) ''
-$windowType.GetMethod('ShowFeedback').Invoke($feedbackWindow, $null) | Out-Null
+Check 'submitted: the result waits for the user' ($overlay.Visibility -eq [System.Windows.Visibility]::Visible) ''
+$copyBtn = $feedbackPageType.GetField('_copyId', $flags).GetValue($feedbackPage)
+Check 'submitted: no copy action before a server id exists' (($null -ne $copyBtn) -and ($copyBtn.Visibility -eq [System.Windows.Visibility]::Collapsed)) ''
+$feedbackPageType.GetField('_serverId', $flags).SetValue($feedbackPage, 'QV_abc12345')
+$feedbackPageType.GetMethod('UpdateCopyAction', $flags).Invoke($feedbackPage, $null) | Out-Null
+Pump 60
+Check 'the copy action appears once the server id is known' ($copyBtn.Visibility -eq [System.Windows.Visibility]::Visible) ''
+$copyLabel = -join [char[]](0x590D, 0x5236, 0x7F16, 0x53F7)
+Check 'the copy action is labelled copy id' (([string]$copyBtn.Content) -eq $copyLabel) ('label=' + $copyBtn.Content)
+$resultSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\FeedbackPage.Result.cs')
+Check 'the copy action puts the server id on the clipboard' ($resultSource -match 'Clipboard\.SetText\(_serverId\)') ''
+Check 'no countdown timer is left in the result page' (-not $resultSource.Contains('_autoCloseSeconds')) ''
 Pump 60
 $feedbackRoot.UpdateLayout()
 

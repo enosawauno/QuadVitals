@@ -18,6 +18,9 @@ namespace QuadVitals.Settings
     internal sealed partial class FeedbackPage
     {
         private readonly FlatButton _retry = new FlatButton("重新上传", true);
+        // 复制的是服务端编号（QV_xxxxxxxx），不是本地带时间戳的那个；上传成功前它不出现。
+        private readonly FlatButton _copyId = new FlatButton("复制编号");
+        private string _serverId;
         private readonly TextBlock _successUpload = new TextBlock();
         private readonly ContentControl _resultMark = new ContentControl();
         private readonly TextBlock _resultHeadline = new TextBlock();
@@ -73,35 +76,29 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// Counts the result panel down and closes it. Five seconds is long enough to read the id and the
-        /// upload line, short enough that a panel nobody needs to act on does not sit there.
+        /// 结果页不会自己消失：成功卡上有一个值得复制的编号，倒计时是唯一能在人读到一半时把它抽走的东西。
         /// </summary>
-        private void StartAutoClose()
+        private void UpdateCopyAction()
         {
-            StopAutoClose();
-            _autoCloseSeconds = 5;
-            if (_closeResult != null) _closeResult.Content = _autoCloseSeconds + "秒后自动关闭";
-
-            _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _autoCloseTimer.Tick += (sender, e) =>
-            {
-                if (_autoCloseSeconds > 0) _autoCloseSeconds--;
-                if (_closeResult != null) _closeResult.Content = _autoCloseSeconds + "秒后自动关闭";
-                if (_autoCloseSeconds > 0) return;
-
-                // 让 0 先显示一会儿再收，否则最后一秒看起来像直接消失。
-                StopAutoClose();
-                Dispatcher.BeginInvoke(new Action(() => _window.CloseOverlay()),
-                    DispatcherPriority.ApplicationIdle);
-            };
-            _autoCloseTimer.Start();
+            _copyId.Visibility = string.IsNullOrEmpty(_serverId) ? Visibility.Collapsed : Visibility.Visible;
         }
 
-        private void StopAutoClose()
+        private void CopyServerId()
         {
-            if (_autoCloseTimer == null) return;
-            _autoCloseTimer.Stop();
-            _autoCloseTimer = null;
+            if (string.IsNullOrEmpty(_serverId))
+            {
+                ShowStatus("没有服务端编号可复制", true);
+                return;
+            }
+            try
+            {
+                Clipboard.SetText(_serverId);
+                ShowStatus("已复制服务端编号 " + _serverId, false);
+            }
+            catch (Exception)
+            {
+                ShowStatus("复制失败，请手动选中编号", true);
+            }
         }
 
         /// <summary>Green disc with a white tick, same shape as the installer's finish page.</summary>
@@ -143,6 +140,8 @@ namespace QuadVitals.Settings
             _successUpload.Text = "准备上传…";
             _successUpload.Foreground = Theme.TextSecondaryBrush;
             _retry.Visibility = Visibility.Collapsed;
+            _serverId = null;
+            UpdateCopyAction();
 
             // 同一块区域原地变成结果：表单收起，结果顶上来；底部只剩一个关闭。
             ShowingResult = true;
@@ -155,7 +154,6 @@ namespace QuadVitals.Settings
             _submit.Visibility = Visibility.Collapsed;
             if (_closeResult != null) _closeResult.Visibility = Visibility.Visible;
             _resultBody.Visibility = Visibility.Visible;
-            StartAutoClose();
             FadeIn(_resultBody);
 
             if (IsPreviewOpen) _window.CloseSubOverlay();
@@ -217,6 +215,8 @@ namespace QuadVitals.Settings
                 _resultHeadline.Text = "反馈已发送成功";
                 _successId.Visibility = Visibility.Visible;
                 _failureReason.Visibility = Visibility.Collapsed;
+                _serverId = upload.FeedbackId;
+                UpdateCopyAction();
                 return;
             }
 
@@ -225,14 +225,15 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// Upload failed: the local package stays, so the panel has to stay too. The countdown is
-        /// stopped here - it exists to dismiss a finished result, not to hide the only retry button.
+        /// Upload failed: the local package stays, so the panel has to stay too. There is no countdown
+        /// any more - it would have hidden the only retry button.
         /// </summary>
         private void ShowUploadFailure(string reason)
         {
             // A failed upload is not a success with a red footnote: the mark and the headline change
             // too, and the reason/path move to their own lines so neither gets squeezed.
-            StopAutoClose();
+            _serverId = null;
+            UpdateCopyAction();
             if (_closeResult != null) _closeResult.Content = "关闭";
             _resultMark.Content = FailureMark();
             _resultHeadline.Text = "反馈上传失败";
