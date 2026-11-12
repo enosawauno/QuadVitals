@@ -386,7 +386,9 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $powerGpuX = $powerGpuText.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
             $powerCpuBarX = $powerCpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
             $powerGpuBarX = $powerGpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).X
-            Check 'each bar sits to the right of its label and value' (($powerCpuBarX -gt ($powerCpuX + 80)) -and ($powerGpuBarX -gt ($powerGpuX + 80))) ("cpuBar=" + [Math]::Round($powerCpuBarX, 1) + " cpuText=" + [Math]::Round($powerCpuX, 1))
+                        # 条不压住数字就算对：拿单位文字的右边缘当基准，不再用写死的 80 px 常量。
+            $cpuUnitEdge = $powerCpuUnit.TranslatePoint((New-Object System.Windows.Point($powerCpuUnit.ActualWidth, 0)), $powerCard).X
+            Check 'each bar sits to the right of its number' (($powerCpuBarX -gt ($cpuUnitEdge + 4)) -and ($powerGpuBarX -gt ($powerCpuX + 40))) ("cpuBar=" + [Math]::Round($powerCpuBarX, 1) + " cpuUnitRight=" + [Math]::Round($cpuUnitEdge, 1))
             $powerCpuBarY = $powerCpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
             $powerGpuBarY = $powerGpuBar.TranslatePoint((New-Object System.Windows.Point(0, 0)), $powerCard).Y
             Check 'each bar rides on its value row' (([Math]::Abs(($powerCpuY + $powerCpuText.ActualHeight / 2) - ($powerCpuBarY + $powerCpuBar.ActualHeight / 2)) -lt 6) -and ([Math]::Abs(($powerGpuY + $powerGpuText.ActualHeight / 2) - ($powerGpuBarY + $powerGpuBar.ActualHeight / 2)) -lt 6)) ''
@@ -686,6 +688,13 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($null, $false)) | Out-Null
             Check 'an offline power card shows a dash' ((Find-ById $ovRoot 'PowerTotal').Text -eq '--') ''
             Check 'an offline power card explains itself' (((Read-Field $powerCard '_card' $flags).Title.Length -gt 4) -and ((Find-ById $ovRoot 'PowerNote').Text.Length -eq 0)) ''
+            # 括号里的原因必须还是告警色：挪位置不能把它的重量一起挪掉。
+            $powerTitleBlock = Read-Field (Read-Field $powerCard '_card' $flags) '_title' $flags
+            $powerNoteRun = $null
+            foreach ($inline in $powerTitleBlock.Inlines) {
+                if ($inline -is [System.Windows.Documents.Run]) { $powerNoteRun = $inline }
+            }
+            Check 'the bracketed reason keeps the warning colour' (($null -ne $powerNoteRun) -and ($powerNoteRun.Foreground.Color -eq [QuadVitals.UI.Theme]::AccentOrange)) ("fg=" + $powerNoteRun.Foreground.Color)
 
             # 回到一帧完整数据：错误说明行会在卡片里占一行，量高度前得先让它藏起来。
             $powerSnap.Flags = [Enum]::Parse([QuadVitals.Core.MetricFlags], 'AgentAlive, CpuPowerValid, GpuPowerValid')

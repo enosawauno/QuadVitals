@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -20,6 +21,7 @@ namespace QuadVitals.UI
         private readonly TextBlock _title;
         private readonly ContentControl _headerRight;
         private readonly StackPanel _titleGroup;
+        private string _titlePlain = string.Empty;
 
         public Card(string title) : this(title, (FrameworkElement)null)
         {
@@ -55,6 +57,8 @@ namespace QuadVitals.UI
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            // 标题的纯文本副本：构造时也要填，否则 Title 的 getter 读回来是空的。
+            _titlePlain = title ?? string.Empty;
             _titleGroup = titleGroup;
             if (icon != null) titleGroup.Children.Add(icon);
             titleGroup.Children.Add(_title);
@@ -118,8 +122,34 @@ namespace QuadVitals.UI
 
         public string Title
         {
-            get { return _title.Text; }
-            set { _title.Text = value; }
+            get { return _titlePlain; }
+            set
+            {
+                _titlePlain = value ?? string.Empty;
+                _title.Inlines.Clear();
+                _title.Inlines.Add(new Run(_titlePlain));
+            }
+        }
+
+        /// <summary>
+        /// 标题后面接一个全角括号里的原因，括号用告警色。告警不能只是“换个位置”，
+        /// 还得保持它原本的颜色，否则读起来和普通标题同重。
+        /// </summary>
+        public void SetTitleWithNote(string title, string note)
+        {
+            string head = title ?? string.Empty;
+            _title.Inlines.Clear();
+            _title.Inlines.Add(new Run(head));
+            if (string.IsNullOrEmpty(note))
+            {
+                _titlePlain = head;
+                return;
+            }
+
+            Run bracketed = new Run("（" + note + "）");
+            bracketed.Foreground = Theme.AccentOrangeBrush;
+            _title.Inlines.Add(bracketed);
+            _titlePlain = head + "（" + note + "）";
         }
 
         public StackPanel Content { get { return _content; } }

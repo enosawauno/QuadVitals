@@ -179,7 +179,7 @@ namespace QuadVitals.Settings
                 _total.Text = (cpuWatts + gpuWatts).ToString("0.0", CultureInfo.InvariantCulture);
                 _totalUnit.Text = "W";
                 _total.Foreground = Theme.TextPrimaryBrush;
-                _card.Title = "功耗";
+                _card.SetTitleWithNote("功耗", null);
                 ShowScopeNote();
             }
             else
@@ -191,7 +191,7 @@ namespace QuadVitals.Settings
                 string missing = !cpuValid && !gpuValid
                     ? "CPU 与 GPU 功耗读取失败"
                     : "缺少 CPU 或 GPU 功耗";
-                _card.Title = "功耗（" + missing + "）";
+                _card.SetTitleWithNote("功耗", missing);
                 _note.Text = string.Empty;
             }
 
@@ -298,7 +298,7 @@ namespace QuadVitals.Settings
             _load = 0;
             _tone = MetricTone.Normal;
             ApplySceneTone(Theme.TextSecondary);
-            _card.Title = "功耗（" + reason + "）";
+            _card.SetTitleWithNote("功耗", reason);
             _note.Text = string.Empty;
             _ringCpu.Fraction = 0;
             _ringGpu.Fraction = 0;

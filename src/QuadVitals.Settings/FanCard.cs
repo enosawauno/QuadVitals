@@ -359,7 +359,7 @@ namespace QuadVitals.Settings
                 _value.Text = MetricFormat.Invalid;
                 _unit.Text = string.Empty;
                 _caption.Text = "通道 " + PreferredChannel;
-                _card.Title = "风扇（所选通道未读数）";
+                _card.SetTitleWithNote("风扇", "所选通道未读数");
                     _others.Text = string.Empty;
                 _bar.SetValue(0);
                 _tone = MetricTone.Warning;
@@ -382,7 +382,7 @@ namespace QuadVitals.Settings
             _unit.Text = "RPM";
             // 停转是告警，不是“正常但数字小”；空出的这一行正好用来写这两个字。
             // 停转与常态都不占底部那一行：原因进标题，卡片高度与其它两张卡保持一致。
-            _card.Title = stopped ? "风扇（风扇停转）" : "风扇";
+            _card.SetTitleWithNote("风扇", stopped ? "风扇停转" : null);
             // 常态不占行：留一个空 TextBlock 会把整列抬高一行，三张卡就不同高了。
             _bar.SetValue(FanZones.Fraction(rpm));
 
@@ -483,7 +483,7 @@ namespace QuadVitals.Settings
             _caption.Text = string.Empty;
             _value.Text = MetricFormat.Invalid;
             _unit.Text = string.Empty;
-            _card.Title = "风扇（" + reason + "）";
+            _card.SetTitleWithNote("风扇", reason);
             _others.Text = string.Empty;
             _bar.SetValue(0);
             _tone = MetricTone.Normal;
