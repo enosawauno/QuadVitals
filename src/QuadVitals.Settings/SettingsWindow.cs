@@ -974,11 +974,12 @@ namespace QuadVitals.Settings
                 Background = Theme.BgElevatedBrush,
                 // 导航文字距窗口左边缘 48 px：36 + 导航项自身的 12 内边距 = 48，
                 // 与标题栏品牌名同一条对齐线；滑块跟着一起内缩 12。
-                // 上下内边距对称：导航块整体在侧栏里垂直居中，项数从 3 加到 4、5 也仍然居中。
-                Padding = new Thickness(36, 24, 36, 24)
+                // 顶部 64 = 页头块的高度（标题行 ~26 + 4 + 副标题行 ~16 + 页头下边距 16 + 2），
+                // 让第一个导航项的顶边落在第一张卡片的上边缘，和内容区一起“从卡片开始”。
+                Padding = new Thickness(36, 64, 36, 12)
             };
 
-            // 滑块在列表背后，随选中项上下滑动。中性白 8%：绿色只留给指标，导航不再抢色。
+            // 滑块在列表背后，随选中项上下滑动（单色品牌绿，不需要逐项换色）。
             _navGliderShift = new TranslateTransform(0, 0);
             _navGlider = new Border
             {
@@ -986,33 +987,43 @@ namespace QuadVitals.Settings
                 CornerRadius = new CornerRadius(12),
                 VerticalAlignment = VerticalAlignment.Top,
                 Background = BuildNavGliderBrush(),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Theme.AccentGreen,
+                    BlurRadius = 18,
+                    ShadowDepth = 0,
+                    Opacity = 0.35
+                },
                 IsHitTestVisible = false,
                 Visibility = Visibility.Collapsed,
                 RenderTransform = _navGliderShift
             };
             AutomationProperties.SetAutomationId(_navGlider, "NavGlider");
 
+            Grid host = new Grid();
+            host.Children.Add(_navGlider);
+
             StackPanel stack = new StackPanel();
             AddNav(stack, "overview", "仪表盘");
             AddNav(stack, "elements", "任务栏");
             AddNav(stack, "about", "关于");
 
-            // 导航块自己是一格，在侧栏里垂直居中；滑块与列表同处这一格，滑轨坐标因此不变。
-            Grid navBox = new Grid { VerticalAlignment = VerticalAlignment.Center };
-            navBox.Children.Add(_navGlider);
-            navBox.Children.Add(stack);
-
-            Grid host = new Grid();
-            host.Children.Add(navBox);
+            host.Children.Add(stack);
             sidebar.Child = host;
             return sidebar;
         }
 
         private static Brush BuildNavGliderBrush()
         {
-            // 选中面不再是绿色实块：白色 8% 的薄片只负责“这一项被选中”，
-            // 和卡片、分段条上的品牌绿区分开。
-            SolidColorBrush brush = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF));
+            // 左端实、右端透：文字只落在实色区，行尾自然淡出（和预览里的单色版一致）。
+            LinearGradientBrush brush = new LinearGradientBrush
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(1, 1)
+            };
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0xF0, 0x1D, 0xB9, 0x54), 0));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0xB8, 0x1D, 0xB9, 0x54), 0.65));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0x5A, 0x1D, 0xB9, 0x54), 1));
             brush.Freeze();
             return brush;
         }
