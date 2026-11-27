@@ -2,6 +2,7 @@
 bin/
 obj/
 build/out/
+release/
 artifacts/
 packages/
 *.nupkg

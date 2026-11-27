@@ -51,7 +51,7 @@ if (Test-Path -LiteralPath $notesCheck) {
 
 
 # ---------------------------------------------------------------- payload ----
-$releaseRoot = Join-Path $root 'build\out\release'
+$releaseRoot = Join-Path $root 'release'
 $zip = Join-Path $releaseRoot ("QuadVitals-{0}.zip" -f $version)
 if (-not $SkipPackage) {
     Step 'package payload'

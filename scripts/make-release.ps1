@@ -57,7 +57,7 @@ if (Test-Path -LiteralPath $devToolsMarker) {
 
 # ---------------------------------------------------------------- stage ----
 Step 'stage package tree'
-$releaseRoot = if ($OutDir) { $OutDir } else { Join-Path $out 'release' }
+$releaseRoot = if ($OutDir) { $OutDir } else { Join-Path $root 'release' }
 $stage = Join-Path $releaseRoot "QuadVitals-$version"
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage -Force | Out-Null

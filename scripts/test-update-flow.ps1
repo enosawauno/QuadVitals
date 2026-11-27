@@ -22,7 +22,7 @@ function Step([string]$text) { Write-Host ""; Write-Host "== $text" -ForegroundC
 $coreDll = Join-Path $root 'build\out\core\QuadVitals.Core.dll'
 if (-not (Test-Path -LiteralPath $coreDll)) { throw "missing $coreDll - run scripts\build-core.ps1" }
 
-$releaseRoot = Join-Path $root 'build\out\release'
+$releaseRoot = Join-Path $root 'release'
 $setup = Get-ChildItem -LiteralPath $releaseRoot -Filter 'QuadVitals-Setup-*.exe' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $setup) { throw "no installer in $releaseRoot - run scripts\build-installer.ps1" }
