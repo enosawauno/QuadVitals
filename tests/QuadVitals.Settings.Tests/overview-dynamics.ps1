@@ -878,11 +878,12 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         Check 'the settings app accepts --diagnostics' ($programSource.Contains('--diagnostics')) ''
         $guardSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\DashboardSingleInstance.cs')
         $settingsSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\SettingsWindow.cs')
+        $intentSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\SettingsWindow.Intent.cs')
         Check 'the dashboard takes one session guard' ($guardSource.Contains('Local\QuadVitals.Settings.SingleInstance.v1')) ''
         Check 'a second launch only wakes the running window' ($programSource.Contains('guard.TryActivate(intent)')) ''
         Check 'the wake-up carries a known intent, not free text' ($guardSource.Contains('DashboardIntentKind.AgentStatus')) ''
         Check 'a minimized dashboard is restored before it is raised' ($guardSource.Contains('SwRestore')) ''
-        Check 'the running window applies the requested page or panel' ($settingsSource.Contains('public void ApplyIntent(DashboardIntentKind kind)')) ''
+        Check 'the running window applies the requested page or panel' ($intentSource.Contains('public void ApplyIntent(DashboardIntentKind kind)')) ''
         Check 'tools can ask for their own window' ($programSource.Contains('DashboardIntent.IsNewInstance')) ''
         Check 'the diagnostics card stays outside the dashboard guard' ($programSource.Contains('if (!openDiagnostics)')) ''
         Check 'a silent guard is retried before opening another window' ($programSource.Contains('guard = DashboardSingleInstance.Acquire();')) ''
