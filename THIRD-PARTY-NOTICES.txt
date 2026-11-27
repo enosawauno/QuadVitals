@@ -15,17 +15,17 @@ stripped; the wording, numbering and punctuation are unchanged. The in-app viewe
 hard-wrapped lines into paragraphs (whitespace only) so the text can fill the panel and justify.
 
 --------------------------------------------------------------------------------
-1. LibreHardwareMonitorLib 0.9.2  —  Mozilla Public License 2.0
+1. LibreHardwareMonitorLib 0.9.6  —  Mozilla Public License 2.0
 --------------------------------------------------------------------------------
 
 Copyright (c) LibreHardwareMonitor contributors.
 Project:  https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
 License:  Mozilla Public License 2.0
 Source:   https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
-Package:  https://www.nuget.org/packages/LibreHardwareMonitorLib/0.9.2
+Package:  https://www.nuget.org/packages/LibreHardwareMonitorLib/0.9.6
 
 用在何处：QuadVitals.Agent 通过反射加载该库读取 CPU 温度（Package / Core Max 传感器），
-需要管理员权限与它自带的内核驱动。QuadVitals 未修改该库的任何文件；若需要该库源码，
+需要管理员权限与 PawnIO 驱动。QuadVitals 未修改该库的任何文件；若需要该库源码，
 按上面的地址获取（MPL 2.0 第 3.2 条要求的源码获取途径即此）。
 
 Used by QuadVitals.Agent (loaded via reflection) to read CPU temperatures. The library is
@@ -408,14 +408,14 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 
 --------------------------------------------------------------------------------
-2. HidSharp 2.1.0  —  Apache License 2.0
+2. HidSharp 2.6.4  —  Apache License 2.0
 --------------------------------------------------------------------------------
 
-Copyright (c) HidSharp contributors.
+Copyright 2010-2025 James F. Bellinger and HidSharp contributors.
 Project:  https://github.com/IntergatedCircuits/HidSharp
 License:  Apache License, Version 2.0
 Source:   https://github.com/IntergatedCircuits/HidSharp
-Package:  https://www.nuget.org/packages/HidSharp/2.1.0
+Package:  https://www.nuget.org/packages/HidSharp/2.6.4
 
 用在何处：LibreHardwareMonitorLib 的依赖（HID 设备访问），随 Agent 一起分发，未修改。
 
@@ -640,3 +640,56 @@ Target framework; the runtime is a Windows component and is not bundled by QuadV
 assets/icon 下的图标为本项目原创素材，不含任何第三方图形、标志或字体。
 Product icons under assets/icon are original artwork made for this project; no
 third-party marks, artwork or fonts are included.
+
+--------------------------------------------------------------------------------
+5. BlackSharp.Core 1.0.7 / DiskInfoToolkit 1.1.2 / RAMSPDToolkit-NDD 1.4.2
+--------------------------------------------------------------------------------
+
+Copyright (c) Florian K. Redistributed unmodified under Mozilla Public License 2.0.
+The full MPL 2.0 text is reproduced in section 1. Source code is available at:
+https://github.com/Blacktempel/BlackSharp
+https://github.com/Blacktempel/DiskInfoToolkit
+https://github.com/Blacktempel/RAMSPDToolkit
+
+--------------------------------------------------------------------------------
+6. Microsoft runtime libraries — MIT License
+--------------------------------------------------------------------------------
+
+System.Buffers 4.6.1, System.CodeDom 10.0.2, System.Memory 4.6.3,
+System.Numerics.Vectors 4.6.1, System.Runtime.CompilerServices.Unsafe 6.1.2,
+System.Security.AccessControl 6.0.0, System.Security.Principal.Windows 5.0.0,
+System.Threading.AccessControl 10.0.3.
+Redistributed unmodified. Supplemental package notices are shipped as sensor-*.txt.
+
+Copyright (c) Microsoft Corporation. All rights reserved.
+Copyright (c) .NET Foundation and Contributors. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+7. PawnIO 2.2.0 official installer
+--------------------------------------------------------------------------------
+
+Copyright (c) namazso. The official digitally signed installer is redistributed
+unmodified with its original copyright and licence notices. The installer permits
+unmodified redistribution. It installs the signed edition, not the unrestricted edition.
+The shared system driver is not removed when QuadVitals is uninstalled.
+
+Official installer: https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0
+Driver source and licence: https://github.com/namazso/PawnIO

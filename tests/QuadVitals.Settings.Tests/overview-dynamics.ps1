@@ -398,6 +398,31 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
             # 默认按最大睿频功耗：13900K 为 253 W，基础功耗（TDP）125 W 会过早顶满。
             Check 'the bar scale is visible as a power caption' (($powerCpuTdpText -eq 'MTP 253 W') -and ($powerGpuTdpText -match '^TDP [0-9]+ W$')) ("cpu=" + $powerCpuTdpText + " gpu=" + $powerGpuTdpText)
 
+            # 合计分档：两路合计 / 两路上限之和，70% 黄、80% 红；分母随机器与 TDP/MTP 口径变化。
+            $cpuLimitNow = [double]$powerCard.GetType().GetField('_cpuTdp', $flags).GetValue($powerCard)
+            $gpuLimitNow = [double]$powerCard.GetType().GetField('_gpuTdp', $flags).GetValue($powerCard)
+            $limitSum = $cpuLimitNow + $gpuLimitNow
+            $totalToneProp = $powerCard.GetType().GetProperty('TotalTone', $pubFlags)
+            $setTotalWatts = {
+                param([double]$watts)
+                $powerSnap.CpuPowerWatts = [single]$watts
+                $powerSnap.GpuPowerWatts = [single]0.1
+                $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+            }
+            & $setTotalWatts ($limitSum * 0.699)
+            Check 'total power stays normal below 70 percent' (($totalToneProp.GetValue($powerCard) -eq [QuadVitals.Core.MetricTone]::Normal) -and ($powerTotalText.Foreground -eq [QuadVitals.UI.Theme]::TextPrimaryBrush)) ''
+            & $setTotalWatts ($limitSum * 0.70)
+            Check 'total power warns at 70 percent' ($totalToneProp.GetValue($powerCard) -eq [QuadVitals.Core.MetricTone]::Warning) ''
+            Check 'the warning total is orange' ($powerTotalText.Foreground -eq [QuadVitals.UI.Theme]::AccentOrangeBrush) ''
+            & $setTotalWatts ($limitSum * 0.80)
+            Check 'total power turns red at 80 percent' ($totalToneProp.GetValue($powerCard) -eq [QuadVitals.Core.MetricTone]::Danger) ''
+            Check 'the danger total is red' ($powerTotalText.Foreground -eq [QuadVitals.UI.Theme]::AccentRedBrush) ''
+            & $setTotalWatts ($limitSum * 0.50)
+            Check 'the total returns to the normal colour' (($totalToneProp.GetValue($powerCard) -eq [QuadVitals.Core.MetricTone]::Normal) -and ($powerTotalText.Foreground -eq [QuadVitals.UI.Theme]::TextPrimaryBrush)) ''
+            $powerSnap.CpuPowerWatts = 112.6
+            $powerSnap.GpuPowerWatts = 46.5
+            $powerCard.GetType().GetMethod('Update').Invoke($powerCard, @($powerSnap, $true)) | Out-Null
+
             # 切到 TDP 后分母用基础功耗：固件报回的 95 W 优先于型号表，没有报告时才用表。
             $powerCard.CpuPowerMode = [QuadVitals.Core.Settings]::CpuPowerTdp
             $powerSnap.CpuTdpWatts = 95
@@ -851,7 +876,16 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         Check 'the tray diagnostics no longer builds a MessageBox body' (-not $traySource.Contains('MessageBox.Show(text.ToString()')) ''
         $programSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\Program.cs')
         Check 'the settings app accepts --diagnostics' ($programSource.Contains('--diagnostics')) ''
+        $guardSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\DashboardSingleInstance.cs')
         $settingsSource = Get-Content -Encoding UTF8 -Raw (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'src\QuadVitals.Settings\SettingsWindow.cs')
+        Check 'the dashboard takes one session guard' ($guardSource.Contains('Local\QuadVitals.Settings.SingleInstance.v1')) ''
+        Check 'a second launch only wakes the running window' ($programSource.Contains('guard.TryActivate(intent)')) ''
+        Check 'the wake-up carries a known intent, not free text' ($guardSource.Contains('DashboardIntentKind.AgentStatus')) ''
+        Check 'a minimized dashboard is restored before it is raised' ($guardSource.Contains('SwRestore')) ''
+        Check 'the running window applies the requested page or panel' ($settingsSource.Contains('public void ApplyIntent(DashboardIntentKind kind)')) ''
+        Check 'tools can ask for their own window' ($programSource.Contains('DashboardIntent.IsNewInstance')) ''
+        Check 'the diagnostics card stays outside the dashboard guard' ($programSource.Contains('if (!openDiagnostics)')) ''
+        Check 'a silent guard is retried before opening another window' ($programSource.Contains('guard = DashboardSingleInstance.Acquire();')) ''
         Check 'the title bar no longer maximizes on double click' (-not $settingsSource.Contains('e.ClickCount == 2')) ''
 
         # Animation clock. The dashboard is meant to sit still: a fan that is not on screen must not
@@ -1314,6 +1348,33 @@ if ($null -eq $ovPage) { throw 'OverviewPage not found' }
         }
         $editWindow.Close()
     }
+        # Second-launch routing: the window that is already open has to be able to act on the
+        # request instead of just coming forward.
+        "== second launch routing =="
+        $routeWindow = [Activator]::CreateInstance($windowType, @('overview'))
+        $routeWindow.ShowActivated = $false
+        $routeWindow.WindowStartupLocation = [System.Windows.WindowStartupLocation]::Manual
+        $routeWindow.Left = -4000
+        $routeWindow.Top = -4000
+        $routeWindow.Show()
+        Pump 300
+        $pageField = $windowType.GetField('_currentPage', $flags)
+        $routeWindow.ApplyIntent([QuadVitals.Core.DashboardIntentKind]::About)
+        Pump 200
+        Check 'an about request switches the open window' ($pageField.GetValue($routeWindow) -eq 'about') ''
+        $routeWindow.ApplyIntent([QuadVitals.Core.DashboardIntentKind]::Feedback)
+        Pump 300
+        Check 'a feedback request opens the panel over the page' ($routeWindow.IsOverlayOpen) ''
+        $routeWindow.ApplyIntent([QuadVitals.Core.DashboardIntentKind]::Overview)
+        Pump 300
+        Check 'a page request closes the panel first' ((-not $routeWindow.IsOverlayOpen) -and ($pageField.GetValue($routeWindow) -eq 'overview')) ''
+        $routeWindow.ApplyIntent([QuadVitals.Core.DashboardIntentKind]::None)
+        Pump 100
+        Check 'a plain activation keeps the current page' ($pageField.GetValue($routeWindow) -eq 'overview') ''
+        $routeWindow.ApplyIntent([QuadVitals.Core.DashboardIntentKind]::AgentStatus)
+        Pump 300
+        Check 'an agent-status request opens the sensor panel' ($routeWindow.IsOverlayOpen) ''
+        $routeWindow.Close()
 $ovWindow.Close()
 
 Complete-Run 'settings-ui-overview-dynamics'

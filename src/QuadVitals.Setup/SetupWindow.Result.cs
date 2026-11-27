@@ -241,7 +241,9 @@ namespace QuadVitals.Setup
             {
                 Text = _uninstall
                     ? "任务栏上的条目会随 Explorer 刷新而消失"
-                    : _bandRestored
+                    : _rebootRequired
+                        ? "传感器驱动安装完成，请重启 Windows 后使用"
+                        : _bandRestored
                         ? "任务栏条已随资源管理器重新加载\r\n" +
                           "如未显示，右键任务栏>工具栏>勾选QuadVitals"
                         : "请查看任务栏上是否出现仪表盘\r\n" +
@@ -268,13 +270,13 @@ namespace QuadVitals.Setup
 
             // Keep the primary action at the right edge. When there is no dashboard to open (uninstall),
             // "完成" is the only action and stays green.
-            FlatButton done = new FlatButton("完成", _uninstall);
+            FlatButton done = new FlatButton("完成", _uninstall || _rebootRequired);
             done.MinWidth = 96;
             done.Margin = new Thickness(0, 0, 8, 0);
             done.Click += (sender, e) => Close();
             buttons.Children.Add(done);
 
-            if (!_uninstall)
+            if (!_uninstall && !_rebootRequired)
             {
                 FlatButton dashboard = new FlatButton("打开仪表盘", true);
                 dashboard.MinWidth = 96;

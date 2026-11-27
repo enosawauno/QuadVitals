@@ -1,4 +1,4 @@
-# QuadVitals release package (0.9.0): stages the exact file set install.ps1 copies and zips it.
+# Stages the exact file set install.ps1 copies and zips it.
 #
 # The stage deliberately mirrors the repo layout (scripts\ + build\out\<flavour>\). install.ps1
 # resolves $root from its own script directory and reads build\out\agent|ui|deskband plus the
@@ -70,12 +70,17 @@ $payload = @(
     @{ Src = (Join-Path $uiOut 'QuadVitals.Settings.exe');           Dst = 'build\out\ui\QuadVitals.Settings.exe' },
     @{ Src = (Join-Path $uiOut 'QuadVitals.UI.dll');                 Dst = 'build\out\ui\QuadVitals.UI.dll' },
     @{ Src = (Join-Path $bandOut 'QuadVitalsDeskBand.dll');          Dst = 'build\out\deskband\QuadVitalsDeskBand.dll' },
-    @{ Src = (Join-Path $agentOut 'LibreHardwareMonitorLib.dll');    Dst = 'build\out\agent\LibreHardwareMonitorLib.dll' },
-    @{ Src = (Join-Path $agentOut 'HidSharp.dll');                   Dst = 'build\out\agent\HidSharp.dll' },
     @{ Src = (Join-Path $root 'LICENSE');                            Dst = 'LICENSE' },
     @{ Src = (Join-Path $root 'LICENSE.zh.md');                      Dst = 'LICENSE.zh.md' },
     @{ Src = (Join-Path $root 'THIRD-PARTY-NOTICES.txt');            Dst = 'THIRD-PARTY-NOTICES.txt' }
 )
+
+. (Join-Path $PSScriptRoot 'sensor-runtime.ps1')
+$runtimeFiles = @(Get-SensorRuntimeFiles $agentOut)
+if ($runtimeFiles.Count -eq 0) { throw 'missing sensor runtime - restore dependencies and rebuild the agent first' }
+$payload += @($runtimeFiles | ForEach-Object {
+    @{ Src = $_.FullName; Dst = ('build\out\agent\' + $_.Name) }
+})
 
 # install.ps1 calls these; TrayDeskBandApi.cs is Add-Type'd by the deskband scripts.
 $scripts = @(
@@ -87,6 +92,7 @@ $scripts = @(
     'uninstall-agent-task.ps1',
     'stop-agent.ps1',
     'stop-quadvitals.ps1',
+    'sensor-runtime.ps1',
     'TrayDeskBandApi.cs'
 )
 

@@ -52,6 +52,12 @@ namespace QuadVitals.Core.Tests
             Equal(MetricTone.Normal, MetricTones.Generic(79.9), "通用 79.9 正常");
             Equal(MetricTone.Warning, MetricTones.Generic(80), "通用 80 提醒");
             Equal(MetricTone.Danger, MetricTones.Generic(90), "通用 90 告警");
+            Equal(MetricTone.Normal, MetricTones.PowerTotal(69.9), "合计功耗 69.9 正常");
+            Equal(MetricTone.Warning, MetricTones.PowerTotal(70), "合计功耗 70 提醒");
+            Equal(MetricTone.Warning, MetricTones.PowerTotal(79.9), "合计功耗 79.9 提醒");
+            Equal(MetricTone.Danger, MetricTones.PowerTotal(80), "合计功耗 80 告警");
+            Equal(MetricTone.Danger, MetricTones.PowerTotal(100), "合计功耗满格告警");
+            Equal(MetricTone.Normal, MetricTones.PowerTotal(double.NaN), "合计功耗未知时正常");
         }
 
 

@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using QuadVitals.Core;
 
 namespace QuadVitals.Settings
 {
@@ -22,6 +23,43 @@ namespace QuadVitals.Settings
 
             try
             {
+                DashboardIntentKind intent = DashboardIntent.Parse(args);
+                bool openDiagnostics = DashboardIntent.Has(args, "--diagnostics");
+                bool forceNew = DashboardIntent.IsNewInstance(args);
+#if QV_DEV_TOOLS
+                bool updatePreview = DashboardIntent.Has(args, "--update-preview");
+                // Screenshot entry: it needs its own window even when one is already open.
+                if (updatePreview) forceNew = true;
+#endif
+
+                // The diagnostics card is not the dashboard. Keeping it outside the session guard
+                // means a tray click cannot become "the one instance" and leave a later taskbar
+                // double click with a window that has no pages.
+                DashboardSingleInstance guard = null;
+                if (!openDiagnostics)
+                {
+                    guard = DashboardSingleInstance.Acquire();
+                    if (!guard.IsOwner)
+                    {
+                        if (!forceNew && guard.TryActivate(intent))
+                        {
+                            guard.Dispose();
+                            return;
+                        }
+
+                        // No answer: the owner may have exited between the wake and the wait. Take
+                        // the guard if it is free now; otherwise open one window anyway so a hung
+                        // dashboard cannot swallow the click.
+                        guard.Dispose();
+                        guard = DashboardSingleInstance.Acquire();
+                        if (!guard.IsOwner)
+                        {
+                            guard.Dispose();
+                            guard = null;
+                        }
+                    }
+                }
+
                 Application app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
                 app.DispatcherUnhandledException += (sender, e) =>
                 {
@@ -32,57 +70,6 @@ namespace QuadVitals.Settings
                     e.Handled = true;
                 };
 
-                string startPage = "overview";
-                bool openAgentStatus = false;
-                bool openDiagnostics = false;
-#if QV_DEV_TOOLS
-                bool updatePreview = false;
-#endif
-                if (args != null)
-                {
-                    foreach (string arg in args)
-                    {
-                        if (string.Equals(arg, "--feedback", StringComparison.OrdinalIgnoreCase))
-                        {
-                            startPage = "feedback";
-                        }
-                        else if (string.Equals(arg, "--about", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Lets the About page be opened/screenshotted without driving the
-                            // mouse through the sidebar (UI self-tests cannot touch the pointer).
-                            startPage = "about";
-                        }
-                        else if (string.Equals(arg, "--agent-status", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Same reason as --about: the status panel has to be openable without
-                            // driving the pointer, otherwise it cannot be screenshotted or tested.
-                            openAgentStatus = true;
-                        }
-                        else if (string.Equals(arg, "--general", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // The general settings are a title-bar dialog; same reason as --about.
-                            startPage = "general";
-                        }
-                        else if (string.Equals(arg, "--diagnostics", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Tray "diagnostics": a small dark window, not the dashboard and not a
-                            // system MessageBox.
-                            openDiagnostics = true;
-                        }
-                        else if (arg != null && arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // --page=overview|elements|about（feedback 与 general 开面板，不是页）
-                            startPage = arg.Substring("--page=".Length);
-                        }
-#if QV_DEV_TOOLS
-                        else if (string.Equals(arg, "--update-preview", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Screenshot entry for the update dialog; absent from release builds.
-                            updatePreview = true;
-                        }
-#endif
-                    }
-                }
                 if (openDiagnostics)
                 {
                     app.Run(new DiagnosticsWindow());
@@ -104,8 +91,15 @@ namespace QuadVitals.Settings
                     }
                 });
 
-                SettingsWindow window = new SettingsWindow(startPage);
-                if (openAgentStatus) window.Loaded += (sender, e) => window.ShowAgentStatus();
+                SettingsWindow window = new SettingsWindow(DashboardIntent.PageKey(intent));
+                if (intent == DashboardIntentKind.Feedback)
+                    window.Loaded += (sender, e) => window.ShowFeedback();
+                if (intent == DashboardIntentKind.General)
+                    window.Loaded += (sender, e) => window.ShowGeneralSettings();
+                if (intent == DashboardIntentKind.AgentStatus)
+                    window.Loaded += (sender, e) => window.ShowAgentStatus();
+                DashboardSingleInstance watcher = guard;
+                if (watcher != null) window.Loaded += (sender, e) => watcher.StartWatching(window);
 #if QV_DEV_TOOLS
                 if (updatePreview)
                 {
@@ -114,6 +108,7 @@ namespace QuadVitals.Settings
                 }
 #endif
                 app.Run(window);
+                if (guard != null) guard.Dispose();
             }
             catch (Exception ex)
             {

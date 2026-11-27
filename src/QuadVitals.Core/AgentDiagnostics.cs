@@ -63,6 +63,8 @@ namespace QuadVitals.Core
         public static string ElevationLine(MetricFlags flags)
         {
             if ((flags & MetricFlags.ElevationKnown) == 0) return "未上报（旧版程序）";
+            if ((flags & (MetricFlags.Elevated | MetricFlags.PawnIoMissing)) ==
+                (MetricFlags.Elevated | MetricFlags.PawnIoMissing)) return "管理员";
             return (flags & MetricFlags.Elevated) != 0
                 ? "管理员：CPU 温度与风扇可读"
                 : "普通权限，无法获取CPU温度和风扇转速数据";
@@ -76,6 +78,8 @@ namespace QuadVitals.Core
         public const string ElevationCancelled =
             "已取消管理员授权：CPU 温度与风扇读不到。可点“重启传感器”重新授权";
 
+        public const string PawnIoRequired = "请安装或更新 PawnIO 驱动，再重启传感器";
+
         /// <summary>Reported when the repair of the logon task itself failed.</summary>
         public static string TaskRepairFailed(string reason)
         {
@@ -88,6 +92,7 @@ namespace QuadVitals.Core
         /// </remarks>
         public static string TemperatureUnavailableLine(MetricsSnapshot snapshot)
         {
+            if (snapshot != null && snapshot.Has(MetricFlags.PawnIoMissing)) return "请安装 PawnIO";
             if (IsKnownUnelevated(snapshot)) return "未提权，读不到温度";
             return "温度读取失败";
         }
@@ -99,6 +104,7 @@ namespace QuadVitals.Core
         /// </summary>
         public static string FanUnavailableLine(MetricsSnapshot snapshot)
         {
+            if (snapshot != null && snapshot.Has(MetricFlags.PawnIoMissing)) return PawnIoRequired;
             if (IsKnownUnelevated(snapshot)) return "传感器未提权，风扇不可用";
             if (snapshot != null && snapshot.Has(MetricFlags.ElevationKnown) &&
                 !snapshot.Has(MetricFlags.TemperatureValid))

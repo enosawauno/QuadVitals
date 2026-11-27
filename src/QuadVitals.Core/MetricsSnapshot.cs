@@ -33,14 +33,15 @@ namespace QuadVitals.Core
         /// <summary>GPU graphics clock present (NVML, appended field at offset 366).</summary>
         GpuClockValid = 1 << 11,
         /// <summary>
-        /// Motherboard fan channels were sampled (v4 tail). Individual readings carry their own
-        /// validity byte, so a channel that is not connected simply does not appear.
+        /// Motherboard fan channels were sampled, including channels reporting 0 RPM.
         /// </summary>
         FanValid = 1 << 12,
         /// <summary>The writing agent reported its elevation state (paired with <see cref="Elevated"/>).</summary>
         ElevationKnown = 1 << 13,
         /// <summary>The writing agent has an elevated token; temperature and fan need it.</summary>
-        Elevated = 1 << 14
+        Elevated = 1 << 14,
+        /// <summary>The required PawnIO system driver is not installed.</summary>
+        PawnIoMissing = 1 << 15
     }
 
     /// <summary>

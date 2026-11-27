@@ -66,6 +66,17 @@ namespace QuadVitals.Setup
                 return 0;
             }
 
+            // The copy inside the install folder cannot delete that folder while it runs from it, so
+            // the uninstall is handed to a %TEMP% copy which can. Silent runs wait for that copy and
+            // return its exit code, so scripted callers still see the real result.
+            if (uninstall && !console && !HasFlag(args, "--relocated") &&
+                InstallerCore.IsInstalledCopy(SelfPath(), InstallerCore.InstalledDir))
+            {
+                int relocatedCode;
+                if (InstallerCore.RelaunchFromTemp(SelfPath(), args, silent, out relocatedCode))
+                    return relocatedCode;
+            }
+
             if (silent) return RunSilent(args, uninstall);
 
             // --screenshot <png>: render the window to a file instead of showing it. Screen capture
@@ -136,7 +147,8 @@ namespace QuadVitals.Setup
             InstallerCore core = new InstallerCore(_version);
             core.OnStatus = stage => Console.WriteLine("  " + stage);
 
-            string installDir = ReadArg(args, "-InstallDir") ?? InstallerCore.DefaultInstallDir;
+            string installDir = ReadArg(args, "-InstallDir") ??
+                                (uninstall ? InstallerCore.InstalledDir : InstallerCore.DefaultInstallDir);
             // Autostart is part of the product (an unelevated agent cannot read CPU temperature), so the
             // silent path creates it unless the caller explicitly opts out.
             bool createTask = !HasFlag(args, "-NoTask");
@@ -160,7 +172,8 @@ namespace QuadVitals.Setup
                 }
 
                 Console.WriteLine(uninstall ? "卸载完成。" : "安装完成：" + installDir);
-                return 0;
+                if (result.RebootRequired) Console.WriteLine("传感器驱动需要重启 Windows 后生效。");
+                return result.ExitCode;
             }
             catch (Exception ex)
             {

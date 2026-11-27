@@ -24,7 +24,7 @@ namespace QuadVitals.Setup
 
             ShowPage(BuildProgress());
 
-            string installDir = _uninstall ? InstallerCore.DefaultInstallDir : _installDirBox.Text.Trim();
+            string installDir = _uninstall ? InstallerCore.InstalledDir : _installDirBox.Text.Trim();
             // The logon task (and with it the single UAC prompt) is part of the product, not an option:
             // without admin rights the agent cannot load the sensor driver, so temperature would stay
             // "--" and the stop step could not end an older agent. Silent installs can still pass -NoTask
@@ -61,6 +61,7 @@ namespace QuadVitals.Setup
                     if (result.Succeeded)
                     {
                         _bandRestored = result.BandRestored;
+                        _rebootRequired = result.RebootRequired;
                         ShowResult(installDir);
                     }
                     else ShowFailure(result.Error, result.ShowLog);

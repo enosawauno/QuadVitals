@@ -472,6 +472,15 @@ namespace QuadVitals.Core.Tests
             elevated.Flags |= MetricFlags.TemperatureValid;
             Equal("未读取到主板风扇", AgentDiagnostics.FanUnavailableLine(elevated), "温度正常只是没有风扇通道");
             Equal("未读取到主板风扇", AgentDiagnostics.FanUnavailableLine(oldAgent), "旧 Agent 风扇文案不变");
+            MetricsSnapshot noDriver = new MetricsSnapshot { Flags = elevated.Flags | MetricFlags.PawnIoMissing };
+            Equal("请安装 PawnIO", AgentDiagnostics.TemperatureUnavailableLine(noDriver), "缺驱动提示安装而不是重启");
+            True(AgentDiagnostics.TemperatureUnavailableLine(noDriver).Length <= 10, "驱动提示保持单行");
+            Equal(AgentDiagnostics.PawnIoRequired, AgentDiagnostics.FanUnavailableLine(noDriver), "风扇缺驱动给安装指引");
+            True((MetricSanity.EffectiveFlags(noDriver) & MetricFlags.PawnIoMissing) != 0, "指标校验保留驱动诊断位");
+            MetricsSnapshot driverRoundTrip;
+            SnapshotError driverError;
+            True(MetricsSnapshot.TryParse(noDriver.ToBytes(), out driverRoundTrip, out driverError) &&
+                 driverRoundTrip.Has(MetricFlags.PawnIoMissing), "驱动诊断位往返且不改变布局");
         }
 
         // ---- agent launch path ---------------------------------------------------------
@@ -494,6 +503,7 @@ namespace QuadVitals.Core.Tests
             MetricFlags known = MetricFlags.ElevationKnown;
             Equal("普通权限，无法获取CPU温度和风扇转速数据", AgentDiagnostics.ElevationLine(known), "已知未提权");
             Equal("管理员：CPU 温度与风扇可读", AgentDiagnostics.ElevationLine(known | MetricFlags.Elevated), "已提权");
+            Equal("管理员", AgentDiagnostics.ElevationLine(known | MetricFlags.Elevated | MetricFlags.PawnIoMissing), "缺驱动时权限行不声称传感器可读");
             Equal("未上报（旧版程序）", AgentDiagnostics.ElevationLine(MetricFlags.None), "旧版不置提权位时不凭空断言");
             True(AgentDiagnostics.IsKnownUnelevated(known), "flags 与快照两个入口同判");
             True(!AgentDiagnostics.IsKnownUnelevated(known | MetricFlags.Elevated), "提权不算未提权");

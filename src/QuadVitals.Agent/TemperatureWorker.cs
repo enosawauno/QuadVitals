@@ -38,6 +38,10 @@ namespace QuadVitals.Agent
         private DateTime _lastFanReopenUtc = DateTime.MinValue;
         private int _fanReopens;
         private bool _stallReported;
+        private bool _hasSample;
+
+        // A failed first driver load can stay empty across Open() calls in the same process.
+        private const int StartupRestartMs = 60000;
 
         /// <summary>Silent for this long before the driver session is rebuilt.</summary>
         private const int ReopenAfterMs = 20000;
@@ -73,6 +77,7 @@ namespace QuadVitals.Agent
         }
 
         public bool HasSource { get { return _source != null && _source.IsAvailable; } }
+        public bool PawnIoMissing { get { return _source != null && _source.PawnIoMissing; } }
 
         /// <summary>
         /// Reads the latest value without blocking. Returns false when the worker has nothing
@@ -119,7 +124,7 @@ namespace QuadVitals.Agent
 
         private void Loop()
         {
-            if (_source == null || !_source.IsAvailable)
+            if (_source == null || (!_source.IsAvailable && !_source.CanRetry))
             {
                 lock (_gate) { _reason = _source == null ? "未配置" : _source.UnavailableReason; }
                 return;
@@ -152,7 +157,7 @@ namespace QuadVitals.Agent
                     lock (_gate) { _reason = "温度采集异常: " + ex.GetType().Name; }
                 }
 
-                Supervise(value);
+                Supervise(value, DateTime.UtcNow);
                 SuperviseFans(value);
 
                 if (_stop.Wait(_intervalMs)) return;
@@ -171,11 +176,6 @@ namespace QuadVitals.Agent
             return copy;
         }
 
-        /// <summary>
-        /// Keeps a silent sensor from staying silent: LHM keeps answering with empty values once
-        /// its driver handle went stale, so the only cure is a fresh Open(). Runs on this thread,
-        /// once a minute at most, and never blocks a sample that is working.
-        /// </summary>
         /// <summary>
         /// 温度正常、但一路风扇都读不到时，换一次 LHM 会话。SuperIO 的句柄会被先前的
         /// 非提权实例或驱动重置留在坏状态，重建会话是唯一能自愈的做法。
@@ -238,11 +238,11 @@ namespace QuadVitals.Agent
                         "（第 " + _fanReopens + " 次）");
         }
 
-        private void Supervise(double value)
+        private void Supervise(double value, DateTime now)
         {
-            DateTime now = DateTime.UtcNow;
             if (!double.IsNaN(value))
             {
+                _hasSample = true;
                 if (_failedSinceUtc != DateTime.MinValue)
                 {
                     _failedSinceUtc = DateTime.MinValue;
@@ -260,21 +260,23 @@ namespace QuadVitals.Agent
                 return;
             }
 
+            int restartAfterMs = _hasSample ? StallRestartMs : StartupRestartMs;
+            if (!_stallReported && (now - _failedSinceUtc).TotalMilliseconds >= restartAfterMs)
+            {
+                _stallReported = true;
+                string reason = _hasSample ? "温度连续 10 分钟无数据" : "启动后温度连续 60 秒无数据";
+                _log.Report(reason + "，请求重启 Agent 进程");
+                Action<string> handler = _onStall;
+                if (handler != null) handler(reason);
+                return;
+            }
+
             if ((now - _failedSinceUtc).TotalMilliseconds < ReopenAfterMs) return;
             if ((now - _lastReopenUtc).TotalMilliseconds < ReopenBackoffMs) return;
 
             _lastReopenUtc = now;
             bool reopened = _source.Reopen();
             _log.Report("重连 LHM: " + (reopened ? "已重开会话，等待数据" : ("失败（" + _source.UnavailableReason + "）")));
-
-            if (_stallReported) return;
-            if ((now - _failedSinceUtc).TotalMilliseconds < StallRestartMs) return;
-
-            _stallReported = true;
-            int minutes = StallRestartMs / 60000;
-            _log.Report("温度已连续 " + minutes + " 分钟无数据，请求重启 Agent 进程");
-            Action<string> handler = _onStall;
-            if (handler != null) handler("温度连续 " + minutes + " 分钟无数据");
         }
 
         public void Dispose()

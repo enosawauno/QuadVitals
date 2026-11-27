@@ -81,6 +81,7 @@ namespace QuadVitals.Agent
                 Flags = MetricFlags.AgentAlive | MetricFlags.ElevationKnown
             };
             if (_elevated) snapshot.Flags |= MetricFlags.Elevated;
+            if (_temperature.PawnIoMissing) snapshot.Flags |= MetricFlags.PawnIoMissing;
 
             TickTimings timings = new TickTimings();
             _stage.Restart();

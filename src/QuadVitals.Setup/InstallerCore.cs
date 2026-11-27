@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace QuadVitals.Setup
 {
@@ -20,6 +21,7 @@ namespace QuadVitals.Setup
         private const string InstallScript = "install.ps1";
         private const string UninstallScript = "uninstall.ps1";
         private const string UninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\QuadVitals";
+        private const string UninstallExeName = "QuadVitals-Uninstall.exe";
         private const int ScriptTimeoutMs = 300000;
 
         private readonly string _version;
@@ -80,7 +82,105 @@ namespace QuadVitals.Setup
             }
         }
 
-        public string SetupExeName { get { return "QuadVitals-Uninstall.exe"; } }
+        /// <summary>
+        /// Where the product was actually installed. The uninstall entry records it, so a custom
+        /// folder is removed instead of the default one; a missing entry falls back to the default.
+        /// </summary>
+        public static string InstalledDir
+        {
+            get
+            {
+                try
+                {
+                    using (Microsoft.Win32.RegistryKey key =
+                           Microsoft.Win32.Registry.CurrentUser.OpenSubKey(UninstallKeyPath))
+                    {
+                        string value = key == null ? null : key.GetValue("InstallLocation") as string;
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            string full = Path.GetFullPath(value.Trim());
+                            if (full.Length > 2) return TrimSeparators(full);
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // A corrupt entry just means "use the default folder".
+                }
+                return DefaultInstallDir;
+            }
+        }
+
+        /// <summary>True when the given exe is the copy that lives inside the installed folder.</summary>
+        public static bool IsInstalledCopy(string selfPath, string installDir)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(selfPath) || string.IsNullOrEmpty(installDir)) return false;
+                string selfDir = Path.GetDirectoryName(Path.GetFullPath(selfPath));
+                return string.Equals(TrimSeparators(selfDir ?? string.Empty), TrimSeparators(installDir),
+                                     StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The uninstaller cannot delete the folder it is running from, so the installed copy hands
+        /// the work to a temporary copy and exits. The copy runs the same uninstall code; the only
+        /// difference is that no file in the install folder is locked by the running exe.
+        /// </summary>
+        public static bool RelaunchFromTemp(string selfPath, string[] args, bool waitForExit, out int exitCode)
+        {
+            exitCode = 0;
+            try
+            {
+                string folder = Path.Combine(Path.GetTempPath(),
+                    "QuadVitals-Uninstall-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                Directory.CreateDirectory(folder);
+                string target = Path.Combine(folder, UninstallExeName);
+                File.Copy(selfPath, target, true);
+
+                StringBuilder command = new StringBuilder("--uninstall --relocated");
+                if (args != null)
+                {
+                    foreach (string arg in args)
+                    {
+                        if (string.IsNullOrEmpty(arg)) continue;
+                        if (string.Equals(arg, "--uninstall", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(arg, "--relocated", StringComparison.OrdinalIgnoreCase)) continue;
+                        command.Append(' ');
+                        if (arg.IndexOf(' ') >= 0 || arg.IndexOf('\t') >= 0)
+                            command.Append('"').Append(arg.Replace("\"", string.Empty)).Append('"');
+                        else
+                            command.Append(arg);
+                    }
+                }
+
+                ProcessStartInfo info = new ProcessStartInfo(target, command.ToString())
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = folder
+                };
+                using (Process child = Process.Start(info))
+                {
+                    if (child == null) return false;
+                    if (!waitForExit) return true;
+                    child.WaitForExit();
+                    exitCode = child.ExitCode;
+                    return true;
+                }
+            }
+            catch (Exception)
+            {
+                // Copy or start failed: the caller falls back to running in place.
+                return false;
+            }
+        }
+
+        public string SetupExeName { get { return UninstallExeName; } }
 
         /// <summary>
         /// Canonicalises a folder the user can type in. The value is spliced into an elevated command
@@ -292,30 +392,21 @@ namespace QuadVitals.Setup
                                (createTask ? " -Task" : " -NoTask") +
                                (startAgent ? string.Empty : " -NoStart");
 
-            // Elevation comes first, before any stage text or log line: the UAC prompt belongs to the
-            // start of the install, not to step five of the progress list. Only the logon task needs
-            // admin, so a per-user install without autostart stays prompt-free.
+            // Driver installation and the logon task share one elevation at the start of installation.
             int exitCode;
-            if (createTask)
+            Action<string> status = OnStatus;
+            if (status != null) status("正在请求管理员权限…");
+            try
             {
-                Action<string> status = OnStatus;
-                if (status != null) status("正在请求管理员权限…");
-                try
-                {
-                    exitCode = RunScriptElevated(payloadRoot, InstallScript, arguments);
-                }
-                catch (Exception ex)
-                {
-                    if (IsUacCancelled(ex)) return UacDeclined(false);
-                    return InstallResult.Failure("无法启动安装程序：" + ex.GetType().Name);
-                }
+                exitCode = RunScriptElevated(payloadRoot, InstallScript, arguments);
             }
-            else
+            catch (Exception ex)
             {
-                exitCode = RunScript(payloadRoot, InstallScript, arguments);
+                if (IsUacCancelled(ex)) return UacDeclined(false);
+                return InstallResult.Failure("无法启动安装程序：" + ex.GetType().Name);
             }
 
-            if (exitCode != 0) return InstallResult.Failure(DescribeFailure(exitCode, false));
+            if (exitCode != 0 && exitCode != 3010) return InstallResult.Failure(DescribeFailure(exitCode, false));
 
             // Safety net: if the task still is not there (elevation granted but schtasks failed), the
             // install is rolled back so "failed" is the truth and a retry starts clean.
@@ -346,6 +437,7 @@ namespace QuadVitals.Setup
             CreateStartMenuEntries(installDir, copied);
 
             InstallResult success = InstallResult.Success(copied);
+            success.RebootRequired = exitCode == 3010;
             success.ShellRestarted = shellRestarted;
             success.BandRestored = bandRestored;
             return success;
@@ -641,6 +733,13 @@ namespace QuadVitals.Setup
             RemoveUninstallEntry();
             RemoveDesktopShortcut();
             RemoveStartMenuEntries();
+            // The band DLL stays loaded by Explorer until the shell restarts, which is why a normal
+            // uninstall used to leave the folder behind. Restart only when something is still there.
+            if (exitCode == 0 && Directory.Exists(installDir) &&
+                (Directory.GetFiles(installDir).Length > 0 || Directory.GetDirectories(installDir).Length > 0))
+            {
+                RestartShellForUninstall();
+            }
             TryDeleteLeftovers(installDir);
 
             return exitCode == 0
@@ -842,6 +941,7 @@ namespace QuadVitals.Setup
             { "register DeskBand (per-user)", "注册任务栏组件" },
             { "refresh the taskbar", "正在刷新任务栏配置" },
             { "install logon task (one UAC prompt)", "创建开机自启任务" },
+            { "install sensor driver", "安装传感器驱动" },
             { "remove logon task (one UAC prompt)", "删除开机自启任务" },
             { "unregister DeskBand", "注销任务栏组件" },
             { "start agent", "启动传感器" },
@@ -1041,8 +1141,39 @@ namespace QuadVitals.Setup
         }
 
         /// <summary>
+        /// Releases the band DLL by restarting the shell once, unelevated. The install path does the
+        /// same to load a new band; here it is what makes the install folder deletable instead of
+        /// leaving a DLL locked until the next logon.
+        /// </summary>
+        private void RestartShellForUninstall()
+        {
+            try
+            {
+                Process[] shells = Process.GetProcessesByName("explorer");
+                if (shells.Length == 0) return;
+
+                Log("重启资源管理器以释放任务栏组件");
+                foreach (Process shell in shells)
+                {
+                    try { shell.Kill(); } catch (Exception) { }
+                }
+                for (int i = 0; i < 40 && Process.GetProcessesByName("explorer").Length > 0; i++)
+                {
+                    Thread.Sleep(150);
+                }
+                EnsureShellRunning();
+                Thread.Sleep(800);
+            }
+            catch (Exception ex)
+            {
+                Log("重启资源管理器失败：" + ex.GetType().Name);
+            }
+        }
+
+        /// <summary>
         /// Deleting a folder while this exe runs from inside it always leaves something behind, so
-        /// the rest is removed here and the locked file is scheduled away at the next reboot.
+        /// the rest is removed here and anything still locked is scheduled away at the next reboot.
+        /// A copy running from %TEMP% is not inside the folder, so the folder itself can go now.
         /// </summary>
         private void TryDeleteLeftovers(string installDir)
         {
@@ -1055,7 +1186,8 @@ namespace QuadVitals.Setup
                 foreach (string file in Directory.GetFiles(installDir))
                 {
                     if (string.Equals(file, self, StringComparison.OrdinalIgnoreCase)) continue;
-                    try { File.Delete(file); } catch (Exception) { }
+                    if (!TryDeleteFile(file))
+                        MoveFileEx(file, null, MoveFileDelayUntilReboot);
                 }
 
                 bool runningFromInstall = string.Equals(Path.GetDirectoryName(self), installDir,
@@ -1066,12 +1198,67 @@ namespace QuadVitals.Setup
                 }
                 else
                 {
-                    try { Directory.Delete(installDir, true); } catch (Exception) { }
+                    for (int attempt = 0; attempt < 5 && Directory.Exists(installDir); attempt++)
+                    {
+                        try { Directory.Delete(installDir, true); }
+                        catch (Exception) { Thread.Sleep(200); }
+                    }
+                    if (Directory.Exists(installDir) &&
+                        Directory.GetFiles(installDir).Length == 0 &&
+                        Directory.GetDirectories(installDir).Length == 0)
+                    {
+                        MoveFileEx(installDir, null, MoveFileDelayUntilReboot);
+                    }
+                }
+
+                // The temporary uninstaller copy is not in the install folder, so nothing above
+                // would ever remove it. Schedule the file and its empty folder for the next reboot.
+                if (!runningFromInstall && IsRelocatedCopy(self))
+                {
+                    MoveFileEx(self, null, MoveFileDelayUntilReboot);
+                    MoveFileEx(Path.GetDirectoryName(self), null, MoveFileDelayUntilReboot);
                 }
             }
             catch (Exception)
             {
                 // Leftovers are already reported by the scripts; never fail an uninstall over them.
+            }
+        }
+
+        /// <summary>File.Delete fails transiently when an antivirus or a shell handle is closing.</summary>
+        private static bool TryDeleteFile(string path)
+        {
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    File.Delete(path);
+                    return !File.Exists(path);
+                }
+                catch (Exception)
+                {
+                    Thread.Sleep(120);
+                }
+            }
+            return !File.Exists(path);
+        }
+
+        /// <summary>True for the copy RelaunchFromTemp puts under %TEMP%.</summary>
+        internal static bool IsRelocatedCopy(string selfPath)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(Path.GetFullPath(selfPath));
+                if (string.IsNullOrEmpty(dir)) return false;
+                string name = Path.GetFileName(dir);
+                if (string.IsNullOrEmpty(name) ||
+                    !name.StartsWith("QuadVitals-Uninstall-", StringComparison.OrdinalIgnoreCase)) return false;
+                string temp = TrimSeparators(Path.GetFullPath(Path.GetTempPath()));
+                return dir.StartsWith(temp + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
@@ -1137,6 +1324,8 @@ namespace QuadVitals.Setup
         /// tick the toolbar entry by hand, which is what the finish page then says.
         /// </summary>
         public bool BandRestored { get; set; }
+        public bool RebootRequired { get; set; }
+        public int ExitCode { get { return Succeeded ? (RebootRequired ? 3010 : 0) : 1; } }
 
         public static InstallResult Success(string copiedSetupPath)
         {

@@ -82,6 +82,9 @@ namespace QuadVitals.Settings
         /// <summary>当前分档，供断言与测试读取。</summary>
         public MetricTone Tone { get { return _tone; } }
 
+        /// <summary>合计功耗的分档，供断言读取；合计无效时为 Normal。</summary>
+        public MetricTone TotalTone { get; private set; }
+
         /// <summary>True while the frame loop is actually running; read by the UI suite.</summary>
         public bool IsAnimating { get { return _loop.IsRunning; } }
 
@@ -155,6 +158,13 @@ namespace QuadVitals.Settings
             double gpuWatts = gpuValid ? snapshot.GpuPowerWatts : 0;
             double cpuFraction = cpuValid ? Math.Min(1.0, cpuWatts / _cpuTdp) : 0;
             double gpuFraction = gpuValid ? Math.Min(1.0, gpuWatts / _gpuTdp) : 0;
+            // 合计的分母就是下面两行已经显示的极限之和：换机器、换 TDP/MTP 口径都自动跟着走。
+            double totalFraction = cpuValid && gpuValid && (_cpuTdp + _gpuTdp) > 0
+                ? Math.Min(1.0, (cpuWatts + gpuWatts) / (_cpuTdp + _gpuTdp))
+                : 0;
+            TotalTone = cpuValid && gpuValid
+                ? MetricTones.PowerTotal(totalFraction * 100)
+                : MetricTone.Normal;
 
             _cpuValue.Text = cpuValid ? FormatWatts(cpuWatts) : MetricFormat.Invalid;
             _cpuUnit.Text = cpuValid ? "W" : string.Empty;
@@ -178,7 +188,9 @@ namespace QuadVitals.Settings
             {
                 _total.Text = (cpuWatts + gpuWatts).ToString("0.0", CultureInfo.InvariantCulture);
                 _totalUnit.Text = "W";
-                _total.Foreground = Theme.TextPrimaryBrush;
+                _total.Foreground = TotalTone == MetricTone.Danger
+                    ? Theme.AccentRedBrush
+                    : (TotalTone == MetricTone.Warning ? Theme.AccentOrangeBrush : Theme.TextPrimaryBrush);
                 _card.SetTitleWithNote("功耗", null);
                 ShowScopeNote();
             }
@@ -187,6 +199,7 @@ namespace QuadVitals.Settings
                 _total.Text = MetricFormat.Invalid;
                 _totalUnit.Text = string.Empty;
                 _total.Foreground = Theme.TextSecondaryBrush;
+                TotalTone = MetricTone.Normal;
                 // 原因进标题：卡片底部那行是给统计范围用的，告警挤在那会把它顶掉。
                 string missing = !cpuValid && !gpuValid
                     ? "CPU 与 GPU 功耗读取失败"
@@ -297,6 +310,7 @@ namespace QuadVitals.Settings
             _gpuBar.SetValue(0);
             _load = 0;
             _tone = MetricTone.Normal;
+            TotalTone = MetricTone.Normal;
             ApplySceneTone(Theme.TextSecondary);
             _card.SetTitleWithNote("功耗", reason);
             _note.Text = string.Empty;

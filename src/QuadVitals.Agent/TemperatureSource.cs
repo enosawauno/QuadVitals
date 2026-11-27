@@ -38,6 +38,10 @@ namespace QuadVitals.Agent
 
         public bool IsAvailable { get { return _computer != null && _emptyRefreshes < 2; } }
 
+        // Missing libraries cannot be repaired by reopening a driver session.
+        public bool CanRetry { get; private set; }
+        public bool PawnIoMissing { get; private set; }
+
         public string UnavailableReason { get { return _unavailableReason; } }
 
         /// <summary>Diagnostic detail: which sensor fed the value.</summary>
@@ -51,9 +55,7 @@ namespace QuadVitals.Agent
         public string LastDiagnostic { get; private set; }
 
         /// <summary>
-        /// Fan channels the last walk saw with a non-zero reading. LHM 0.9.2 names them by
-        /// position ("Fan #2"), so the channel number is all we can publish; the dashboard turns
-        /// it into a label.
+        /// Fan channels with valid readings, including stopped channels at 0 RPM.
         /// </summary>
         public IList<MetricsSnapshot.FanReading> LastFans { get { return _fans; } }
 
@@ -99,7 +101,7 @@ namespace QuadVitals.Agent
             Type computerType = Type.GetType("LibreHardwareMonitor.Hardware.Computer, LibreHardwareMonitorLib", false);
             if (computerType == null)
             {
-                // Look next to the exe and in ..\..\spikes\packages (dev layout).
+                // Reflection keeps the remaining metrics usable without the optional library.
                 string probe = FindLibrary();
                 if (probe != null)
                 {
@@ -126,7 +128,23 @@ namespace QuadVitals.Agent
 
             try
             {
-                object computer = Activator.CreateInstance(computerType);
+                Type pawnIo = computerType.Assembly.GetType("LibreHardwareMonitor.PawnIo.PawnIo");
+                if (pawnIo == null)
+                {
+                    error = _unavailableReason = "传感器库版本过旧，请使用 LHM 0.9.6";
+                    return false;
+                }
+                Version driverVersion = pawnIo.GetProperty("Version").GetValue(null, null) as Version;
+                PawnIoMissing = !(bool)pawnIo.GetProperty("IsInstalled").GetValue(null, null) ||
+                                driverVersion == null || driverVersion < new Version(2, 2, 0, 0);
+                if (PawnIoMissing)
+                {
+                    error = _unavailableReason = AgentDiagnostics.PawnIoRequired;
+                    return false;
+                }
+                CanRetry = true;
+                _computerType = computerType;
+                object computer = _computer = Activator.CreateInstance(computerType);
                 // CPU for temperature/power, motherboard for the SuperIO fan channels. Opening the
                 // motherboard node costs nothing measurable next to the CPU walk (both are inside
                 // the same 5 s Update), and it is the only place fan RPM exists. EC stays off: this
@@ -144,12 +162,14 @@ namespace QuadVitals.Agent
             }
             catch (TargetInvocationException ex)
             {
+                CloseComputer();
                 error = "LHM 初始化失败: " + (ex.InnerException ?? ex).Message;
                 _unavailableReason = "LHM 初始化失败";
                 return false;
             }
             catch (Exception ex)
             {
+                CloseComputer();
                 error = "LHM 初始化失败: " + ex.GetType().Name;
                 _unavailableReason = "LHM 初始化失败";
                 return false;
@@ -292,7 +312,6 @@ namespace QuadVitals.Agent
                         }
 
                         // 风扇与温度同一个遍历：主板 SuperIO 已经在这棵树里刷新过，不另开一次 Update。
-                        // 只发布“这次真的在转”的通道（> 0）；未接的风扇头 LHM 读 0，发上去只会多出空行。
                         if (kindName == "Fan")
                         {
                             // 先记账再看值：读到 0 的通道也是“主板有这个风扇头”的证据，
@@ -448,22 +467,8 @@ namespace QuadVitals.Agent
         private static string FindLibrary()
         {
             string exeDir = AppDomain.CurrentDomain.BaseDirectory;
-            List<string> candidates = new List<string>
-            {
-                Path.Combine(exeDir, "LibreHardwareMonitorLib.dll"),
-                Path.Combine(exeDir, "packages", "librehardwaremonitorlib-0.9.2", "lib", "net472", "LibreHardwareMonitorLib.dll")
-            };
-
-            // Dev layout: repo\src\QuadVitals.Agent\bin -> repo\spikes\packages\...
-            string repo = Path.GetFullPath(Path.Combine(exeDir, "..", "..", ".."));
-            candidates.Add(Path.Combine(repo, "spikes", "packages", "librehardwaremonitorlib-0.9.2", "lib", "net472",
-                "LibreHardwareMonitorLib.dll"));
-
-            foreach (string candidate in candidates)
-            {
-                if (File.Exists(candidate)) return candidate;
-            }
-            return null;
+            string library = Path.Combine(exeDir, "LibreHardwareMonitorLib.dll");
+            return File.Exists(library) ? library : null;
         }
 
         public void Dispose()

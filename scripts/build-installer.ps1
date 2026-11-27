@@ -69,7 +69,7 @@ Write-Host ("  payload: {0} ({1:N0} B)" -f $zip, (Get-Item -LiteralPath $zip).Le
 # how the two Explorer taskbar dialogs survived four rounds of fixes.
 Step 'verify payload scripts match this tree'
 $payloadCheck = Join-Path $root ('build\tmp\payload-check-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
-$packaged = @('install.ps1','uninstall.ps1','install-deskband.ps1','uninstall-deskband.ps1','install-agent-task.ps1','uninstall-agent-task.ps1','stop-agent.ps1','stop-quadvitals.ps1','TrayDeskBandApi.cs')
+$packaged = @('install.ps1','uninstall.ps1','install-deskband.ps1','uninstall-deskband.ps1','install-agent-task.ps1','uninstall-agent-task.ps1','stop-agent.ps1','stop-quadvitals.ps1','sensor-runtime.ps1','TrayDeskBandApi.cs')
 $drift = @()
 try {
     Expand-Archive -LiteralPath $zip -DestinationPath $payloadCheck -Force
@@ -83,6 +83,17 @@ try {
         $a = (Get-FileHash -LiteralPath $packedFile -Algorithm SHA256).Hash
         $b = (Get-FileHash -LiteralPath $currentFile -Algorithm SHA256).Hash
         if ($a -ne $b) { $drift += ($name + ' differs from scripts\' + $name) }
+    }
+    . (Join-Path $PSScriptRoot 'sensor-runtime.ps1')
+    $packedAgent = Join-Path $packedRoot.FullName 'build\out\agent'
+    $packedSensors = @(Get-SensorRuntimeFiles $packedAgent)
+    if ($packedSensors.Count -eq 0) { $drift += 'sensor runtime missing from the payload' }
+    foreach ($file in (Get-SensorRuntimeFiles (Join-Path $root 'build\out\agent'))) {
+        $packedFile = Join-Path $packedAgent $file.Name
+        if (-not (Test-Path -LiteralPath $packedFile) -or
+            (Get-FileHash -LiteralPath $packedFile -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash) {
+            $drift += ($file.Name + ' sensor payload differs from the current build')
+        }
     }
 }
 finally {

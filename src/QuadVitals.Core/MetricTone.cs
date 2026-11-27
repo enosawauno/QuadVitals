@@ -32,6 +32,19 @@ namespace QuadVitals.Core
             return MetricTone.Normal;
         }
 
+        /// <summary>
+        /// Combined CPU + GPU draw against the two limits added together: 70% warn, 80% danger.
+        /// The denominator comes from the same per-machine limits the two rows already show, so
+        /// the bands scale with the hardware instead of a fixed wattage.
+        /// </summary>
+        public static MetricTone PowerTotal(double percent)
+        {
+            if (double.IsNaN(percent)) return MetricTone.Normal;
+            if (percent >= 80) return MetricTone.Danger;
+            if (percent >= 70) return MetricTone.Warning;
+            return MetricTone.Normal;
+        }
+
         /// <summary>Everything else measured in percent (GPU utilisation, disk usage): 80/90.</summary>
         public static MetricTone Generic(double percent)
         {

@@ -20,6 +20,23 @@ $ErrorActionPreference = 'Continue'
 
 function Step([string]$text) { Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan }
 
+# A file held open by Explorer (the taskbar DLL) cannot be deleted now; queue it for the next boot
+# instead of leaving it in the install folder forever. The wizard restarts Explorer and retries
+# first; this is the fallback for the script path and for a file even a restart cannot release.
+function Schedule-DeleteAtReboot([string]$Path) {
+    if (-not ('QVUninstallNative' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class QVUninstallNative {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
+}
+'@
+    }
+    try { [void][QVUninstallNative]::MoveFileEx($Path, $null, 4) } catch { }
+}
+
 # Same owner as the installer: the elevated script ends processes, never the window (see the header of
 # stop-quadvitals.ps1). A survivor here would fail the file removal below anyway.
 # The install folder is a parameter and uninstall deletes it recursively, so a drive root, a system
@@ -90,11 +107,16 @@ if ($KeepFiles) {
             Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction Stop
             Write-Host '  removed'
         } catch {
-            # LibreHardwareMonitor keeps its kernel driver (<exe>.sys) loaded until reboot.
+            # LibreHardwareMonitor keeps its kernel driver (<exe>.sys) loaded until reboot, and the
+            # taskbar DLL is held by Explorer. Queue whatever is left so it cannot stay forever.
             Write-Host "  could not remove everything: $($_.Exception.Message)" -ForegroundColor Yellow
-            Get-ChildItem -LiteralPath $InstallDir -ErrorAction SilentlyContinue |
-                ForEach-Object { Write-Host "    leftover: $($_.Name)" }
-            Write-Host '  reboot, then delete the directory (the sensor driver is still loaded)' -ForegroundColor Yellow
+            $left = @(Get-ChildItem -LiteralPath $InstallDir -ErrorAction SilentlyContinue)
+            foreach ($item in $left) {
+                Schedule-DeleteAtReboot $item.FullName
+                Write-Host "    leftover: $($item.Name) (scheduled for the next restart)"
+            }
+            if (Test-Path -LiteralPath $InstallDir) { Schedule-DeleteAtReboot $InstallDir }
+            Write-Host '  restart Windows to finish the removal' -ForegroundColor Yellow
         }
     } else {
         Write-Host '  not present'

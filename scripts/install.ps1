@@ -3,9 +3,7 @@
 # Copies a built tree into a writable install directory, registers the DeskBand for the current
 # user (HKCU, no admin), optionally creates the logon task (one UAC), and starts the agent.
 #
-# Default install dir is %LOCALAPPDATA%\QuadVitals on purpose: LibreHardwareMonitor writes its
-# kernel driver as "<exe name>.sys" NEXT TO THE EXE, so an install under Program Files
-# would fail to load the temperature driver.
+# The per-user install directory remains writable for application updates.
 #
 #   powershell -File scripts\install.ps1                 # task follows settings.json preference
 #   powershell -File scripts\install.ps1 -Task           # force the logon task (one UAC)
@@ -81,10 +79,11 @@ foreach ($item in $required) {
     }
 }
 
-$optional = @(
-    @{ Src = (Join-Path $agentOut 'LibreHardwareMonitorLib.dll'); Dst = 'LibreHardwareMonitorLib.dll' },
-    @{ Src = (Join-Path $agentOut 'HidSharp.dll');               Dst = 'HidSharp.dll' }
-)
+. (Join-Path $PSScriptRoot 'sensor-runtime.ps1')
+$optional = @(Get-SensorRuntimeFiles $agentOut | ForEach-Object { @{ Src = $_.FullName; Dst = $_.Name } })
+if ($optional.Count -eq 0) {
+    Write-Host "  warning: sensor runtime missing - CPU temperature, power and fans will show '--'" -ForegroundColor Yellow
+}
 foreach ($item in $optional) {
     if (-not (Test-Path -LiteralPath $item.Src)) {
         Write-Host "  warning: $($item.Dst) missing - CPU temperature will show '--'" -ForegroundColor Yellow
@@ -107,8 +106,7 @@ if ($LASTEXITCODE -ne 0) {
 Step "install to $InstallDir"
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
-# The LHM driver is written next to the exe. Refuse a read-only target instead of
-# discovering it at runtime as a silent "temperature unavailable".
+# Refuse a read-only target before copying an incomplete application tree.
 try {
     $probe = Join-Path $InstallDir '.write-test'
     [IO.File]::WriteAllText($probe, 'ok')
@@ -223,6 +221,13 @@ Step 'register DeskBand (per-user)'
 
 
 # ---------------------------------------------------------------- logon task ----
+# Driver installation reuses the installer's elevation and never removes a shared driver.
+Step 'install sensor driver'
+$driverResult = if ($optional.Count -gt 0) { Install-PawnIoDriver (Join-Path $agentOut 'PawnIO_setup.exe') } else { 0 }
+$driverRebootRequired = $driverResult -eq 3010
+if ($driverRebootRequired) { Write-Host 'QV-PAWNIO-REBOOT: Windows restart required for the sensor driver' -ForegroundColor Yellow }
+
+# ---------------------------------------------------------------- logon task ----
 # The dashboard's "start with Windows" checkbox writes a preference; honour it here so the
 # checkbox is not a dead setting. -Task/-NoTask override the file.
 $wantTask = $false
@@ -259,7 +264,7 @@ if ($NoTask) {
 }
 
 # ---------------------------------------------------------------- start ----
-if (-not $NoStart) {
+if (-not $NoStart -and -not $driverRebootRequired) {
     Step 'start agent'
     Start-Process -FilePath (Join-Path $InstallDir 'QuadVitals.Agent.exe')
     Start-Sleep -Seconds 2
@@ -275,3 +280,4 @@ Write-Host '  (Windows asking whether the toolbar is compatible is normal; choos
 Write-Host ''
 Write-Host "Settings : $env:APPDATA\QuadVitals\settings.json"
 Write-Host "Install  : $InstallDir"
+if ($driverRebootRequired) { exit 3010 }
