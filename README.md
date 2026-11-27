@@ -46,7 +46,7 @@ QuadVitals 的任务栏条基于 **DeskBand**（COM 工具栏对象）实现，�
 
 从 [Releases](https://github.com/enosawauno/QuadVitals/releases) 下载 `QuadVitals-Setup-<版本>.exe` 并运行安装向导。
 
-- 程序部署至 `%LOCALAPPDATA%\QuadVitals`，目录写入无需管理员权限。
+- 程序安装至 `%LOCALAPPDATA%\QuadVitals`，目录写入无需管理员权限。
 - 安装过程请求一次管理员权限，用于准备传感器驱动与创建登录计划任务：若目标机已存在 2.2.0 或更高版本 PawnIO 则直接复用，否则离线安装内置的官方签名版本；若驱动返回需重启状态码，完成页将明确提示且不自动重启系统。卸载 QuadVitals 时保留共用 PawnIO 驱动。
 - Windows 10：安装完成后，右键任务栏 → **工具栏** → 勾选 **QuadVitals**。若系统提示「工具栏与此版本 Windows 不兼容」，选择「是」即可加载。
 - Windows 11：跳过任务栏工具栏勾选步骤，通过托盘菜单打开仪表盘。
