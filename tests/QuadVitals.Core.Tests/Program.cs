@@ -76,6 +76,7 @@ namespace QuadVitals.Core.Tests
             Suite("AgentDiagnostics 诊断框", AgentDiagnosticsBehaviour);
             Suite("AgentControl 控制事件", AgentControlBehaviour);
             Suite("AgentLaunchPlan 启动路径", AgentLaunchPlanBehaviour);
+            Suite("DashboardIntent 参数解析", DashboardIntentBehaviour);
             Suite("Settings 四格指标选择", DeviceMetricChoicesBehaviour);
             Suite("IoWave 走马循环", IoWaveBehaviour);
             Suite("NetHistory 曲线快照", NetHistoryBehaviour);

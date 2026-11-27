@@ -39,11 +39,10 @@ try {
     # No outbound requests from a regression run (update check, processor spec table).
     $env:QUADVITALS_NO_UPDATE_CHECK = '1'
     $env:QUADVITALS_NO_AUTO_RECOVERY = '1'
-    # Four suites, four processes: the element-list rules, the general settings sheet, the device
-    # status dialog / tile formats, and the overview dynamics (fan card / diagnostics / frame clock).
+    # Each surface runs in its own process so windows and static state cannot leak between suites.
     # Separate processes because the overlay panel kept answering "not found" after a few hundred
     # windows, and because one file per surface is what keeps each suite inside the size limit.
-    $suites = @('ui-regression.ps1', 'general-settings.ps1', 'device-dialog.ps1', 'overview-dynamics.ps1', 'update-dialog.ps1')
+    $suites = @('ui-regression.ps1', 'general-settings.ps1', 'device-dialog.ps1', 'overview-dynamics.ps1', 'update-dialog.ps1', 'agent-driver.ps1')
     $codes = @()
     foreach ($name in $suites) {
         $suite = Join-Path $root ('tests\QuadVitals.Settings.Tests\' + $name)
@@ -55,7 +54,7 @@ try {
 
     # The baseline check wants one number for the whole run: sum the per-suite counts.
     $passed = 0
-    foreach ($part in @('settings-ui-elements', 'settings-ui-general', 'settings-ui-device', 'settings-ui-overview-dynamics', 'settings-ui-update')) {
+    foreach ($part in @('settings-ui-elements', 'settings-ui-general', 'settings-ui-device', 'settings-ui-overview-dynamics', 'settings-ui-update', 'settings-ui-agent-driver')) {
         $partFile = Join-Path $root ('build\tmp\assertion-count-' + $part + '.txt')
         if (Test-Path -LiteralPath $partFile) { $passed += [int]([IO.File]::ReadAllText($partFile).Trim()) }
     }

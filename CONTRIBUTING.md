@@ -19,12 +19,17 @@
 |---|---|
 | `QUADVITALS_VC` | MSVC 工具集根目录（版本不同时用） |
 | `QUADVITALS_SDK` | Windows SDK 根目录（指向解包的 NuGet 包或自定义安装位置） |
-| `QUADVITALS_LIB` | 两个运行时依赖 DLL 所在目录，默认 `lib\` |
+| `QUADVITALS_LIB` | 传感器运行时依赖与官方驱动安装器所在目录，默认 `lib\` |
 
-两个依赖不随仓库分发，首次构建前放进去（缺了也能编，只是温度读不到）：
+依赖二进制不提交到源码仓库。首次构建前运行：
 
-- `lib\LibreHardwareMonitorLib.dll`（0.9.2）
-- `lib\HidSharp.dll`（2.1.0）
+```powershell
+powershell -File scripts/restore-sensor-runtime.ps1
+```
+
+脚本按 `scripts/sensor-runtime.ps1` 的固定版本清单还原 LHM 0.9.6 的 Windows x64 / net472 实现、HidSharp 2.6.4 与传递依赖，保留附带许可；System.Management 使用系统 .NET Framework 的实现。还原时下载官方 PawnIO 2.2.0 安装器并检查签名与固定 SHA-256，不执行安装。构建、发布暂存与安装共用一份载荷清单，缺依赖或混入旧 LHM 会失败。可选库全部缺失时仍能编译开发版，其温度、CPU 功耗与风扇降级。
+
+正式安装包内置原样的 PawnIO 安装器，目标机无需联网下载驱动。安装时复用 2.2.0 或更高版本，否则用官方签名版本安装；需要重启 Windows 时明确提示，不自动重启。卸载 QuadVitals 不卸载共用 PawnIO。
 
 版本与许可见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
 

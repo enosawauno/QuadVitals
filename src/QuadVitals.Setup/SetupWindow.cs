@@ -45,6 +45,7 @@ namespace QuadVitals.Setup
         private Button _closeButton;
         /// <summary>Set before the finish page is built: whether the band came back after the shell restart.</summary>
         private bool _bandRestored;
+        private bool _rebootRequired;
 
         public int ExitCode { get; private set; }
 

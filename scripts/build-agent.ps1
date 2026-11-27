@@ -39,7 +39,7 @@ if (Test-Path -LiteralPath $trayIcon) {
 $icon = Join-Path $root 'assets\icon\app.ico'
 $iconArg = if (Test-Path -LiteralPath $icon) { '/win32icon:' + $icon } else { $null }
 
-& $csc /nologo /target:winexe /langversion:7.3 /codepage:65001 /platform:anycpu /optimize+ /debug- `
+& $csc /nologo /target:winexe /langversion:7.3 /codepage:65001 /platform:x64 /optimize+ /debug- `
     /out:"$exe" `
     /r:"$coreDll" `
     /r:System.Net.NetworkInformation.dll `
@@ -52,16 +52,13 @@ if ($LASTEXITCODE -ne 0) { throw "agent build failed ($LASTEXITCODE)" }
 
 "agent -> $exe"
 
-# LHM is optional at runtime (temperature degrades); copy it in when the dependency DLLs exist.
-# They are not source: drop LibreHardwareMonitorLib 0.9.2 and HidSharp 2.1.0 into lib/, or point
-# QUADVITALS_LIB at wherever they live.
+# Optional sensors degrade when absent; a partial or legacy driver bundle must not be shipped.
+. (Join-Path $PSScriptRoot 'sensor-runtime.ps1')
 $libDir = if ($env:QUADVITALS_LIB) { $env:QUADVITALS_LIB } else { Join-Path $root 'lib' }
-$lhm = Join-Path $libDir 'LibreHardwareMonitorLib.dll'
-$hid = Join-Path $libDir 'HidSharp.dll'
-if (Test-Path -LiteralPath $lhm) {
-    Copy-Item -LiteralPath $lhm -Destination $outDir -Force
-    if (Test-Path -LiteralPath $hid) { Copy-Item -LiteralPath $hid -Destination $outDir -Force }
-    "LHM copied (temperature available when the agent runs elevated)"
+$sensorFiles = @(Get-SensorRuntimeFiles $libDir)
+if ($sensorFiles.Count -gt 0) {
+    foreach ($file in $sensorFiles) { Copy-Item -LiteralPath $file.FullName -Destination $outDir -Force }
+    "LHM 0.9.6 runtime copied (requires PawnIO and an elevated agent)"
 } else {
     "LHM not found in $libDir - temperature will report '--' (expected on a clean checkout)"
 }

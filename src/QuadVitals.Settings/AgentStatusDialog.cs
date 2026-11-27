@@ -80,6 +80,8 @@ namespace QuadVitals.Settings
             body.Children.Add(DetailRow("通道", "Local\\QuadVitals.Metrics.v1"));
             body.Children.Add(DetailRow("采样数据", DescribeData(state)));
             body.Children.Add(DetailRow("权限", AgentDiagnostics.ElevationLine(state.Flags)));
+            if ((state.Flags & MetricFlags.PawnIoMissing) != 0)
+                body.Children.Add(DetailRow("驱动", AgentDiagnostics.PawnIoRequired));
             body.Children.Add(DetailRow("自动恢复", AutoRecoveryLine()));
 
             RotateTransform spin = new RotateTransform(0);

@@ -7,7 +7,9 @@ param(
     [switch]$SkipUi,
     [switch]$SkipAgent,
     [switch]$SkipNative,
-    [switch]$SkipProbe
+    [switch]$SkipProbe,
+    [string]$ReleaseVersion = '',
+    [switch]$ReleaseLocalOnly
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -47,6 +49,8 @@ try {
 
     if (-not $SkipAgent) {
         [void](Invoke-Step 'Agent compile (temp output)' 'scripts\build-agent.ps1' @('-SkipCore', '-OutDir', 'build\tmp\agent-check'))
+        [void](Invoke-Step 'Temperature startup recovery regression' 'scripts\test-temperature-recovery.ps1' @())
+        [void](Invoke-Step 'Sensor dependency regression' 'scripts\test-sensor-runtime.ps1' @())
     } else {
         Write-Host '[verify] Agent compile skipped (-SkipAgent)' -ForegroundColor Yellow
     }
@@ -72,6 +76,12 @@ try {
     if ($SoakSeconds -gt 0) {
         Write-Host "[verify] soak will run for $SoakSeconds s" -ForegroundColor Yellow
         [void](Invoke-Step 'stability soak' 'scripts\soak-test.ps1' @('-Seconds', "$SoakSeconds"))
+    }
+
+    if ($ReleaseVersion) {
+        $releaseArgs = @('-Version', $ReleaseVersion)
+        if ($ReleaseLocalOnly) { $releaseArgs += '-LocalOnly' }
+        [void](Invoke-Step 'release completeness' 'scripts\maintenance\check-release-complete.ps1' $releaseArgs)
     }
 }
 finally {

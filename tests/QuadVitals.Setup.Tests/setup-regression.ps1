@@ -175,6 +175,19 @@ Check 'finish: dashboard button exists' ($dashboard -ne $null) ''
 Check 'finish: dashboard closes the window' (Close-Fired $win4 { Click $dashboard }) ''
 
 # ---- finish page: the band hint follows what the install actually achieved ---------------------
+$rebootWindow = New-Win $false
+$windowType.GetField('_rebootRequired', $flags).SetValue($rebootWindow, $true)
+$showResult.Invoke($rebootWindow, [object[]]@($installDirArg)) | Out-Null
+$rebootText = @(Walk (Host $rebootWindow) | Where-Object { $_ -is [System.Windows.Controls.TextBlock] -and $_.Text.Contains('Windows') })
+Check 'finish: a pending sensor driver restart is explained' ($rebootText.Count -gt 0) ''
+Check 'finish: no dashboard is offered before the driver restart' ((Find-Button (Host $rebootWindow) $S_OPEN_DASHBOARD) -eq $null) ''
+$resultType = $asm.GetType('QuadVitals.Setup.InstallResult')
+$successResult = $resultType.GetMethod('Success').Invoke($null, [object[]]@($null))
+Check 'silent install: successful work returns zero' ($successResult.ExitCode -eq 0) ''
+$successResult.RebootRequired = $true
+Check 'silent install: a pending Windows restart returns 3010' ($successResult.ExitCode -eq 3010) ''
+$failedResult = $resultType.GetMethod('Failure').Invoke($null, [object[]]@('fixture'))
+Check 'silent install: failed work returns an error' ($failedResult.ExitCode -eq 1) ''
 
 $bandField = $windowType.GetField('_bandRestored', [Reflection.BindingFlags]'NonPublic,Instance')
 Check 'finish: the band hint has a switch' ($bandField -ne $null) ''
@@ -291,6 +304,67 @@ try {
 finally {
     Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# ---- uninstall cleanup -------------------------------------------------------------
+# The reported residue: the installed uninstaller, the UI DLL and the taskbar DLL survived an
+# uninstall. The folder copy hands the job to a temp copy, the shell restart releases the band
+# DLL, and anything still locked is queued for the next boot.
+$isInstalledCopy = $coreType.GetMethod('IsInstalledCopy', [Reflection.BindingFlags]'Public,Static')
+Check 'the installed uninstaller is recognised by its folder' ([bool]$isInstalledCopy.Invoke($null, [object[]]@([string](Join-Path $probeDir 'QuadVitals-Uninstall.exe'), [string]$probeDir))) ''
+Check 'a downloaded setup is not the installed copy' (-not [bool]$isInstalledCopy.Invoke($null, [object[]]@([string](Join-Path $env:TEMP 'QuadVitals-Setup-1.1.1.exe'), [string]$probeDir))) ''
+
+$isRelocated = $coreType.GetMethod('IsRelocatedCopy', [Reflection.BindingFlags]'NonPublic,Static')
+$relocatedDir = Join-Path $env:TEMP ('QuadVitals-Uninstall-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+Check 'the temp copy is recognised as the relocation' ([bool]$isRelocated.Invoke($null, [object[]]@([string](Join-Path $relocatedDir 'QuadVitals-Uninstall.exe')))) ''
+Check 'an install-folder copy is not the temp copy' (-not [bool]$isRelocated.Invoke($null, [object[]]@([string](Join-Path $probeDir 'QuadVitals-Uninstall.exe')))) ''
+
+# The handoff itself: copy, start, wait, and return the child's exit code. cmd.exe stands in for
+# the uninstaller, so the check never touches the real installation.
+$tempBefore = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'QuadVitals-Uninstall-*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+try {
+    $relaunch = $coreType.GetMethod('RelaunchFromTemp', [Reflection.BindingFlags]'Public,Static')
+    $handoffArgs = [object[]]@([string](Join-Path $env:SystemRoot 'System32\cmd.exe'), [string[]]@(), [bool]$true, 0)
+    $handed = $relaunch.Invoke($null, $handoffArgs)
+    $tempAfter = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'QuadVitals-Uninstall-*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $created = @($tempAfter | Where-Object { $tempBefore -notcontains $_ })
+    Check 'the handoff copies the uninstaller into its own temp folder' ([bool]$handed -and ($created.Count -eq 1)) "created=$($created.Count)"
+    Check 'the temp copy keeps the uninstaller name' (($created.Count -eq 1) -and (Test-Path -LiteralPath (Join-Path $created[0] 'QuadVitals-Uninstall.exe'))) ''
+}
+finally {
+    $tempAfter = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'QuadVitals-Uninstall-*' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    foreach ($dir in @($tempAfter | Where-Object { $tempBefore -notcontains $_ })) {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$installedDir = $coreType.GetProperty('InstalledDir', [Reflection.BindingFlags]'Public,Static').GetValue($null, $null)
+Check 'the uninstall target falls back to a real folder' (($installedDir -ne $null) -and ($installedDir.Length -gt 2)) "dir=$installedDir"
+
+$uninstallProbe = Join-Path $env:TEMP ('qv-uninstall-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Path $uninstallProbe -Force | Out-Null
+try {
+    foreach ($name in 'QuadVitals.Agent.exe', 'QuadVitals.UI.dll', 'QuadVitalsDeskBand.dll', 'QuadVitals-Uninstall.exe') {
+        New-Item -ItemType File -Path (Join-Path $uninstallProbe $name) -Force | Out-Null
+    }
+    $core = [Activator]::CreateInstance($coreType, @('0.9.0'))
+    $deleteLeftovers = $coreType.GetMethod('TryDeleteLeftovers', $flags)
+    $deleteLeftovers.Invoke($core, [object[]]@([string]$uninstallProbe)) | Out-Null
+    Check 'the cleanup removes a folder the uninstaller is not running from' (-not (Test-Path -LiteralPath $uninstallProbe)) ''
+}
+finally {
+    Remove-Item -LiteralPath $uninstallProbe -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$programSource = Get-Content -Encoding UTF8 -Raw (Join-Path $repoRoot 'src\QuadVitals.Setup\Program.cs')
+$coreSource = Get-Content -Encoding UTF8 -Raw (Join-Path $repoRoot 'src\QuadVitals.Setup\InstallerCore.cs')
+$progressSource = Get-Content -Encoding UTF8 -Raw (Join-Path $repoRoot 'src\QuadVitals.Setup\SetupWindow.Progress.cs')
+$uninstallSource = Get-Content -Encoding UTF8 -Raw (Join-Path $repoRoot 'scripts\uninstall.ps1')
+Check 'the installed uninstaller hands off to a temp copy' ($programSource.Contains('RelaunchFromTemp')) ''
+Check 'the handed-off copy cannot hand off again' ($programSource.Contains('--relocated')) ''
+Check 'the uninstaller restarts the shell before deleting' ($coreSource.Contains('RestartShellForUninstall')) ''
+Check 'a locked leftover is queued for the next restart' ($uninstallSource.Contains('Schedule-DeleteAtReboot')) ''
+Check 'a custom install folder is the uninstall target' ($progressSource.Contains('InstallerCore.InstalledDir')) ''
 
 $win.Close()
 $win2.Close()

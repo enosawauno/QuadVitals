@@ -52,8 +52,7 @@ namespace QuadVitals.Settings
         }
 
         /// <summary>
-        /// 「启动 Agent」：拉起进程，等它写出第一帧再刷新面板。计划任务不可用时（开发版）
-        /// 这里直接启动 exe，温度会显示 --，但其余指标正常。
+        /// 通过统一提权入口拉起进程，等第一帧后刷新面板，避免将未提权启动报作恢复成功。
         /// </summary>
         public void StartAgentFromDialog()
         {
@@ -275,6 +274,9 @@ namespace QuadVitals.Settings
                 if (error != null) return error;
                 if (unelevated) return AgentDiagnostics.NotElevatedAfterRestart;
             }
+
+            if (firstFrame != null && firstFrame.Has(MetricFlags.PawnIoMissing))
+                return AgentDiagnostics.PawnIoRequired;
 
             // 温度、风扇与功耗在 5 s 节拍里采样：多等一拍再返回，页面重建时才不是一片 --。
             if (waitForSettled && firstFrame != null) WaitForSettledFrame(firstFrame, 9000);
